@@ -1,15 +1,22 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { TrendingUp, BarChart2, Brain, ArrowRight, Loader2, X } from "lucide-react";
+import { TrendingUp, BarChart2, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";   // Add this import
 
 export default function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     setLoading(true);
+
+    // Mark onboarding as completed in Supabase
+    await supabase.auth.updateUser({
+      data: { onboarding_completed: true }
+    });
+
     setTimeout(() => {
       navigate("/");
     }, 800);
