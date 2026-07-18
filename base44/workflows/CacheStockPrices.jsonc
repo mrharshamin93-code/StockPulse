@@ -1,0 +1,45 @@
+{
+  "name": "Cache Stock Prices",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "*/5 * * * *",
+      "one_time_date": null,
+      "timezone": "America/New_York",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "description": "Fetches latest stock prices from Finnhub every 5 minutes and stores them in the database so the app loads instantly with fresh prices.",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "cache_stock_prices",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "fetch_and_cache": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "cacheStockPrices",
+            "args": {}
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Fetch & cache prices",
+            "description": "Finnhub \u2192 DB"
+          }
+        }
+      }
+    ]
+  }
+}

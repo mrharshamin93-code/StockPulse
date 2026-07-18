@@ -1,0 +1,37 @@
+{
+  "name": "WatchlistItem",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "description": "Stock ticker symbol to watch"
+    },
+    "company_name": {
+      "type": "string",
+      "description": "Full company name"
+    },
+    "exchange": {
+      "type": "string",
+      "description": "Exchange name (e.g. NASDAQ, NYSE)"
+    },
+    "cached_price": {
+      "type": "number",
+      "description": "Server-cached price, updated every 5 minutes by background workflow"
+    },
+    "cached_change_pct": {
+      "type": "number",
+      "description": "Server-cached daily % change, updated every 5 minutes by background workflow"
+    },
+    "cached_change": {
+      "type": "number",
+      "description": "Server-cached absolute daily change, updated every 5 minutes by background workflow"
+    },
+    "cache_updated_at": {
+      "type": "string",
+      "description": "ISO timestamp of last server cache update"
+    }
+  },
+  "required": [
+    "ticker"
+  ]
+}

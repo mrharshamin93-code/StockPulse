@@ -1,0 +1,40 @@
+{
+  "name": "StockTransaction",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "description": "Stock ticker symbol"
+    },
+    "company_name": {
+      "type": "string",
+      "description": "Company name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "buy",
+        "sell"
+      ],
+      "description": "Transaction type"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Number of shares"
+    },
+    "price": {
+      "type": "number",
+      "description": "Price per share at time of transaction"
+    },
+    "total": {
+      "type": "number",
+      "description": "Total transaction value"
+    }
+  },
+  "required": [
+    "ticker",
+    "type",
+    "quantity",
+    "price"
+  ]
+}

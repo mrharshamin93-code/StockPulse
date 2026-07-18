@@ -1,0 +1,37 @@
+{
+  "name": "StockAlert",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "description": "Stock ticker symbol"
+    },
+    "condition": {
+      "type": "string",
+      "enum": [
+        "above",
+        "below"
+      ],
+      "description": "Trigger condition: price goes above or below the target"
+    },
+    "target_price": {
+      "type": "number",
+      "description": "Target price that triggers the alert"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether the alert is active",
+      "default": true
+    },
+    "triggered": {
+      "type": "boolean",
+      "description": "Whether the alert has already fired",
+      "default": false
+    }
+  },
+  "required": [
+    "ticker",
+    "condition",
+    "target_price"
+  ]
+}

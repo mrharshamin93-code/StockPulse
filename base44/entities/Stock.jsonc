@@ -1,0 +1,56 @@
+{
+  "name": "Stock",
+  "type": "object",
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "description": "Stock ticker symbol (e.g. AAPL, TSLA)"
+    },
+    "company_name": {
+      "type": "string",
+      "description": "Full company name"
+    },
+    "quantity": {
+      "type": "number",
+      "description": "Number of shares owned"
+    },
+    "purchase_price": {
+      "type": "number",
+      "description": "Average purchase price per share"
+    },
+    "current_price": {
+      "type": "number",
+      "description": "Latest known price per share"
+    },
+    "sector": {
+      "type": "string",
+      "description": "Industry sector"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "Company logo URL"
+    },
+    "cached_price": {
+      "type": "number",
+      "description": "Server-cached price, updated every 5 minutes by background workflow"
+    },
+    "cached_change_pct": {
+      "type": "number",
+      "description": "Server-cached daily % change, updated every 5 minutes by background workflow"
+    },
+    "cached_change": {
+      "type": "number",
+      "description": "Server-cached absolute daily change, updated every 5 minutes by background workflow"
+    },
+    "cache_updated_at": {
+      "type": "string",
+      "description": "ISO timestamp of last server cache update"
+    }
+  },
+  "required": [
+    "ticker",
+    "company_name",
+    "quantity",
+    "purchase_price"
+  ]
+}

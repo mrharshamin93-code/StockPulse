@@ -1,0 +1,25 @@
+{
+  "name": "SavedScreen",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "User-defined name for this saved screen"
+    },
+    "filters": {
+      "type": "object",
+      "description": "Filter criteria as a JSON object"
+    },
+    "activeMetrics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of active metric keys"
+    }
+  },
+  "required": [
+    "name",
+    "filters"
+  ]
+}

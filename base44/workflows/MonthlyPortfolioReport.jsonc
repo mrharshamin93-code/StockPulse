@@ -1,0 +1,45 @@
+{
+  "description": "Sends a monthly portfolio performance report email to all opted-in users on the 1st of each month.",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "monthly_portfolio_report",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "send_reports": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "sendMonthlyReport",
+            "args": {}
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Send monthly reports",
+            "description": "Emails all opted-in users"
+          }
+        }
+      }
+    ]
+  },
+  "name": "Monthly Portfolio Report",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 9 1 * *",
+      "one_time_date": null,
+      "timezone": "America/New_York",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  }
+}
