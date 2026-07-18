@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-//import { base44 } from "@/api/base44Client";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { Switch } from "@/components/ui/switch";
 import { Mail, CheckCircle, Loader2 } from "lucide-react";
@@ -8,47 +8,83 @@ import { generateReportPDF } from "@/lib/generateReportPDF";
 
 const getCurrency = () => localStorage.getItem("currency") || "USD";
 
+function downloadPdf(buffer, filename) {
+  const blob = new Blob([buffer], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function MonthlyReport() {
   const { user } = useAuth();
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [status, setStatus] = useState("");
-  const [autoReport, setAutoReport] = useState(() =>
-    user?.monthly_report_opt_in ?? (localStorage.getItem("monthlyReport") === "true")
+  const [autoReport, setAutoReport] = useState(
+    () => user?.monthly_report_opt_in ?? (localStorage.getItem("monthlyReport") === "true")
   );
+
+  useEffect(() => {
+    if (typeof user?.monthly_report_opt_in === "boolean") {
+      setAutoReport(user.monthly_report_opt_in);
+    }
+  }, [user?.monthly_report_opt_in]);
 
   const toggleAutoReport = async (val) => {
     setAutoReport(val);
     localStorage.setItem("monthlyReport", String(val));
-    await base44.auth.updateMe({ monthly_report_opt_in: val });
+
+    if (!user?.id) return;
+
+    await supabase
+      .from("profiles")
+      .update({ monthly_report_opt_in: val })
+      .eq("id", user.id);
   };
 
   const handleSend = async () => {
-    if (!user?.email) return;
+    if (!user?.id) return;
+
     setSending(true);
     setSent(false);
+
     try {
       setStatus("Loading portfolio data…");
-      const stocks = await base44.entities.Stock.filter({ created_by_id: user.id });
-      const transactions = await base44.entities.StockTransaction.filter({ created_by_id: user.id }, "-created_date", 50);
+
+      const [{ data: stocks = [], error: stocksError }, { data: transactions = [], error: txError }] =
+        await Promise.all([
+          supabase
+            .from("stocks")
+            .select("*")
+            .eq("user_id", user.id),
+          supabase
+            .from("stock_transactions")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(50),
+        ]);
+
+      if (stocksError) throw stocksError;
+      if (txError) throw txError;
+
       const currency = getCurrency();
 
       setStatus("Generating PDF…");
-      const pdfBuffer = await generateReportPDF({ user, stocks, transactions, currency });
-
-      setStatus("Uploading report…");
-      const pdfBlob = new Blob([pdfBuffer], { type: "application/pdf" });
-      const pdfFile = new File([pdfBlob], "StockPulse-Performance-Report.pdf", { type: "application/pdf" });
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
-
-      setStatus("Sending email…");
-      const month = new Date().toLocaleString("default", { month: "long", year: "numeric" });
-
-      await base44.integrations.Core.SendEmail({
-        to: user.email,
-        subject: `Your StockPulse Performance Report — ${month}`,
-        body: file_url,
+      const pdfBuffer = await generateReportPDF({
+        user,
+        stocks,
+        transactions,
+        currency,
       });
+
+      setStatus("Preparing download…");
+      downloadPdf(pdfBuffer, "StockPulse-Performance-Report.pdf");
 
       setSent(true);
       setStatus("");
@@ -57,6 +93,7 @@ export default function MonthlyReport() {
       setStatus("Something went wrong. Please try again.");
       setTimeout(() => setStatus(""), 4000);
     }
+
     setSending(false);
   };
 
@@ -69,7 +106,6 @@ export default function MonthlyReport() {
 
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
         <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-50">
-          {/* Send now */}
           <button
             onClick={handleSend}
             disabled={sending}
@@ -77,24 +113,25 @@ export default function MonthlyReport() {
           >
             <div className="flex items-center gap-3">
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${sent ? "bg-emerald-50" : "bg-blue-50"}`}>
-                {sent
-                  ? <CheckCircle className="w-4 h-4 text-emerald-500" />
-                  : sending
-                    ? <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                    : <Mail className="w-4 h-4 text-blue-500" />
-                }
+                {sent ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-500" />
+                ) : sending ? (
+                  <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                ) : (
+                  <Mail className="w-4 h-4 text-blue-500" />
+                )}
               </div>
               <div>
-                <span className="font-medium text-sm">{sent ? "Report Sent!" : "Email my portfolio performance"}</span>
+                <span className="font-medium text-sm">
+                  {sent ? "Report Ready!" : "Download my portfolio performance"}
+                </span>
                 {status && !sent && (
                   <p className="text-xs text-muted-foreground mt-0.5">{status}</p>
                 )}
-
               </div>
             </div>
           </button>
 
-          {/* Auto send toggle */}
           <div className="w-full flex items-center justify-between px-5 py-4 min-h-[56px]">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
@@ -102,7 +139,9 @@ export default function MonthlyReport() {
               </div>
               <div>
                 <span className="font-medium text-sm">Auto Performance Report</span>
-                <p className="text-xs text-muted-foreground mt-0.5">Receive a PDF report on the 1st of each month</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Receive a PDF report on the 1st of each month
+                </p>
               </div>
             </div>
             <Switch checked={autoReport} onCheckedChange={toggleAutoReport} />
