@@ -1,14 +1,11 @@
-import { createClient } from '@base44/sdk';
-import { appParams } from '@/lib/app-params';
+const appId = import.meta.env.VITE_BASE44_APP_ID;
+const appBaseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL;
 
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
-
-//Create a client with authentication required
-export const base44 = createClient({
+export const appParams = {
   appId,
-  token,
-  functionsVersion,
-  serverUrl: '',
-  requiresAuth: false,
-  appBaseUrl
-});
+  appBaseUrl,
+  token: null,           // Base44 will handle this
+  functionsVersion: 'v1',
+};
+
+console.log("Base44 Config:", { appId, appBaseUrl }); // for debugging
