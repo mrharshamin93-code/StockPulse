@@ -52,7 +52,9 @@ const AuthenticatedApp = () => {
     <Routes location={location} key={location.pathname}>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      
 
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/" element={<Watchlist />} />   {/* Change to Login temporarily if needed */}
