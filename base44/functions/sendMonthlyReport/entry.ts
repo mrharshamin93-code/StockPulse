@@ -1,63 +1,196 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.38';
+import { createClient } from "@supabase/supabase-js";
 
-Deno.serve(async (req) => {
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const resendApiKey = process.env.RESEND_API_KEY;
+const resendFromEmail = process.env.RESEND_FROM_EMAIL || "StockPulse <reports@yourdomain.com>";
+
+const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+async function sendEmail({ to, subject, body }) {
+  if (!resendApiKey) {
+    throw new Error("Missing RESEND_API_KEY");
+  }
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: resendFromEmail,
+      to,
+      subject,
+      text: body,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Email send failed: ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
-    const base44 = createClientFromRequest(req);
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      return res.status(500).json({ error: "Missing Supabase server environment variables" });
+    }
 
-    // Get all users who have opted in (stored in their updateMe data)
-    const allUsers = await base44.asServiceRole.entities.User.list();
+    const month = new Date().toLocaleString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
 
-    const month = new Date().toLocaleString("en-US", { month: "long", year: "numeric" });
     let sent = 0;
 
-    for (const user of allUsers) {
-      // Check opt-in flag stored on user record
-      if (!user.monthly_report_opt_in) continue;
+    const { data: users, error: usersError } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, monthly_report_opt_in")
+      .eq("monthly_report_opt_in", true);
+
+    if (usersError) {
+      throw usersError;
+    }
+
+    for (const user of users || []) {
       if (!user.email) continue;
 
-      // Fetch their stocks
-      const stocks = await base44.asServiceRole.entities.Stock.filter({ created_by_id: user.id });
-      if (!stocks.length) continue;
+      const { data: stocks, error: stocksError } = await supabase
+        .from("stocks")
+        .select("*")
+        .eq("user_id", user.id);
 
-      const totalValue = stocks.reduce((s, stock) => s + (stock.current_price || 0) * stock.quantity, 0);
-      const totalCost = stocks.reduce((s, stock) => s + stock.purchase_price * stock.quantity, 0);
+      if (stocksError) {
+        throw stocksError;
+      }
+
+      if (!stocks || !stocks.length) continue;
+
+      const totalValue = stocks.reduce(
+        (sum, stock) => sum + (stock.current_price || 0) * stock.quantity,
+        0
+      );
+
+      const totalCost = stocks.reduce(
+        (sum, stock) => sum + stock.purchase_price * stock.quantity,
+        0
+      );
+
       const totalGain = totalValue - totalCost;
-      const totalGainPct = totalCost > 0 ? ((totalGain / totalCost) * 100).toFixed(2) : "0.00";
+      const totalGainPct =
+        totalCost > 0 ? ((totalGain / totalCost) * 100).toFixed(2) : "0.00";
 
-      const holdingsRows = stocks.map(s => {
-        const val = (s.current_price || 0) * s.quantity;
-        const cost = s.purchase_price * s.quantity;
-        const gain = val - cost;
-        const pct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : "0.00";
-        return `• ${s.ticker} (${s.company_name}): ${s.quantity} shares @ $${s.purchase_price.toFixed(2)} avg — Value: $${val.toFixed(2)} — P&L: ${gain >= 0 ? "+" : ""}$${gain.toFixed(2)} (${gain >= 0 ? "+" : ""}${pct}%)`;
-      }).join("\n");
+      const holdingsRows = stocks
+        .map((stock) => {
+          const val = (stock.current_price || 0) * stock.quantity;
+          const cost = stock.purchase_price * stock.quantity;
+          const gain = val - cost;
+          const pct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : "0.00";
 
-      // Fetch transactions for the past month
-      const txns = await base44.asServiceRole.entities.StockTransaction.filter({ created_by_id: user.id }, "-created_date", 50);
+          return `• ${stock.ticker} (${stock.company_name}): ${stock.quantity} shares @ 
+$$
+{stock.purchase_price.toFixed(
+            2
+          )} avg — Value:
+$$
+{val.toFixed(2)} — P&L: ${
+            gain >= 0 ? "+" : ""
+          }
+$$
+{gain.toFixed(2)} (${gain >= 0 ? "+" : ""}${pct}%)`;
+        })
+        .join("\n");
+
+      const { data: txns, error: txnsError } = await supabase
+        .from("stock_transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (txnsError) {
+        throw txnsError;
+      }
+
       const oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-      const recentTxns = txns.filter(t => new Date(t.created_date) >= oneMonthAgo);
 
-      const txnRows = recentTxns.length > 0
-        ? recentTxns.map(t => {
-            const date = new Date(t.created_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-            const action = t.type === "buy" ? "🟢 BUY " : "🔴 SELL";
-            return `${action}  ${t.ticker} — ${t.quantity} shares @ $${t.price?.toFixed(2)} = $${t.total?.toFixed(2)}  [${date}]`;
-          }).join("\n")
-        : "No transactions this month.";
+      const recentTxns = (txns || []).filter(
+        (t) => new Date(t.created_at) >= oneMonthAgo
+      );
 
-      const body = `Hi ${user.full_name || "there"},\n\nHere is your StockPulse portfolio performance report for ${month}.\n\n📊 PORTFOLIO SUMMARY\nTotal Value: $${totalValue.toFixed(2)}\nTotal Cost Basis: $${totalCost.toFixed(2)}\nOverall P&L: ${totalGain >= 0 ? "+" : ""}$${totalGain.toFixed(2)} (${totalGain >= 0 ? "+" : ""}${totalGainPct}%)\n\n📋 HOLDINGS\n${holdingsRows}\n\n🕒 TRANSACTIONS THIS MONTH\n${txnRows}\n\n---\nThis report was generated by StockPulse. Market data may be delayed.\n\nHappy investing! 📈\nThe StockPulse Team`;
+      const txnRows =
+        recentTxns.length > 0
+          ? recentTxns
+              .map((t) => {
+                const date = new Date(t.created_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                });
+                const action = t.type === "buy" ? "🟢 BUY " : "🔴 SELL";
 
-      await base44.asServiceRole.integrations.Core.SendEmail({
+                return `${action}  ${t.ticker} — ${t.quantity} shares @
+$$
+{t.price?.toFixed(
+                  2
+                )} = 
+$$
+{t.total?.toFixed(2)}  [${date}]`;
+              })
+              .join("\n")
+          : "No transactions this month.";
+
+      const body = `Hi ${user.full_name || "there"},
+
+Here is your StockPulse portfolio performance report for ${month}.
+
+📊 PORTFOLIO SUMMARY
+Total Value:
+$$
+{totalValue.toFixed(2)}
+Total Cost Basis: 
+$$
+{totalCost.toFixed(2)}
+Overall P&L: ${totalGain >= 0 ? "+" : ""}
+$$
+{totalGain.toFixed(2)} (${
+        totalGain >= 0 ? "+" : ""
+      }${totalGainPct}%)
+
+📋 HOLDINGS
+${holdingsRows}
+
+🕒 TRANSACTIONS THIS MONTH
+${txnRows}
+
+---
+This report was generated by StockPulse. Market data may be delayed.
+
+Happy investing! 📈
+The StockPulse Team`;
+
+      await sendEmail({
         to: user.email,
         subject: `Your StockPulse Monthly Report — ${month}`,
         body,
       });
+
       sent++;
     }
 
-    return Response.json({ ok: true, sent });
+    return res.status(200).json({ ok: true, sent });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return res.status(500).json({
+      error: error?.message || "Internal server error",
+    });
   }
-});
+}
