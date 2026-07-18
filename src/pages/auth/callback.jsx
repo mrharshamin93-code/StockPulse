@@ -8,16 +8,12 @@ export default function AuthCallback() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate('/');
+        navigate('/', { replace: true });
       } else {
-        navigate('/login');
+        navigate('/login', { replace: true });
       }
     });
   }, [navigate]);
 
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p>Completing login...</p>
-    </div>
-  );
+  return <div className="min-h-screen flex items-center justify-center">Completing login...</div>;
 }
