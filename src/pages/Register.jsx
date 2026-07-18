@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,12 +23,16 @@ export default function Register() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    if (password !== confirmPassword) { 
+      setError('Passwords do not match'); 
+      return; 
+    }
     setLoading(true);
     setError('');
     try {
-      await base44.auth.register({ email, password });
-      setStep('otp');
+      // TODO: Replace with real registration later
+      alert("Registration coming soon. Use Google for now.");
+      window.location.href = '/onboarding';
     } catch (err) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -37,31 +40,13 @@ export default function Register() {
     }
   };
 
-  const handleVerify = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      const { access_token } = await base44.auth.verifyOtp({ email, otpCode });
-      base44.auth.setToken(access_token);
-      window.location.href = '/onboarding';
-    } catch (err) {
-      setError(err.message || 'Invalid verification code');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResend = async () => {
-    await base44.auth.resendOtp(email);
-  };
-
   const handleGoogleLogin = () => {
-    base44.auth.loginWithProvider('google', '/');
+    const baseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || 'https://6a46f22136d1e520f1b1ce65.base44.app';
+    window.location.href = `${baseUrl}/auth/google?redirect=/`;
   };
 
   const handleAppleLogin = () => {
-    base44.auth.loginWithProvider('apple', '/');
+    alert("Apple login coming soon");
   };
 
   return (
@@ -80,7 +65,7 @@ export default function Register() {
             Your portfolio,<br />intelligently tracked.
           </h2>
           <p className="text-white/60 text-base mb-10">
-            Join thousands of smart investors using StockPulse for real-time portfolio tracking, intelligent market AI insights, and automated news summaries that help you stay ahead of the market.
+            Join thousands of smart investors using StockPulse for real-time portfolio tracking, intelligent market AI insights, and automated news summaries.
           </p>
           <div className="space-y-5">
             {FEATURES.map(({ icon: Icon, label, desc }) => (
@@ -103,14 +88,6 @@ export default function Register() {
       {/* Right panel — form */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          {/* Mobile logo */}
-          <div className="flex items-center justify-center gap-2 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-heading text-xl font-bold text-gray-900">StockPulse</span>
-          </div>
-
           <div className="mb-8">
             <h1 className="font-heading text-2xl font-bold text-gray-900">
               {step === 'register' ? 'Create Your Account' : 'Check Your Email'}
@@ -185,21 +162,12 @@ export default function Register() {
                   {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Verify & Continue
                 </Button>
-                <Button type="button" variant="ghost" className="w-full text-sm" onClick={handleResend}>
-                  Resend code
-                </Button>
               </form>
             )}
 
             <p className="text-center text-sm text-gray-500">
               Already have an account?{' '}
               <Link to="/login" className="text-gray-900 font-semibold hover:underline">Sign in</Link>
-            </p>
-
-            <p className="text-center text-xs text-gray-400">
-              By creating an account, you agree to our{' '}
-              <Link to="/legal?page=terms" className="underline hover:text-gray-900">Terms</Link>{' '}and{' '}
-              <Link to="/legal?page=privacy" className="underline hover:text-gray-900">Privacy Policy</Link>
             </p>
           </div>
         </div>
