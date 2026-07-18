@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +16,8 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      await base44.auth.loginViaEmailPassword(email, password);
+      // TODO: Replace with real auth later
+      alert("Email login coming soon. Use Google for now.");
       window.location.href = '/';
     } catch (err) {
       setError(err.message || 'Invalid email or password');
@@ -27,11 +27,12 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    base44.auth.loginWithProvider('google', '/');
+    const baseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || 'https://6a46f22136d1e520f1b1ce65.base44.app';
+    window.location.href = `${baseUrl}/auth/google?redirect=/`;
   };
 
   const handleAppleLogin = () => {
-    base44.auth.loginWithProvider('apple', '/');
+    alert("Apple login coming soon");
   };
 
   return (
