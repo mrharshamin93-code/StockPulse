@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { TrendingUp, TrendingDown, Loader2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,32 +14,7 @@ function BuyDialog({ open, onOpenChange, stock, onDone }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    // Add more shares: create a new Stock record for this ticker
-    let currentPrice = parseFloat(purchasePrice);
-    try {
-      const res = await base44.functions.invoke("finnhub", { action: "quote", ticker: stock.ticker });
-      if (res.data?.c) currentPrice = res.data.c;
-    } catch {}
-    const qty = parseFloat(quantity);
-    const price = parseFloat(purchasePrice);
-    // Update existing holding with new weighted avg cost
-    const newQty = stock.quantity + qty;
-    const newAvgCost = ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty;
-    await Promise.all([
-      base44.entities.Stock.update(stock.id, {
-        quantity: newQty,
-        purchase_price: +newAvgCost.toFixed(4),
-        current_price: currentPrice,
-      }),
-      base44.entities.StockTransaction.create({
-        ticker: stock.ticker.toUpperCase(),
-        company_name: stock.company_name,
-        type: "buy",
-        quantity: qty,
-        price,
-        total: qty * price,
-      }),
-    ]);
+    alert("Buy functionality coming soon! (Demo)");
     setLoading(false);
     setQuantity("");
     onDone();
@@ -83,21 +57,7 @@ function SellDialog({ open, onOpenChange, stock, onDone }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const sellQty = parseFloat(quantity);
-    const sellPrice = stock.current_price || stock.purchase_price;
-    await base44.entities.StockTransaction.create({
-      ticker: stock.ticker.toUpperCase(),
-      company_name: stock.company_name,
-      type: "sell",
-      quantity: sellQty,
-      price: sellPrice,
-      total: sellQty * sellPrice,
-    });
-    if (sellQty >= max) {
-      await base44.entities.Stock.deleteMany({ ticker: stock.ticker });
-    } else {
-      await base44.entities.Stock.update(stock.id, { quantity: parseFloat((max - sellQty).toFixed(6)) });
-    }
+    alert("Sell functionality coming soon! (Demo)");
     setLoading(false);
     setQuantity("");
     onDone();
@@ -160,7 +120,6 @@ export default function StockCard({ stock, onRefresh }) {
       <SellDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={() => onRefresh?.()} />
 
       <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200">
-        {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <Link to={`/stock/${stock.id}`} className="group flex-1 min-w-0">
             <span className="text-xs font-mono tracking-widest text-gray-400 uppercase">{stock.sector}</span>
@@ -168,7 +127,6 @@ export default function StockCard({ stock, onRefresh }) {
             <p className="text-sm text-gray-500 truncate max-w-[180px]">{stock.company_name}</p>
           </Link>
 
-          {/* Buy / Sell / Edit buttons */}
           <div className="flex items-center gap-1.5 ml-2 shrink-0">
             <button
               onClick={() => setBuyOpen(true)}
@@ -185,7 +143,6 @@ export default function StockCard({ stock, onRefresh }) {
           </div>
         </div>
 
-        {/* Stats */}
         <Link to={`/stock/${stock.id}`}>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -202,7 +159,6 @@ export default function StockCard({ stock, onRefresh }) {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
             <p className={`text-sm font-medium ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
               {isPositive ? "+" : ""}${gain.toFixed(2)} total
