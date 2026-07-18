@@ -29,12 +29,12 @@ import ReferralPage from '@/pages/ReferralPage';
 import ContactUs from '@/pages/ContactUs';
 import NavigationLayout from '@/components/NavigationLayout';
 import { MarketDataProvider } from '@/lib/MarketDataContext';
+import AuthCallback from '@/pages/auth/callback';   // ← Added
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const location = useLocation();
 
-  // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
@@ -43,24 +43,23 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Handle authentication errors
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
       navigateToLogin();
       return null;
     }
   }
 
-  // Render the main app
   return (
     <Routes location={location} key={location.pathname}>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />   {/* ← Added */}
+
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/onboarding" element={<Onboarding />} />
         <Route element={<NavigationLayout />}>
@@ -80,6 +79,7 @@ const AuthenticatedApp = () => {
           <Route path="/stock/:id" element={<StockDetail />} />
         </Route>
       </Route>
+
       <Route path="/PriceAlerts" element={<Navigate to="/price-alerts" replace />} />
       <Route path="/price_alerts" element={<Navigate to="/price-alerts" replace />} />
       <Route path="*" element={<PageNotFound />} />
@@ -87,9 +87,7 @@ const AuthenticatedApp = () => {
   );
 };
 
-
 function App() {
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
