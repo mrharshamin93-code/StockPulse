@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useAuth } from "@/lib/AuthContext";
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Loader2, Briefcase, RefreshCw } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Home() {
   const { user, isLoadingAuth } = useAuth();
