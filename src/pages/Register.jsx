@@ -23,14 +23,10 @@ export default function Register() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (password !== confirmPassword) { 
-      setError('Passwords do not match'); 
-      return; 
-    }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     setLoading(true);
     setError('');
     try {
-      // TODO: Replace with real registration later
       alert("Registration coming soon. Use Google for now.");
       window.location.href = '/onboarding';
     } catch (err) {
@@ -41,8 +37,7 @@ export default function Register() {
   };
 
   const handleGoogleLogin = () => {
-    const baseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || 'https://6a46f22136d1e520f1b1ce65.base44.app';
-    window.location.href = `${baseUrl}/auth/google?redirect=/`;
+    window.location.href = 'https://6a46f22136d1e520f1b1ce65.base44.app/auth/google?redirect=/';
   };
 
   const handleAppleLogin = () => {
