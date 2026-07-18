@@ -1,39 +1,54 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BarChart3, Loader2, Apple } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleEmailLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    try {
-      // TODO: Replace with real auth later
-      alert("Email login coming soon. Use Google for now.");
-      window.location.href = '/';
-    } catch (err) {
-      setError(err.message || 'Invalid email or password');
-    } finally {
-      setLoading(false);
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (err) {
+      setError(err.message);
+    } else {
+      navigate('/');
     }
+    setLoading(false);
   };
 
-  const handleGoogleLogin = () => {
-    // Update this URL once you have your own backend/auth
-    window.location.href = 'https://your-backend.com/auth/google?redirect=/';
+  const handleGoogleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) setError(error.message);
   };
 
-  const handleAppleLogin = () => {
-    alert("Apple login coming soon");
+  const handleAppleLogin = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) setError(error.message);
   };
 
   return (
@@ -49,11 +64,7 @@ export default function Login() {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-5 shadow-sm">
-          <Button 
-            variant="outline" 
-            className="w-full gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50" 
-            onClick={handleGoogleLogin}
-          >
+          <Button variant="outline" className="w-full gap-2" onClick={handleGoogleLogin}>
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -63,47 +74,27 @@ export default function Login() {
             Continue with Google
           </Button>
 
-          <Button 
-            variant="outline" 
-            className="w-full gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50" 
-            onClick={handleAppleLogin}
-          >
+          <Button variant="outline" className="w-full gap-2" onClick={handleAppleLogin}>
             <Apple className="w-4 h-4" />
             Continue with Apple
           </Button>
 
           <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-muted-foreground">or</span>
-            </div>
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-muted-foreground">or</span></div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>
-            )}
+          <form onSubmit={handleEmailLogin} className="space-y-4">
+            {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg p-3">{error}</p>}
 
             <div className="space-y-2">
               <Label>Email</Label>
-              <Input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)} 
-                required 
-              />
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
 
             <div className="space-y-2">
               <Label>Password</Label>
-              <Input 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                required 
-              />
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
@@ -112,18 +103,14 @@ export default function Login() {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Signing in...
                 </>
-              ) : (
-                'Sign in'
-              )}
+              ) : 'Sign in'}
             </Button>
           </form>
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
           Don't have an account?{' '}
-          <Link to="/signup" className="text-blue-600 hover:underline font-medium">
-            Sign up
-          </Link>
+          <Link to="/signup" className="text-blue-600 hover:underline">Sign up</Link>
         </p>
       </div>
     </div>
