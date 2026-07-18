@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Button from '@/components/ui/button';   // Make sure this path is correct in your project
+import Input from '@/components/ui/input';
+import Label from '@/components/ui/label';
 import { BarChart3, Loader2, Apple } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
