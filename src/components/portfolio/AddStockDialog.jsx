@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+//import { base44 } from "@/api/base44Client";
 
 export default function AddStockDialog({ onStockAdded }) {
   const [open, setOpen] = useState(false);
