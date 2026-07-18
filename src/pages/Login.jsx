@@ -15,16 +15,12 @@ export default function Login() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
+    await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: 'https://stock-pulse-rouge.vercel.app/auth/callback',
       },
     });
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    }
   };
 
   const handleEmailLogin = async (e) => {
