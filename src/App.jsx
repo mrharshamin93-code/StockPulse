@@ -29,18 +29,14 @@ import ReferralPage from '@/pages/ReferralPage';
 import ContactUs from '@/pages/ContactUs';
 import NavigationLayout from '@/components/NavigationLayout';
 import { MarketDataProvider } from '@/lib/MarketDataContext';
-import AuthCallback from '@/pages/auth/callback';   // ← Added
+import AuthCallback from '@/pages/auth/callback';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const location = useLocation();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
-      </div>
-    );
+    return <div className="fixed inset-0 flex items-center justify-center">Loading...</div>;
   }
 
   if (authError) {
@@ -56,32 +52,14 @@ const AuthenticatedApp = () => {
     <Routes location={location} key={location.pathname}>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />   {/* ← Added */}
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route path="/onboarding" element={<Onboarding />} />
-        <Route element={<NavigationLayout />}>
-          <Route path="/" element={<Watchlist />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/screener" element={<Screener />} />
-          <Route path="/analysis" element={<Analysis />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/price-alerts" element={<PriceAlerts />} />
-          <Route path="/theme" element={<ThemeSettings />} />
-          <Route path="/currency" element={<CurrencySettings />} />
-          <Route path="/legal" element={<Legal />} />
-          <Route path="/screener/results" element={<ScreenerResults />} />
-          <Route path="/monthly-report" element={<MonthlyReport />} />
-          <Route path="/referral" element={<ReferralPage />} />
-          <Route path="/contact" element={<ContactUs />} />
-          <Route path="/stock/:id" element={<StockDetail />} />
-        </Route>
+        <Route path="/" element={<Watchlist />} />   {/* Change to Login temporarily if needed */}
+        <Route path="/home" element={<Home />} />
+        {/* other protected routes */}
       </Route>
 
-      <Route path="/PriceAlerts" element={<Navigate to="/price-alerts" replace />} />
-      <Route path="/price_alerts" element={<Navigate to="/price-alerts" replace />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
