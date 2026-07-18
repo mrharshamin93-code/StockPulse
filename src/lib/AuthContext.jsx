@@ -6,22 +6,18 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false);   // ← Changed to false
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setIsAuthenticated(!!session);
-      setIsLoadingAuth(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       setIsAuthenticated(!!session);
-      setIsLoadingAuth(false);
     });
 
     return () => subscription.unsubscribe();
@@ -29,12 +25,6 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setIsAuthenticated(false);
-  };
-
-  const navigateToLogin = () => {
-    window.location.href = '/login';
   };
 
   return (
@@ -43,18 +33,11 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated, 
       isLoadingAuth,
       authError,
-      logout,
-      navigateToLogin
+      logout
     }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);
