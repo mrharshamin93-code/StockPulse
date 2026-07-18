@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +13,15 @@ export default function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try { await base44.auth.resetPasswordRequest(email); } catch {}
-    setSent(true);
-    setLoading(false);
+    try {
+      // TODO: Add real reset later
+      alert("Password reset link sent! (Demo)");
+      setSent(true);
+    } catch (err) {
+      alert("Error sending reset link");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
