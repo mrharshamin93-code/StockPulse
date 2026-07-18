@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+//import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { Switch } from "@/components/ui/switch";
 import { Mail, CheckCircle, Loader2 } from "lucide-react";
