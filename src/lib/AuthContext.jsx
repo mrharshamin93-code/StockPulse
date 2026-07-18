@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { appParams } from '@/lib/app-params';
+import { supabase } from './supabase';
 
 const AuthContext = createContext();
 
@@ -7,37 +7,30 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
   const [authError, setAuthError] = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [appPublicSettings, setAppPublicSettings] = useState(null);
 
   useEffect(() => {
-    checkAppState();
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsAuthenticated(!!session);
+      setIsLoadingAuth(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+      setIsAuthenticated(!!session);
+      setIsLoadingAuth(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const checkAppState = async () => {
-    try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-      
-      // Simplified for now - we'll add full auth later
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-      setAuthChecked(true);
-    } catch (error) {
-      console.error('App state check failed:', error);
-      setAuthError({ type: 'unknown', message: error.message });
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-    }
-  };
-
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setIsAuthenticated(false);
-    // TODO: Add base44 logout when fixed
-    window.location.href = '/login';
   };
 
   const navigateToLogin = () => {
@@ -49,10 +42,7 @@ export const AuthProvider = ({ children }) => {
       user, 
       isAuthenticated, 
       isLoadingAuth,
-      isLoadingPublicSettings,
       authError,
-      appPublicSettings,
-      authChecked,
       logout,
       navigateToLogin
     }}>
