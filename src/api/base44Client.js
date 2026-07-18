@@ -1,13 +1,8 @@
-import { createClient } from '@base44/sdk';
+import { createClient } from '@supabase/supabase-js';
 
-const appId = import.meta.env.VITE_BASE44_APP_ID;
-const appBaseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || `https://${appId}.base44.app`;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const base44 = createClient({
-  appId,
-  appBaseUrl,
-  requiresAuth: false,
-  serverUrl: '',
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-console.log("Base44 Client Initialized with App ID:", appId);
+console.log("Supabase Client Initialized");
