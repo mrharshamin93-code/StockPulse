@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+//import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { LogOut, Trash2, Bell, ChevronRight, Loader2, Palette, Banknote, Shield, FileText, Mail, Sparkles, MessageSquare } from "lucide-react";
