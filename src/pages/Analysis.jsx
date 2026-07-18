@@ -3,10 +3,7 @@ import { Sparkles, Search, Newspaper, ThumbsUp, ThumbsDown, RefreshCw } from "lu
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { POPULAR_TICKERS } from "@/lib/tickers";
-import { base44 } from "@/api/base44Client";
 import { Loader2 } from "lucide-react";
-
-
 
 export default function Analysis() {
   const [query, setQuery] = useState("");
@@ -14,7 +11,7 @@ export default function Analysis() {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loadingNews, setLoadingNews] = useState(false);
   const [error, setError] = useState("");
-  const [analysis, setAnalysis] = useState(null); // summary, pros, cons, company_name
+  const [analysis, setAnalysis] = useState(null);
   const [news, setNews] = useState(null);
   const [activeTicker, setActiveTicker] = useState("");
   const [activeCompany, setActiveCompany] = useState("");
@@ -43,62 +40,32 @@ export default function Analysis() {
     const found = POPULAR_TICKERS.find(s => s.ticker.toUpperCase() === t);
     const companyName = found?.name || t;
 
-    // Fire both calls simultaneously
-    const insightsCall = base44.integrations.Core.InvokeLLM({
-      prompt: `Provide an investment analysis of ${companyName} (${t}) stock. Include:
-1. 4-6 key pros/bullish arguments for investing (specific facts, numbers)
-2. 4-6 key cons/bearish arguments or risks (specific facts, numbers)
-3. A 2-3 sentence overall assessment summary
-4. Confirm the ticker is valid (valid: true/false)`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          company_name: { type: "string" },
-          valid: { type: "boolean" },
-          pros: {
-            type: "array",
-            items: { type: "object", properties: { title: { type: "string" }, detail: { type: "string" } } }
-          },
-          cons: {
-            type: "array",
-            items: { type: "object", properties: { title: { type: "string" }, detail: { type: "string" } } }
-          },
-          summary: { type: "string" }
-        }
-      }
+    setActiveTicker(t);
+    setActiveCompany(companyName);
+
+    // Mock data for now
+    setAnalysis({
+      company_name: companyName,
+      pros: [
+        { title: "Strong Growth", detail: "Consistent revenue growth over the past 5 years" },
+        { title: "Market Leader", detail: "Dominant position in its industry" },
+      ],
+      cons: [
+        { title: "High Valuation", detail: "Trading at premium multiples" },
+        { title: "Competition", detail: "Increasing competition from new entrants" },
+      ],
+      summary: `Overall positive outlook for ${companyName}. Strong fundamentals with some valuation concerns.`
     });
 
-    const newsCall = base44.functions.invoke("finnhub", { action: "news", ticker: t });
-    const quoteCall = base44.functions.invoke("finnhub", { action: "quote", ticker: t });
+    setNews([
+      { title: "Company beats earnings expectations", summary: "Strong quarterly results announced today.", source: "CNBC" },
+      { title: "Analyst upgrades stock", summary: "Major bank raises price target.", source: "Bloomberg" },
+    ]);
 
-    // Insights resolves first
-    insightsCall.then(result => {
-      if (!result?.valid) {
-        setError(`"${t}" doesn't appear to be a valid ticker. Please try again.`);
-        setLoadingInsights(false);
-        setLoadingNews(false);
-        return;
-      }
-      setActiveTicker(t);
-      setActiveCompany(result.company_name || companyName);
-      setAnalysis(result);
-      setLoadingInsights(false);
-    }).catch(() => {
-      setError("Something went wrong. Please try again.");
-      setLoadingInsights(false);
-      setLoadingNews(false);
-    });
+    setQuote({ c: 225.5, dp: 1.2 });
 
-    quoteCall.then(result => { if (result?.data) setQuote(result.data); }).catch(() => {});
-
-    // News resolves after (Finnhub, deduplicated by source)
-    newsCall.then(result => {
-      setNews(result?.data?.articles || []);
-      setLoadingNews(false);
-    }).catch(() => {
-      setNews([]);
-      setLoadingNews(false);
-    });
+    setLoadingInsights(false);
+    setLoadingNews(false);
   };
 
   useEffect(() => {
@@ -141,7 +108,6 @@ export default function Analysis() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-        {/* Search */}
         <div className="flex flex-col items-center">
           {!analysis && !loadingInsights && (
             <>
@@ -190,7 +156,6 @@ export default function Analysis() {
           </form>
         </div>
 
-        {/* Insights loading state */}
         {loadingInsights && (
           <div className="border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center" style={{ backgroundColor: "hsl(var(--card))" }}>
             <div className="w-12 h-12 rounded-2xl bg-violet-50 flex items-center justify-center mb-4">
@@ -201,10 +166,8 @@ export default function Analysis() {
           </div>
         )}
 
-        {/* Analysis results */}
         {!loadingInsights && analysis && (
           <div className="space-y-6">
-            {/* AI Summary */}
             <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-100 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -228,10 +191,9 @@ export default function Analysis() {
                 </div>
               )}
               <p className="text-sm leading-relaxed text-violet-900">{analysis.summary}</p>
-              <p className="text-[10px] text-violet-400 mt-3">AI-generated insights · Not financial advice · For informational purposes only</p>
+              <p className="text-[10px] text-violet-400 mt-3">AI-generated insights · Not financial advice</p>
             </div>
 
-            {/* Pros & Cons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="border border-gray-100 rounded-2xl p-6" style={{ backgroundColor: "hsl(var(--card))" }}>
                 <div className="flex items-center gap-2 mb-5">
@@ -263,7 +225,6 @@ export default function Analysis() {
               </div>
             </div>
 
-            {/* News */}
             <div className="border border-gray-100 rounded-2xl p-6" style={{ backgroundColor: "hsl(var(--card))" }}>
               <div className="flex items-center gap-2 mb-5">
                 <Newspaper className="w-4 h-4 text-gray-400" />
@@ -289,16 +250,16 @@ export default function Analysis() {
                           )}
                           <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{item.summary}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                           {item.date && <p className="text-xs text-gray-400">{item.date}</p>}
-                           {item.source && (
-                             <>
-                               {item.date && <span className="text-xs text-gray-300">·</span>}
-                               {item.url ? (
-                                 <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline font-medium">
-                                   {item.source} ↗
-                                 </a>
-                               ) : (
-                                 <span className="text-xs text-gray-400 font-medium">{item.source}</span>
+                            {item.date && <p className="text-xs text-gray-400">{item.date}</p>}
+                            {item.source && (
+                              <>
+                                {item.date && <span className="text-xs text-gray-300">·</span>}
+                                {item.url ? (
+                                  <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline font-medium">
+                                    {item.source} ↗
+                                  </a>
+                                ) : (
+                                  <span className="text-xs text-gray-400 font-medium">{item.source}</span>
                                 )}
                               </>
                             )}
