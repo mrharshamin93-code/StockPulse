@@ -2,7 +2,7 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import { TrendingUp, TrendingDown, Loader2, SlidersHorizontal } from "lucide-react";
 import SubPageHeader from "@/components/SubPageHeader";
-import { base44 } from "@/api/base44Client";
+//import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { useState } from "react";
 
