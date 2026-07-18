@@ -16,7 +16,7 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      // TODO: Replace with real auth later
+      // TODO: Add real email login later
       alert("Email login coming soon. Use Google for now.");
       window.location.href = '/';
     } catch (err) {
@@ -27,8 +27,7 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    const baseUrl = import.meta.env.VITE_BASE44_APP_BASE_URL || 'https://6a46f22136d1e520f1b1ce65.base44.app';
-    window.location.href = `${baseUrl}/auth/google?redirect=/`;
+    window.location.href = 'https://6a46f22136d1e520f1b1ce65.base44.app/auth/google?redirect=/';
   };
 
   const handleAppleLogin = () => {
@@ -69,26 +68,4 @@ export default function Login() {
             </div>
             <div className="space-y-2">
               <Label>Password</Label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </div>
-            <Button type="submit" className="w-full bg-gray-900 text-white hover:bg-gray-800" disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Sign In
-            </Button>
-          </form>
-
-          <div className="flex items-center justify-between text-sm">
-            <Link to="/forgot-password" className="text-gray-500 hover:text-gray-900">Forgot password?</Link>
-            <Link to="/register" className="text-gray-500 hover:text-gray-900">Create account</Link>
-          </div>
-
-          <p className="text-center text-xs text-gray-400">
-            By continuing, you agree to our{' '}
-            <Link to="/legal?page=terms" className="underline hover:text-foreground">Terms</Link>{' '}and{' '}
-            <Link to="/legal?page=privacy" className="underline hover:text-foreground">Privacy Policy</Link>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
