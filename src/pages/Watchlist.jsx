@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
 import StockCard from "@/components/portfolio/StockCard";
