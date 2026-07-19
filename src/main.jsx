@@ -1,5 +1,3 @@
-import { initTheme } from "@/components/settings/ThemeSection";
-initTheme();
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
