@@ -25,7 +25,15 @@ export default function AuthCallback() {
           return;
         }
 
-        navigate('/', { replace: true });
+        // === KEY FIX: Confirm session is fully set before navigating ===
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session) {
+          navigate('/', { replace: true });
+        } else {
+          console.error('No session after successful exchange');
+          navigate('/login', { replace: true });
+        }
       } catch (err) {
         console.error('Unexpected callback error:', err);
         navigate('/login', { replace: true });
