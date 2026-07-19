@@ -2,15 +2,45 @@ const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 const BASE_URL = "https://finnhub.io/api/v1";
 
 const cache = new Map();
+const inFlight = new Map();
 
 function cacheGet(key) {
   const entry = cache.get(key);
-  if (!entry || Date.now() > entry.expiresAt) return null;
+
+  if (!entry) return null;
+
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+
   return entry.data;
 }
 
 function cacheSet(key, data, ttlMs) {
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+}
+
+async function withCache(key, ttlMs, fetcher) {
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  if (inFlight.has(key)) {
+    return inFlight.get(key);
+  }
+
+  const promise = (async () => {
+    try {
+      const data = await fetcher();
+      cacheSet(key, data, ttlMs);
+      return data;
+    } finally {
+      inFlight.delete(key);
+    }
+  })();
+
+  inFlight.set(key, promise);
+  return promise;
 }
 
 async function finnhubGet(path, params = {}, retries = 2) {
@@ -43,6 +73,7 @@ function getBody(req) {
       action,
       ticker,
       query,
+      q,
       resolution,
       from,
       to,
@@ -65,7 +96,7 @@ function getBody(req) {
     return {
       action,
       ticker: ticker ? String(ticker).trim().toUpperCase() : undefined,
-      query,
+      query: query || q,
       resolution,
       from: from ? Number(from) : undefined,
       to: to ? Number(to) : undefined,
@@ -80,6 +111,7 @@ function getBody(req) {
   return {
     ...body,
     ticker: body.ticker ? String(body.ticker).trim().toUpperCase() : undefined,
+    query: body.query || body.q,
     tickers: Array.isArray(body.tickers)
       ? body.tickers.map((t) => String(t).trim().toUpperCase()).filter(Boolean)
       : [],
@@ -97,6 +129,21 @@ function mapQuoteData(ticker, data) {
     l: typeof data?.l === "number" ? data.l : null,
     o: typeof data?.o === "number" ? data.o : null,
     t: data?.t ?? null,
+  };
+}
+
+function emptyQuote(ticker, error = null) {
+  return {
+    ticker,
+    c: null,
+    dp: null,
+    d: null,
+    pc: null,
+    h: null,
+    l: null,
+    o: null,
+    t: null,
+    ...(error ? { error } : {}),
   };
 }
 
@@ -118,13 +165,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing ticker" });
       }
 
-      const cacheKey = `quote:${ticker}`;
-      const cached = cacheGet(cacheKey);
-      if (cached) return res.status(200).json(cached);
-
-      const data = await finnhubGet("/quote", { symbol: ticker });
-      const result = mapQuoteData(ticker, data);
-      cacheSet(cacheKey, result, 60_000);
+      const result = await withCache(`quote:${ticker}`, 15_000, async () => {
+        const data = await finnhubGet("/quote", { symbol: ticker });
+        return mapQuoteData(ticker, data);
+      });
 
       return res.status(200).json(result);
     }
@@ -137,31 +181,17 @@ export default async function handler(req, res) {
       const results = await Promise.all(
         tickers.map(async (t) => {
           const normalizedTicker = String(t).trim().toUpperCase();
-          const cacheKey = `quote:${normalizedTicker}`;
-          const cached = cacheGet(cacheKey);
-
-          if (cached) {
-            return { ticker: normalizedTicker, ...cached };
-          }
 
           try {
-            const data = await finnhubGet("/quote", { symbol: normalizedTicker });
-            const result = mapQuoteData(normalizedTicker, data);
-            cacheSet(cacheKey, result, 60_000);
-            return result;
+            return await withCache(`quote:${normalizedTicker}`, 15_000, async () => {
+              const data = await finnhubGet("/quote", { symbol: normalizedTicker });
+              return mapQuoteData(normalizedTicker, data);
+            });
           } catch (error) {
-            return {
-              ticker: normalizedTicker,
-              c: null,
-              dp: null,
-              d: null,
-              pc: null,
-              h: null,
-              l: null,
-              o: null,
-              t: null,
-              error: error?.message || "Failed to fetch quote",
-            };
+            return emptyQuote(
+              normalizedTicker,
+              error?.message || "Failed to fetch quote"
+            );
           }
         })
       );
@@ -174,31 +204,28 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing ticker" });
       }
 
-      const cacheKey = `candles:${ticker}`;
-      const cached = cacheGet(cacheKey);
-      if (cached) return res.status(200).json(cached);
+      const result = await withCache(`candles:${ticker}`, 5 * 60_000, async () => {
+        const toTs = Math.floor(Date.now() / 1000);
+        const fromTs = toTs - 365 * 24 * 60 * 60;
 
-      const to = Math.floor(Date.now() / 1000);
-      const from = to - 365 * 24 * 60 * 60;
+        const data = await finnhubGet("/stock/candle", {
+          symbol: ticker,
+          resolution: "W",
+          from: String(fromTs),
+          to: String(toTs),
+        });
 
-      const data = await finnhubGet("/stock/candle", {
-        symbol: ticker,
-        resolution: "W",
-        from: String(from),
-        to: String(to),
+        if (data.s !== "ok") {
+          return { candles: [] };
+        }
+
+        const candles = data.c.map((close, i) => ({
+          t: data.t[i],
+          v: close,
+        }));
+
+        return { candles };
       });
-
-      if (data.s !== "ok") {
-        return res.status(200).json({ candles: [] });
-      }
-
-      const candles = data.c.map((close, i) => ({
-        t: data.t[i],
-        v: close,
-      }));
-
-      const result = { candles };
-      cacheSet(cacheKey, result, 5 * 60_000);
 
       return res.status(200).json(result);
     }
@@ -213,27 +240,26 @@ export default async function handler(req, res) {
       const fromTs = from || toTs - 30 * 86400;
 
       const cacheKey = `candles_range:${ticker}:${resolution}:${fromTs}:${toTs}`;
-      const cached = cacheGet(cacheKey);
-      if (cached) return res.status(200).json(cached);
 
-      const data = await finnhubGet("/stock/candle", {
-        symbol: ticker,
-        resolution: String(resolution),
-        from: String(fromTs),
-        to: String(toTs),
+      const result = await withCache(cacheKey, 5 * 60_000, async () => {
+        const data = await finnhubGet("/stock/candle", {
+          symbol: ticker,
+          resolution: String(resolution),
+          from: String(fromTs),
+          to: String(toTs),
+        });
+
+        if (data.s !== "ok") {
+          return { candles: [] };
+        }
+
+        const candles = data.c.map((close, i) => ({
+          t: data.t[i],
+          v: close,
+        }));
+
+        return { candles };
       });
-
-      if (data.s !== "ok") {
-        return res.status(200).json({ candles: [] });
-      }
-
-      const candles = data.c.map((close, i) => ({
-        t: data.t[i],
-        v: close,
-      }));
-
-      const result = { candles };
-      cacheSet(cacheKey, result, 5 * 60_000);
 
       return res.status(200).json(result);
     }
@@ -243,50 +269,54 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing ticker" });
       }
 
-      const to = new Date().toISOString().split("T")[0];
-      const from = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
+      const result = await withCache(`news:${ticker}`, 10 * 60_000, async () => {
+        const toDate = new Date().toISOString().split("T")[0];
+        const fromDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .split("T")[0];
 
-      const [data, profileData] = await Promise.all([
-        finnhubGet("/company-news", { symbol: ticker, from, to }),
-        finnhubGet("/stock/profile2", { symbol: ticker }),
-      ]);
+        const [data, profileData] = await Promise.all([
+          finnhubGet("/company-news", { symbol: ticker, from: fromDate, to: toDate }),
+          finnhubGet("/stock/profile2", { symbol: ticker }),
+        ]);
 
-      const companyName = (profileData.name || "").toLowerCase();
-      const tickerLower = ticker.toLowerCase();
+        const companyName = (profileData.name || "").toLowerCase();
+        const tickerLower = ticker.toLowerCase();
 
-      const all = (Array.isArray(data) ? data : []).sort(
-        (a, b) => b.datetime - a.datetime
-      );
+        const all = (Array.isArray(data) ? data : []).sort(
+          (a, b) => b.datetime - a.datetime
+        );
 
-      const relevant = all.filter((a) => {
-        const text = `${a.headline || ""} ${a.summary || ""}`.toLowerCase();
-        return text.includes(tickerLower) || (companyName && text.includes(companyName));
-      });
+        const relevant = all.filter((a) => {
+          const text = `${a.headline || ""} ${a.summary || ""}`.toLowerCase();
+          return text.includes(tickerLower) || (companyName && text.includes(companyName));
+        });
 
-      const seenSources = {};
-      const articles = [];
-      const pool = relevant.length >= 3 ? relevant : all;
+        const seenSources = {};
+        const articles = [];
+        const pool = relevant.length >= 3 ? relevant : all;
 
-      for (const a of pool) {
-        const src = (a.source || "").toLowerCase();
-        seenSources[src] = (seenSources[src] || 0) + 1;
+        for (const a of pool) {
+          const src = (a.source || "").toLowerCase();
+          seenSources[src] = (seenSources[src] || 0) + 1;
 
-        if (seenSources[src] <= 2) {
-          articles.push({
-            title: a.headline,
-            summary: a.summary,
-            url: a.url,
-            source: a.source,
-            date: new Date(a.datetime * 1000).toLocaleDateString(),
-          });
+          if (seenSources[src] <= 2) {
+            articles.push({
+              title: a.headline,
+              summary: a.summary,
+              url: a.url,
+              source: a.source,
+              date: new Date(a.datetime * 1000).toLocaleDateString(),
+            });
+          }
+
+          if (articles.length >= 10) break;
         }
 
-        if (articles.length >= 10) break;
-      }
+        return { articles };
+      });
 
-      return res.status(200).json({ articles });
+      return res.status(200).json(result);
     }
 
     if (action === "profile") {
@@ -294,13 +324,17 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing ticker" });
       }
 
-      const data = await finnhubGet("/stock/profile2", { symbol: ticker });
+      const result = await withCache(`profile:${ticker}`, 24 * 60 * 60_000, async () => {
+        const data = await finnhubGet("/stock/profile2", { symbol: ticker });
 
-      return res.status(200).json({
-        exchange: data.exchange || null,
-        name: data.name || null,
-        ticker: data.ticker || ticker,
+        return {
+          exchange: data.exchange || null,
+          name: data.name || null,
+          ticker: data.ticker || ticker,
+        };
       });
+
+      return res.status(200).json(result);
     }
 
     if (action === "search") {
@@ -310,34 +344,42 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing query" });
       }
 
-      const cacheKey = `search:${String(query).trim().toUpperCase()}`;
-      const cached = cacheGet(cacheKey);
-      if (cached) return res.status(200).json(cached);
+      const normalizedQuery = String(query).trim();
 
-      const data = await finnhubGet("/search", {
-        q: query,
+      const result = await withCache(`search:${normalizedQuery.toUpperCase()}`, 5 * 60_000, async () => {
+        const data = await finnhubGet("/search", {
+          q: normalizedQuery,
+        });
+
+        const results = (data.result || [])
+          .filter((r) => {
+            const symbol = String(r?.symbol || "").trim();
+            const type = String(r?.type || "").toLowerCase();
+            return (
+              symbol &&
+              !symbol.includes(".") &&
+              (type.includes("stock") ||
+                type.includes("equity") ||
+                type === "" ||
+                type.includes("common"))
+            );
+          })
+          .slice(0, 8)
+          .map((r) => ({
+            ticker: String(r.symbol || "").trim().toUpperCase(),
+            name: String(r.description || r.displaySymbol || r.symbol || "").trim(),
+            exchange: String(r.primaryExchange || r.exchange || "").trim(),
+            symbol: String(r.symbol || "").trim().toUpperCase(),
+            description: String(r.description || r.displaySymbol || r.symbol || "").trim(),
+            primaryExchange: String(r.primaryExchange || r.exchange || "").trim(),
+          }))
+          .filter((r) => r.ticker);
+
+        return {
+          results,
+          result: results,
+        };
       });
-
-      const results = (data.result || [])
-        .filter((r) => {
-          const symbol = String(r?.symbol || "").trim();
-          const type = String(r?.type || "").toLowerCase();
-          return (
-            symbol &&
-            !symbol.includes(".") &&
-            (type.includes("stock") || type.includes("equity") || type === "" || type.includes("common"))
-          );
-        })
-        .slice(0, 8)
-        .map((r) => ({
-          ticker: String(r.symbol || "").trim().toUpperCase(),
-          name: String(r.description || r.displaySymbol || r.symbol || "").trim(),
-          exchange: String(r.primaryExchange || r.exchange || "").trim(),
-        }))
-        .filter((r) => r.ticker);
-
-      const result = { results };
-      cacheSet(cacheKey, result, 5 * 60_000);
 
       return res.status(200).json(result);
     }
