@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, RefreshCw, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
+import PortfolioGrowthChart from "@/components/portfolio/PortfolioGrowthChart";
 
 export default function Home() {
   const { user, isLoadingAuth } = useAuth();
@@ -30,11 +31,10 @@ export default function Home() {
     } catch (err) {
       console.error("Error fetching holdings:", err);
     } finally {
-      setLoading(false);           // ← This was missing
+      setLoading(false);
     }
   };
 
-  // Fetch + Realtime
   useEffect(() => {
     if (!user?.id) {
       setLoading(false);
@@ -52,9 +52,7 @@ export default function Home() {
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [user?.id]);
 
   const handleRefresh = async () => {
@@ -63,7 +61,6 @@ export default function Home() {
     setRefreshing(false);
   };
 
-  // Show loading only while really loading
   if (isLoadingAuth || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -73,23 +70,24 @@ export default function Home() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-5xl mx-auto space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="font-heading text-3xl font-bold">Portfolio</h1>
-          <p className="text-muted-foreground text-sm">Your current holdings overview</p>
+          <p className="text-muted-foreground">Your holdings & performance</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+        <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
 
       {/* Portfolio Summary (your original UI) */}
-      <div className="mb-8">
-        <PortfolioSummary stocks={holdings} />
-      </div>
+      <PortfolioSummary stocks={holdings} />
+
+      {/* Portfolio Growth Chart (your original component) */}
+      <PortfolioGrowthChart stocks={holdings} />
 
       {/* Holdings List */}
       {holdings.length > 0 ? (
@@ -105,7 +103,7 @@ export default function Home() {
               const value = currentPrice * (stock.quantity || 0);
               const cost = (stock.purchase_price || 0) * (stock.quantity || 0);
               const gain = value - cost;
-              const gainPct = cost > 0 ? ((gain / cost) * 100) : 0;
+              const gainPct = cost > 0 ? (gain / cost) * 100 : 0;
 
               return (
                 <div key={stock.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50">
