@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -241,7 +241,6 @@ function StockChart({ ticker, currentPrice, isPositive }) {
     };
 
     loadChart();
-
     return () => {
       cancelled = true;
     };
@@ -561,6 +560,7 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
 export default function StockDetail() {
   const { ticker: routeTicker } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [stock, setStock] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -848,7 +848,7 @@ export default function StockDetail() {
       <BuyDetailDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={handleBuyDone} />
       <SellDetailDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={handleSellDone} />
 
-      <SubPageHeader title={stock.ticker} backPath={stock._watchlistOnly ? "/watchlist" : "/home"} />
+      <SubPageHeader title={stock.ticker} onBack={() => navigate(-1)} />
 
       <main className="mx-auto max-w-4xl space-y-8 px-4 py-8 pb-safe sm:px-6">
         <div className="rounded-2xl border border-gray-100 bg-white p-6 sm:p-8">
