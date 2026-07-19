@@ -11,15 +11,34 @@ export function MarketDataProvider({ children }) {
   const refreshQuotes = useCallback(async (tickers) => {
     const list = tickers || tickersRef.current;
     if (!list.length) return;
-    console.log("Refreshing quotes for:", list); // TODO: Add real API later
+
+    try {
+      const tickersParam = list.join(",");
+      const response = await fetch(`/api/finnhub?action=quotes&tickers=${encodeURIComponent(tickersParam)}`);
+      
+      if (!response.ok) {
+        throw new Error(`Finnhub API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.quotes) {
+        setQuotes(data.quotes);
+      } else if (data.error) {
+        console.error("Finnhub quotes error:", data.error);
+      }
+    } catch (error) {
+      console.error("Failed to refresh quotes:", error);
+    }
   }, []);
 
   useEffect(() => {
     if (!user?.id) return;
-    // Mock data for now
+
+    // Start with a reasonable default set (can be expanded later)
     tickersRef.current = ["AAPL", "TSLA", "NVDA"];
     refreshQuotes(tickersRef.current);
-  }, [user?.id]);
+  }, [user?.id, refreshQuotes]);
 
   return (
     <MarketDataContext.Provider value={{ quotes, refreshQuotes }}>
