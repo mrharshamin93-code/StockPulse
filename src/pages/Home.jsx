@@ -5,7 +5,6 @@ import { Loader2, RefreshCw, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
 
-
 export default function Home() {
   const { user, isLoadingAuth } = useAuth();
   const [holdings, setHoldings] = useState([]);
@@ -13,22 +12,34 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchHoldings = async () => {
-    if (!user?.id) return;
-    
-    const { data, error } = await supabase
-      .from("stocks")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
-    if (!error && data) {
-      setHoldings(data);
+    try {
+      const { data, error } = await supabase
+        .from("stocks")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (!error && data) {
+        setHoldings(data);
+      }
+    } catch (err) {
+      console.error("Error fetching holdings:", err);
+    } finally {
+      setLoading(false);           // ← This was missing
     }
   };
 
-  // Realtime updates
+  // Fetch + Realtime
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     fetchHoldings();
 
@@ -41,7 +52,9 @@ export default function Home() {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.id]);
 
   const handleRefresh = async () => {
@@ -50,6 +63,7 @@ export default function Home() {
     setRefreshing(false);
   };
 
+  // Show loading only while really loading
   if (isLoadingAuth || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -72,7 +86,7 @@ export default function Home() {
         </Button>
       </div>
 
-      {/* === Your Original PortfolioSummary (migrated) === */}
+      {/* Portfolio Summary (your original UI) */}
       <div className="mb-8">
         <PortfolioSummary stocks={holdings} />
       </div>
@@ -84,14 +98,14 @@ export default function Home() {
             <Briefcase className="w-4 h-4 text-gray-500" />
             <span className="font-semibold">Holdings ({holdings.length})</span>
           </div>
-          
+
           <div className="divide-y">
             {holdings.map((stock) => {
               const currentPrice = stock.current_price || stock.purchase_price || 0;
               const value = currentPrice * (stock.quantity || 0);
               const cost = (stock.purchase_price || 0) * (stock.quantity || 0);
               const gain = value - cost;
-              const gainPct = cost > 0 ? (gain / cost) * 100 : 0;
+              const gainPct = cost > 0 ? ((gain / cost) * 100) : 0;
 
               return (
                 <div key={stock.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50">
