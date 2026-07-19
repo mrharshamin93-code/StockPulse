@@ -1,7 +1,13 @@
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
-import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Route,
+  Routes,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import UserNotRegisteredError from "@/components/UserNotRegisteredError";
@@ -32,21 +38,28 @@ import { MarketDataProvider } from "@/lib/MarketDataContext";
 import AuthCallback from "@/pages/auth/callback";
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError } = useAuth();
+  const {
+    isLoadingAuth,
+    isLoadingPublicSettings,
+    authError,
+  } = useAuth();
+
   const location = useLocation();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
-    return <div className="fixed inset-0 flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="fixed inset-0 flex items-center justify-center">
+        Loading...
+      </div>
+    );
   }
 
-  if (authError) {
-    if (authError.type === "user_not_registered") {
-      return <UserNotRegisteredError />;
-    }
+  if (authError?.type === "user_not_registered") {
+    return <UserNotRegisteredError />;
   }
 
   return (
-    <Routes location={location} key={location.pathname}>
+    <Routes location={location}>
       {/* Public routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -56,23 +69,55 @@ const AuthenticatedApp = () => {
       <Route path="/legal" element={<Legal />} />
 
       {/* Protected routes */}
-      <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
+      <Route
+        element={
+          <ProtectedRoute
+            unauthenticatedElement={
+              <Navigate to="/login" replace />
+            }
+          />
+        }
+      >
         <Route element={<NavigationLayout />}>
-          <Route path="/" element={<Navigate to="/watchlist" replace />} />
+          <Route
+            path="/"
+            element={<Navigate to="/watchlist" replace />}
+          />
           <Route path="/home" element={<Home />} />
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/stock/:ticker" element={<StockDetail />} />
           <Route path="/analysis/:ticker" element={<Analysis />} />
           <Route path="/screener" element={<Screener />} />
-          <Route path="/screener/results" element={<ScreenerResults />} />
+          <Route
+            path="/screener/results"
+            element={<ScreenerResults />}
+          />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/settings/theme" element={<ThemeSettings />} />
-          <Route path="/settings/currency" element={<CurrencySettings />} />
-          <Route path="/price-alerts" element={<PriceAlerts />} />
-          <Route path="/monthly-report" element={<MonthlyReport />} />
-          <Route path="/referrals" element={<ReferralPage />} />
-          <Route path="/contact-us" element={<ContactUs />} />
+          <Route
+            path="/settings/theme"
+            element={<ThemeSettings />}
+          />
+          <Route
+            path="/settings/currency"
+            element={<CurrencySettings />}
+          />
+          <Route
+            path="/price-alerts"
+            element={<PriceAlerts />}
+          />
+          <Route
+            path="/monthly-report"
+            element={<MonthlyReport />}
+          />
+          <Route
+            path="/referrals"
+            element={<ReferralPage />}
+          />
+          <Route
+            path="/contact-us"
+            element={<ContactUs />}
+          />
         </Route>
       </Route>
 
