@@ -490,8 +490,12 @@ export default function Watchlist() {
       setSearchLoading(true);
 
       try {
-        const data = await callFinnhub({ action: "search", query: q });
-        const results = Array.isArray(data?.results) ? data.results : [];
+        const data = await callFinnhub({ action: "search", q });
+        const results = Array.isArray(data?.result)
+          ? data.result
+          : Array.isArray(data?.results)
+            ? data.results
+            : [];
 
         const filtered = results.filter(
           (s) =>
