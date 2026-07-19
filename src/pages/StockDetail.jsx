@@ -544,7 +544,7 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
             </div>
           </div>
           <Button
-            type="submit"
+            type="submit" 
             className="w-full"
             disabled={loading || !quantity || parseFloat(quantity) <= 0}
           >
@@ -848,7 +848,8 @@ export default function StockDetail() {
       <BuyDetailDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={handleBuyDone} />
       <SellDetailDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={handleSellDone} />
 
-      <SubPageHeader title={stock.ticker} onBack={() => navigate(-1)} />
+      {/* === UPDATED: Removed ticker from header === */}
+      <SubPageHeader onBack={() => navigate(-1)} />
 
       <main className="mx-auto max-w-4xl space-y-8 px-4 py-8 pb-safe sm:px-6">
         <div className="rounded-2xl border border-gray-100 bg-white p-6 sm:p-8">
