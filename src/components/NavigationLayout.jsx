@@ -74,12 +74,10 @@ export default function NavigationLayout() {
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden">
+      {/* Content Area - Fixed height handling */}
       <div
-        style={{
-          position: "relative",
-          overflow: showTabs ? "hidden" : "visible",
-          flex: 1,
-        }}
+        className="relative flex-1 overflow-hidden"
+        style={{ minHeight: showTabs ? "calc(100dvh - 70px)" : "100dvh" }}
       >
         <AnimatePresence mode="popLayout" custom={directionRef.current} initial={false}>
           <motion.div
@@ -90,17 +88,17 @@ export default function NavigationLayout() {
             animate="center"
             exit="exit"
             transition={{ duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] }}
-            style={
-              showTabs
-                ? { position: "absolute", top: 0, left: 0, right: 0, willChange: "transform" }
-                : { position: "relative" }
-            }
+            className={showTabs ? "absolute inset-0" : ""}
+            style={{
+              willChange: showTabs ? "transform" : undefined,
+            }}
           >
             <Outlet />
           </motion.div>
         </AnimatePresence>
       </div>
 
+      {/* Floating Add button on Portfolio tab */}
       {pathname === "/home" && (
         <div
           className="fixed left-1/2 z-50 -translate-x-1/2"
@@ -110,6 +108,7 @@ export default function NavigationLayout() {
         </div>
       )}
 
+      {/* Bottom Navigation */}
       {showTabs && (
         <nav
           className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100"
