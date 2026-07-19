@@ -92,6 +92,8 @@ export default function AddStockDialog({ onStockAdded }) {
     setLoading(true);
 
     const cleanTicker = ticker.trim().toUpperCase();
+    const inputQuantity = parseFloat(quantity);
+    const inputPurchasePrice = parseFloat(purchasePrice);
 
     let company_name = cleanTicker;
     let exchange = "";
@@ -108,7 +110,7 @@ export default function AddStockDialog({ onStockAdded }) {
       }
     } catch {}
 
-    let current_price = parseFloat(purchasePrice);
+    let current_price = inputPurchasePrice;
 
     try {
       const quoteRes = await fetch(
@@ -121,14 +123,58 @@ export default function AddStockDialog({ onStockAdded }) {
       }
     } catch {}
 
-    const { error: stockError } = await supabase.from("stocks").insert({
-      user_id: user.id,
-      ticker: cleanTicker,
-      company_name,
-      quantity: parseFloat(quantity),
-      purchase_price: parseFloat(purchasePrice),
-      current_price,
-    });
+    const { data: existingStock, error: existingStockError } = await supabase
+      .from("stocks")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("ticker", cleanTicker)
+      .maybeSingle();
+
+    if (existingStockError) {
+      setLoading(false);
+      setError(existingStockError.message || "Failed to check existing portfolio stock.");
+      return;
+    }
+
+    let stockError = null;
+
+    if (existingStock) {
+      const existingQuantity = parseFloat(existingStock.quantity) || 0;
+      const existingPurchasePrice = parseFloat(existingStock.purchase_price) || 0;
+      const combinedQuantity = existingQuantity + inputQuantity;
+
+      const weightedPurchasePrice =
+        combinedQuantity > 0
+          ? (
+              existingQuantity * existingPurchasePrice +
+              inputQuantity * inputPurchasePrice
+            ) / combinedQuantity
+          : inputPurchasePrice;
+
+      const { error } = await supabase
+        .from("stocks")
+        .update({
+          company_name,
+          quantity: combinedQuantity,
+          purchase_price: weightedPurchasePrice,
+          current_price,
+        })
+        .eq("id", existingStock.id)
+        .eq("user_id", user.id);
+
+      stockError = error;
+    } else {
+      const { error } = await supabase.from("stocks").insert({
+        user_id: user.id,
+        ticker: cleanTicker,
+        company_name,
+        quantity: inputQuantity,
+        purchase_price: inputPurchasePrice,
+        current_price,
+      });
+
+      stockError = error;
+    }
 
     if (stockError) {
       setLoading(false);
@@ -253,7 +299,7 @@ export default function AddStockDialog({ onStockAdded }) {
             disabled={loading || !tickerValid || validating || !quantity || !purchasePrice}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-            {loading ? "Validating…" : "Add to Portfolio"}
+            {loading ? "Saving…" : "Add to Portfolio"}
           </Button>
         </form>
       </DialogContent>
