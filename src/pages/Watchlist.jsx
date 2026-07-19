@@ -58,7 +58,7 @@ function abbreviateExchange(exchange) {
   if (e.includes("SAPPORO")) return "SPE";
   if (e.includes("SHANGHAI") || e.includes("SSE") || e.includes("SHSE")) return "SSE";
   if (e.includes("SHENZHEN") || e.includes("SZSE")) return "SZSE";
-  if (e.includes("HONG KON") || e.includes("HKEX") || e.includes("HKG")) return "HKEX";
+  if (e.includes("HONG KONG") || e.includes("HKEX") || e.includes("HKG")) return "HKEX";
   if (e.includes("NSE") || e.includes("NATIONAL STOCK EXCHANGE")) return "NSE";
   if (e.includes("BSE") || e.includes("BOMBAY")) return "BSE";
   if (e.includes("KRX") || e.includes("KOREA EXCHANGE")) return "KRX";
@@ -749,9 +749,9 @@ export default function Watchlist() {
       )}
 
       <div className="max-w-2xl mx-auto px-4 pt-6">
-        {/* === UPDATED HEADER === */}
+        {/* === UPDATED HEADER (Tighter Gap) === */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Star className="h-7 w-7 text-yellow-500 fill-yellow-500" />
             <h1 className="text-3xl font-bold text-gray-900">Watchlist</h1>
           </div>
