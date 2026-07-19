@@ -1,7 +1,6 @@
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 const BASE_URL = "https://finnhub.io/api/v1";
 
-// In-memory cache: key -> { data, expiresAt }
 const cache = new Map();
 
 function cacheGet(key) {
@@ -19,7 +18,7 @@ async function finnhubGet(path, params = {}, retries = 2) {
   url.searchParams.set("token", FINNHUB_API_KEY);
 
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null) {
+    if (v !== undefined && v !== null && v !== "") {
       url.searchParams.set(k, String(v));
     }
   }
@@ -51,26 +50,54 @@ function getBody(req) {
     } = req.query;
 
     let parsedTickers = tickers;
+
     if (typeof tickers === "string") {
       try {
         parsedTickers = JSON.parse(tickers);
       } catch {
-        parsedTickers = tickers.split(",").map((t) => t.trim()).filter(Boolean);
+        parsedTickers = tickers
+          .split(",")
+          .map((t) => t.trim().toUpperCase())
+          .filter(Boolean);
       }
     }
 
     return {
       action,
-      ticker,
+      ticker: ticker ? String(ticker).trim().toUpperCase() : undefined,
       query,
       resolution,
       from: from ? Number(from) : undefined,
       to: to ? Number(to) : undefined,
-      tickers: Array.isArray(parsedTickers) ? parsedTickers : [],
+      tickers: Array.isArray(parsedTickers)
+        ? parsedTickers.map((t) => String(t).trim().toUpperCase()).filter(Boolean)
+        : [],
     };
   }
 
-  return req.body || {};
+  const body = req.body || {};
+
+  return {
+    ...body,
+    ticker: body.ticker ? String(body.ticker).trim().toUpperCase() : undefined,
+    tickers: Array.isArray(body.tickers)
+      ? body.tickers.map((t) => String(t).trim().toUpperCase()).filter(Boolean)
+      : [],
+  };
+}
+
+function mapQuoteData(ticker, data) {
+  return {
+    ticker,
+    c: typeof data?.c === "number" ? data.c : null,
+    dp: typeof data?.dp === "number" ? data.dp : null,
+    d: typeof data?.d === "number" ? data.d : null,
+    pc: typeof data?.pc === "number" ? data.pc : null,
+    h: typeof data?.h === "number" ? data.h : null,
+    l: typeof data?.l === "number" ? data.l : null,
+    o: typeof data?.o === "number" ? data.o : null,
+    t: data?.t ?? null,
+  };
 }
 
 export default async function handler(req, res) {
@@ -96,7 +123,7 @@ export default async function handler(req, res) {
       if (cached) return res.status(200).json(cached);
 
       const data = await finnhubGet("/quote", { symbol: ticker });
-      const result = { c: data.c, dp: data.dp, d: data.d, pc: data.pc };
+      const result = mapQuoteData(ticker, data);
       cacheSet(cacheKey, result, 60_000);
 
       return res.status(200).json(result);
@@ -109,17 +136,32 @@ export default async function handler(req, res) {
 
       const results = await Promise.all(
         tickers.map(async (t) => {
-          const cacheKey = `quote:${t}`;
+          const normalizedTicker = String(t).trim().toUpperCase();
+          const cacheKey = `quote:${normalizedTicker}`;
           const cached = cacheGet(cacheKey);
-          if (cached) return { ticker: t, ...cached };
+
+          if (cached) {
+            return { ticker: normalizedTicker, ...cached };
+          }
 
           try {
-            const data = await finnhubGet("/quote", { symbol: t });
-            const result = { c: data.c, dp: data.dp, d: data.d, pc: data.pc };
+            const data = await finnhubGet("/quote", { symbol: normalizedTicker });
+            const result = mapQuoteData(normalizedTicker, data);
             cacheSet(cacheKey, result, 60_000);
-            return { ticker: t, ...result };
-          } catch {
-            return { ticker: t, c: 0, dp: 0, d: 0, pc: 0 };
+            return result;
+          } catch (error) {
+            return {
+              ticker: normalizedTicker,
+              c: null,
+              dp: null,
+              d: null,
+              pc: null,
+              h: null,
+              l: null,
+              o: null,
+              t: null,
+              error: error?.message || "Failed to fetch quote",
+            };
           }
         })
       );
@@ -268,21 +310,36 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing query" });
       }
 
+      const cacheKey = `search:${String(query).trim().toUpperCase()}`;
+      const cached = cacheGet(cacheKey);
+      if (cached) return res.status(200).json(cached);
+
       const data = await finnhubGet("/search", {
         q: query,
-        exchange: "",
       });
 
       const results = (data.result || [])
-        .filter((r) => r.type === "Common Stock" && r.symbol && !r.symbol.includes("."))
+        .filter((r) => {
+          const symbol = String(r?.symbol || "").trim();
+          const type = String(r?.type || "").toLowerCase();
+          return (
+            symbol &&
+            !symbol.includes(".") &&
+            (type.includes("stock") || type.includes("equity") || type === "" || type.includes("common"))
+          );
+        })
         .slice(0, 8)
         .map((r) => ({
-          ticker: r.symbol,
-          name: r.description,
-          exchange: r.primaryExchange || r.exchange || "",
-        }));
+          ticker: String(r.symbol || "").trim().toUpperCase(),
+          name: String(r.description || r.displaySymbol || r.symbol || "").trim(),
+          exchange: String(r.primaryExchange || r.exchange || "").trim(),
+        }))
+        .filter((r) => r.ticker);
 
-      return res.status(200).json({ results });
+      const result = { results };
+      cacheSet(cacheKey, result, 5 * 60_000);
+
+      return res.status(200).json(result);
     }
 
     return res.status(400).json({ error: "Unknown action" });
