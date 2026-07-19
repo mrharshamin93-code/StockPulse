@@ -454,7 +454,6 @@ export default function Watchlist() {
 
   const [items, setItems] = useState([]);
   const [stocks, setStocks] = useState([]);
-  const [quotes, setQuotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [ticker, setTicker] = useState("");
   const [adding, setAdding] = useState(false);
@@ -517,10 +516,7 @@ export default function Watchlist() {
           const tickerValue = s.ticker.toUpperCase();
           const queryValue = q.toUpperCase();
 
-          return (
-            tickerValue.includes(queryValue) ||
-            s.name.toUpperCase().includes(queryValue)
-          );
+          return tickerValue.includes(queryValue) || s.name.toUpperCase().includes(queryValue);
         });
 
         setSuggestions(filtered.slice(0, 8));
@@ -570,12 +566,6 @@ export default function Watchlist() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (globalQuotes && typeof globalQuotes === "object") {
-      setQuotes(globalQuotes);
-    }
-  }, [globalQuotes]);
-
-  useEffect(() => {
     if (!user?.id) return;
 
     let mounted = true;
@@ -598,7 +588,6 @@ export default function Watchlist() {
 
   useEffect(() => {
     if (!user?.id || !items.length) return;
-
     syncQuotesForItems(items);
   }, [items, user?.id, syncQuotesForItems]);
 
@@ -761,11 +750,11 @@ export default function Watchlist() {
 
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      const qa = quotes[a.ticker.toUpperCase()]?.dp ?? 0;
-      const qb = quotes[b.ticker.toUpperCase()]?.dp ?? 0;
+      const qa = globalQuotes[a.ticker.toUpperCase()]?.dp ?? 0;
+      const qb = globalQuotes[b.ticker.toUpperCase()]?.dp ?? 0;
       return qb - qa;
     });
-  }, [items, quotes]);
+  }, [items, globalQuotes]);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -848,9 +837,7 @@ export default function Watchlist() {
                               </span>
                             )}
 
-                            {alreadyAdded && (
-                              <span className="text-xs text-gray-400">Added</span>
-                            )}
+                            {alreadyAdded && <span className="text-xs text-gray-400">Added</span>}
 
                             {!alreadyAdded && inPortfolio && (
                               <span className="text-xs text-amber-600">In portfolio</span>
@@ -886,7 +873,7 @@ export default function Watchlist() {
                 key={item.id}
                 item={item}
                 stock={findStock(item.ticker)}
-                quote={quotes[item.ticker.toUpperCase()]}
+                quote={globalQuotes[item.ticker.toUpperCase()]}
                 onRemove={handleRemove}
                 onStarToggle={handleStarToggle}
                 index={index}
