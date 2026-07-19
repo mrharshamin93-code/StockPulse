@@ -39,11 +39,7 @@ const PERIOD_CONFIG = {
 async function callFinnhub(params) {
   const searchParams = new URLSearchParams(params).toString();
   const res = await fetch(`/api/finnhub?${searchParams}`);
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch Finnhub data");
-  }
-
+  if (!res.ok) throw new Error("Failed to fetch Finnhub data");
   return res.json();
 }
 
@@ -69,7 +65,6 @@ async function fetchChartData(ticker, period, basePrice) {
     });
 
     const candles = res?.candles;
-
     if (candles?.length > 0) {
       return candles.map((c) => {
         const d = new Date(c.t * 1000);
@@ -258,11 +253,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
   const handleAddCompare = (e) => {
     e.preventDefault();
     const t = compareInput.trim().toUpperCase();
-
-    if (t && t !== ticker.toUpperCase()) {
-      setCompareTicker(t);
-    }
-
+    if (t && t !== ticker.toUpperCase()) setCompareTicker(t);
     setShowInput(false);
     setCompareInput("");
   };
@@ -860,24 +851,7 @@ export default function StockDetail() {
       <SubPageHeader title={stock.ticker} backPath={stock._watchlistOnly ? "/watchlist" : "/home"} />
 
       <main className="mx-auto max-w-4xl space-y-8 px-4 py-8 pb-safe sm:px-6">
-        <div className="relative rounded-2xl border border-gray-100 bg-white p-6 sm:p-8">
-          <div className="absolute right-4 top-8 flex items-center gap-2">
-            <button
-              onClick={() => setBuyOpen(true)}
-              className="h-8 rounded-md bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-95"
-            >
-              Buy
-            </button>
-            {!stock._watchlistOnly && (
-              <button
-                onClick={() => setSellOpen(true)}
-                className="h-8 rounded-md border border-gray-200 bg-white px-3 text-xs font-semibold text-black transition-all hover:bg-gray-50 active:scale-95"
-              >
-                Sell
-              </button>
-            )}
-          </div>
-
+        <div className="rounded-2xl border border-gray-100 bg-white p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <span className="text-xs font-mono uppercase tracking-widest text-gray-400">
@@ -887,18 +861,37 @@ export default function StockDetail() {
               <p className="text-gray-500">{stock.company_name}</p>
             </div>
 
-            <div className="text-left sm:text-right">
-              <p className="font-heading text-3xl font-bold">
-                {stock.current_price ? "$" + stock.current_price.toFixed(2) : "—"}
-              </p>
-              <div
-                className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${
-                  isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                }`}
-              >
-                {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                {isPositive ? "+" : ""}
-                {gainPct.toFixed(2)}%
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              <div className="text-left sm:text-right">
+                <p className="font-heading text-3xl font-bold">
+                  {stock.current_price ? "$" + stock.current_price.toFixed(2) : "—"}
+                </p>
+                <div
+                  className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${
+                    isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                  }`}
+                >
+                  {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                  {isPositive ? "+" : ""}
+                  {gainPct.toFixed(2)}%
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setBuyOpen(true)}
+                  className="h-8 rounded-md bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-95"
+                >
+                  Buy
+                </button>
+                {!stock._watchlistOnly && (
+                  <button
+                    onClick={() => setSellOpen(true)}
+                    className="h-8 rounded-md border border-gray-200 bg-white px-3 text-xs font-semibold text-black transition-all hover:bg-gray-50 active:scale-95"
+                  >
+                    Sell
+                  </button>
+                )}
               </div>
             </div>
           </div>
