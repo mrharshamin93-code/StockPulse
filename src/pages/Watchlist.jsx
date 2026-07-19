@@ -237,9 +237,7 @@ function AnimatedPrice({ value }) {
         flash === "up" ? "text-emerald-600" : flash === "down" ? "text-red-600" : "text-gray-900"
       }`}
     >
-      {value !== "—" ? `
-$$
-{value}` : "—"}
+      {value !== "—" ? "$" + value : "—"}
     </span>
   );
 }
@@ -311,19 +309,22 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     e.preventDefault();
     e.stopPropagation();
 
+    const shareText = `Check out ${companyName} (${item.ticker}) — 
+$$
+{displayPrice}`;
+    const clipboardText = `${item.ticker} —
+$$
+{displayPrice}`;
+
     if (navigator.share) {
       navigator
         .share({
           title: item.ticker,
-          text: `Check out ${companyName} (${item.ticker}) —
-$$
-{displayPrice}`,
+          text: shareText,
         })
         .catch(() => {});
     } else {
-      navigator.clipboard?.writeText(`${item.ticker} — 
-$$
-{displayPrice}`);
+      navigator.clipboard?.writeText(clipboardText);
     }
 
     closeSwipe();
