@@ -216,12 +216,18 @@ function AnimatedPrice({ value }) {
 
   useEffect(() => {
     if (prevRef.current !== value && value !== "—") {
-      const dir = parseFloat(value) > parseFloat(prevRef.current) ? "up" : "down";
-      setFlash(dir);
-      const t = setTimeout(() => setFlash(null), 700);
-      prevRef.current = value;
-      return () => clearTimeout(t);
+      const prev = parseFloat(prevRef.current);
+      const next = parseFloat(value);
+
+      if (!Number.isNaN(prev) && !Number.isNaN(next)) {
+        const dir = next > prev ? "up" : "down";
+        setFlash(dir);
+        const t = setTimeout(() => setFlash(null), 700);
+        prevRef.current = value;
+        return () => clearTimeout(t);
+      }
     }
+
     prevRef.current = value;
   }, [value]);
 
@@ -309,13 +315,13 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
       navigator
         .share({
           title: item.ticker,
-          text: `Check out ${companyName} (${item.ticker}) — 
+          text: `Check out ${companyName} (${item.ticker}) —
 $$
 {displayPrice}`,
         })
         .catch(() => {});
     } else {
-      navigator.clipboard?.writeText(`${item.ticker} —
+      navigator.clipboard?.writeText(`${item.ticker} — 
 $$
 {displayPrice}`);
     }
