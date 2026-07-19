@@ -1,54 +1,57 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
+ const navigate = useNavigate();
+ const { isAuthenticated, isLoadingAuth } = useAuth();
 
-  useEffect(() => {
-    const handleCallback = async () => {
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
+ // Step 1: Perform the OAuth exchange (only once)
+ useEffect(() => {
+ const handleCallback = async () => {
+ try {
+ const params = new URLSearchParams(window.location.search);
+ const code = params.get('code');
 
-        // Not an OAuth callback
-        if (!code) {
-          navigate('/login', { replace: true });
-          return;
-        }
+ if (!code) {
+ navigate('/login', { replace: true });
+ return;
+ }
 
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+ const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-        if (error) {
-          console.error('OAuth Error:', error);
-          navigate('/login', { replace: true });
-          return;
-        }
+ if (error) {
+ console.error('OAuth Error:', error);
+ navigate('/login', { replace: true });
+ return;
+ }
 
-        // === KEY FIX: Confirm session is fully set before navigating ===
-        const { data: { session } } = await supabase.auth.getSession();
+ // Exchange succeeded — now wait for AuthContext to update
+ // (no immediate navigate here)
+ await supabase.auth.getSession(); // ensure session is synced
+ } catch (err) {
+ console.error('Unexpected callback error:', err);
+ navigate('/login', { replace: true });
+ }
+ };
 
-        if (session) {
-          navigate('/', { replace: true });
-        } else {
-          console.error('No session after successful exchange');
-          navigate('/login', { replace: true });
-        }
-      } catch (err) {
-        console.error('Unexpected callback error:', err);
-        navigate('/login', { replace: true });
-      }
-    };
+ handleCallback();
+ }, [navigate]);
 
-    handleCallback();
-  }, [navigate]);
+ // Step 2: Only navigate when the shared AuthContext confirms we're authenticated
+ useEffect(() => {
+ if (!isLoadingAuth && isAuthenticated) {
+ navigate('/', { replace: true });
+ }
+ }, [isAuthenticated, isLoadingAuth, navigate]);
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4" />
-        <p className="text-gray-600">Signing you in…</p>
-      </div>
-    </div>
-  );
+ return (
+ <div className="min-h-screen flex items-center justify-center bg-gray-50">
+ <div className="text-center">
+ <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4" />
+ <p className="text-gray-600">Signing you in…</p>
+ </div>
+ </div>
+ );
 }
