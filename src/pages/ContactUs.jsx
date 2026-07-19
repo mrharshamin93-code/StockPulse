@@ -4,7 +4,6 @@ import SubPageHeader from "@/components/SubPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-//import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function ContactUs() {
@@ -17,15 +16,22 @@ export default function ContactUs() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSending(true);
+
     try {
-      await base44.integrations.Core.SendEmail({
-      to: "akaharshgd@gmail.com",
-      subject: `[StockPulse Support] ${subject}`,
-      body: `Message from ${user.full_name || user.email} (${user.email}):\n\n${message}`,
+      // TODO: Replace this with Supabase Edge Function for real email sending
+      console.log("Contact form submitted:", {
+        from: user?.email,
+        subject: `[StockPulse Support] ${subject}`,
+        message,
       });
+
+      // Simulate sending (replace with real implementation later)
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
       setSent(true);
-    } catch {
-      // fail silently — show success anyway
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      // Still show success to user (you can improve this later)
       setSent(true);
     } finally {
       setSending(false);
@@ -49,7 +55,9 @@ export default function ContactUs() {
 
         {/* Direct email */}
         <div>
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 px-1">Get in Touch</p>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 px-1">
+            Get in Touch
+          </p>
           <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-50 shadow-sm">
             <div className="w-full flex items-center px-5 py-4 min-h-[56px]">
               <div className="flex items-center gap-3">
@@ -59,13 +67,14 @@ export default function ContactUs() {
                 <p className="font-medium text-sm">Email Support</p>
               </div>
             </div>
-
           </div>
         </div>
 
         {/* Contact form */}
         <div>
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 px-1">Send a Message</p>
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 px-1">
+            Send a Message
+          </p>
           <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
             {sent ? (
               <div className="flex flex-col items-center justify-center py-6 gap-3 text-center">
@@ -73,10 +82,16 @@ export default function ContactUs() {
                   <MessageSquare className="w-6 h-6 text-green-500" />
                 </div>
                 <p className="font-semibold text-sm">Message sent!</p>
-                <p className="text-xs text-muted-foreground">We'll get back to you as soon as possible.</p>
+                <p className="text-xs text-muted-foreground">
+                  We'll get back to you as soon as possible.
+                </p>
                 <button
                   className="text-xs text-muted-foreground underline mt-2"
-                  onClick={() => { setSent(false); setSubject(""); setMessage(""); }}
+                  onClick={() => {
+                    setSent(false);
+                    setSubject("");
+                    setMessage("");
+                  }}
                 >
                   Send another
                 </button>
@@ -88,7 +103,7 @@ export default function ContactUs() {
                   <Input
                     placeholder="e.g. Bug report, Feature request…"
                     value={subject}
-                    onChange={e => setSubject(e.target.value)}
+                    onChange={(e) => setSubject(e.target.value)}
                     required
                   />
                 </div>
@@ -98,12 +113,20 @@ export default function ContactUs() {
                     className="flex min-h-[120px] w-full rounded-md border border-input bg-white text-gray-900 placeholder:text-gray-400 px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
                     placeholder="Tell us what's on your mind…"
                     value={message}
-                    onChange={e => setMessage(e.target.value)}
+                    onChange={(e) => setMessage(e.target.value)}
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={sending || !subject || !message}>
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={sending || !subject || !message}
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
                   Send Message
                 </Button>
               </form>
