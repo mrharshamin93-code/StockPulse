@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
@@ -53,14 +53,14 @@ function abbreviateExchange(exchange) {
   if (e.includes("CHI-X AUSTRALIA")) return "CXA";
   if (e.includes("TOKYO") || e.includes("TSE") || e.includes("JPX")) return "TSE";
   if (e.includes("OSAKA") || e.includes("OSE")) return "OSE";
-  if (e.includes("NAGOYA")) return "NSE-JP";
+  if (e.includes("NAGOYA") || e.includes("NSE")) return "NSE-JP";
   if (e.includes("FUKUOKA")) return "FKE";
   if (e.includes("SAPPORO")) return "SPE";
-  if (e.includes("SHANGHAI") || e.includes("SHSE")) return "SSE";
+  if (e.includes("SHANGHAI") || e.includes("SSE") || e.includes("SHSE")) return "SSE";
   if (e.includes("SHENZHEN") || e.includes("SZSE")) return "SZSE";
   if (e.includes("HONG KONG") || e.includes("HKEX") || e.includes("HKG")) return "HKEX";
-  if (e.includes("NATIONAL STOCK EXCHANGE")) return "NSE";
-  if (e.includes("BOMBAY")) return "BSE";
+  if (e.includes("NSE") || e.includes("NATIONAL STOCK EXCHANGE")) return "NSE";
+  if (e.includes("BSE") || e.includes("BOMBAY")) return "BSE";
   if (e.includes("KRX") || e.includes("KOREA EXCHANGE")) return "KRX";
   if (e.includes("KOSDAQ")) return "KOSDAQ";
   if (e.includes("KOSPI")) return "KOSPI";
@@ -129,7 +129,7 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
 
     try {
       const data = await callFinnhub({ action: "quote", ticker });
-      if (typeof data?.c === "number") currentPrice = data.c;
+      if (data?.c) currentPrice = data.c;
     } catch {}
 
     await supabase.from("stocks").insert({
@@ -216,18 +216,12 @@ function AnimatedPrice({ value }) {
 
   useEffect(() => {
     if (prevRef.current !== value && value !== "—") {
-      const prev = parseFloat(prevRef.current);
-      const next = parseFloat(value);
-
-      if (!Number.isNaN(prev) && !Number.isNaN(next)) {
-        const dir = next > prev ? "up" : "down";
-        setFlash(dir);
-        const t = setTimeout(() => setFlash(null), 700);
-        prevRef.current = value;
-        return () => clearTimeout(t);
-      }
+      const dir = parseFloat(value) > parseFloat(prevRef.current) ? "up" : "down";
+      setFlash(dir);
+      const t = setTimeout(() => setFlash(null), 700);
+      prevRef.current = value;
+      return () => clearTimeout(t);
     }
-
     prevRef.current = value;
   }, [value]);
 
@@ -253,17 +247,11 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const isDragging = useRef(false);
+  const cardRef = useRef(null);
   const REVEAL_WIDTH = 160;
 
-  const livePrice = typeof quote?.c === "number" ? quote.c : null;
-  const displayPrice =
-    livePrice !== null
-      ? livePrice.toFixed(2)
-      : typeof stock?.current_price === "number"
-        ? stock.current_price.toFixed(2)
-        : "—";
-
-  const dailyGainPct = typeof quote?.dp === "number" ? quote.dp : null;
+  const displayPrice = quote?.c ? quote.c.toFixed(2) : stock?.current_price?.toFixed(2) || "—";
+  const dailyGainPct = quote?.dp ?? null;
   const dailyIsPositive = (dailyGainPct ?? 0) >= 0;
   const revealRatio = Math.min(Math.abs(dragX) / REVEAL_WIDTH, 1);
 
@@ -321,13 +309,15 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
       navigator
         .share({
           title: item.ticker,
-          text: `Check out ${companyName} (${item.ticker}) —
+          text: `Check out ${companyName} (${item.ticker}) — 
 $$
 {displayPrice}`,
         })
         .catch(() => {});
     } else {
-      navigator.clipboard?.writeText(`${item.ticker} — $${displayPrice}`);
+      navigator.clipboard?.writeText(`${item.ticker} —
+$$
+{displayPrice}`);
     }
 
     closeSwipe();
@@ -366,28 +356,27 @@ $$
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="font-semibold text-gray-900">{item.ticker}</div>
+          <div className="font-semibold text-gray-900">{item.ticker}</div>
+          <div className="text-sm text-gray-500 truncate">{companyName}</div>
 
-            {item.exchange && (
+          {item.exchange && (
+            <div className="mt-1">
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                 {abbreviateExchange(item.exchange)}
               </span>
-            )}
-          </div>
-
-          <div className="text-sm text-gray-500 truncate">{companyName}</div>
+            </div>
+          )}
         </div>
 
         <div className="text-right shrink-0">
           <AnimatedPrice value={displayPrice} />
           <div
             className={`text-sm font-medium ${
-              dailyGainPct === null
-                ? "text-gray-400"
-                : dailyIsPositive
+              dailyGainPct !== null
+                ? dailyIsPositive
                   ? "text-emerald-600"
                   : "text-red-600"
+                : "text-gray-400"
             }`}
           >
             {dailyGainPct !== null ? `${dailyIsPositive ? "+" : ""}${dailyGainPct.toFixed(2)}%` : "—"}
@@ -403,6 +392,7 @@ $$
 
   return (
     <motion.div
+      ref={cardRef}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.03 }}
@@ -412,7 +402,7 @@ $$
         <button
           onClick={handleShare}
           className="w-20 bg-sky-500 text-white flex flex-col items-center justify-center gap-1"
-          style={{ opacity: revealRatio }}
+          style={{ opacity: revealRatio, pointerEvents: revealRatio > 0.5 ? "auto" : "none" }}
         >
           <Share2 className="h-5 w-5" />
           <span className="text-xs font-medium">Share</span>
@@ -421,7 +411,7 @@ $$
         <button
           onClick={handleDelete}
           className="w-20 bg-red-500 text-white flex flex-col items-center justify-center gap-1"
-          style={{ opacity: revealRatio }}
+          style={{ opacity: revealRatio, pointerEvents: revealRatio > 0.5 ? "auto" : "none" }}
         >
           <Trash2 className="h-5 w-5" />
           <span className="text-xs font-medium">Delete</span>
@@ -450,7 +440,7 @@ $$
 
 export default function Watchlist() {
   const { user } = useAuth();
-  const { quotes: globalQuotes, refreshQuotes } = useMarketData();
+  const { quotes, refreshQuotes } = useMarketData();
 
   const [items, setItems] = useState([]);
   const [stocks, setStocks] = useState([]);
@@ -478,22 +468,6 @@ export default function Watchlist() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const normalizeSearchResults = useCallback((data) => {
-    const rawResults = Array.isArray(data?.result)
-      ? data.result
-      : Array.isArray(data?.results)
-        ? data.results
-        : [];
-
-    return rawResults
-      .map((item) => ({
-        ticker: String(item?.ticker || item?.symbol || item?.displaySymbol || "").trim().toUpperCase(),
-        name: String(item?.name || item?.description || "").trim(),
-        exchange: String(item?.exchange || item?.mic || "").trim(),
-      }))
-      .filter((item) => item.ticker && item.name);
-  }, []);
-
   useEffect(() => {
     const q = ticker.trim();
 
@@ -510,41 +484,28 @@ export default function Watchlist() {
 
       try {
         const data = await callFinnhub({ action: "search", query: q });
-        const results = normalizeSearchResults(data);
+        const results = Array.isArray(data?.results) ? data.results : [];
 
-        const filtered = results.filter((s) => {
-          const tickerValue = s.ticker.toUpperCase();
-          const queryValue = q.toUpperCase();
-
-          return tickerValue.includes(queryValue) || s.name.toUpperCase().includes(queryValue);
-        });
+        const filtered = results.filter(
+          (s) =>
+            s?.ticker &&
+            s?.name &&
+            !s.ticker.includes(".") &&
+            s.ticker.toUpperCase().includes(q.toUpperCase())
+        );
 
         setSuggestions(filtered.slice(0, 8));
       } catch {
         setSuggestions([]);
-      } finally {
-        setSearchLoading(false);
       }
-    }, 250);
+
+      setSearchLoading(false);
+    }, 300);
 
     return () => clearTimeout(searchTimeout.current);
-  }, [ticker, normalizeSearchResults]);
+  }, [ticker]);
 
-  const syncQuotesForItems = useCallback((watchItems) => {
-    const tickersToRefresh = [
-      ...new Set(
-        (watchItems || [])
-          .map((item) => String(item?.ticker || "").trim().toUpperCase())
-          .filter(Boolean)
-      ),
-    ];
-
-    if (tickersToRefresh.length) {
-      refreshQuotes(tickersToRefresh);
-    }
-  }, [refreshQuotes]);
-
-  const load = useCallback(async () => {
+  const load = async () => {
     if (!user?.id) return [];
 
     const [{ data: watchData = [] }, { data: stockData = [] }] = await Promise.all([
@@ -562,44 +523,76 @@ export default function Watchlist() {
     setItems(watchData);
     setStocks(stockData);
 
+    const missing = watchData.filter((i) => !i.exchange || !i.company_name);
+
+    if (missing.length > 0) {
+      await Promise.all(
+        missing.map(async (item) => {
+          try {
+            const data = await callFinnhub({ action: "profile", ticker: item.ticker });
+            const updates = {};
+
+            if (data?.exchange) updates.exchange = data.exchange;
+            if (data?.name) updates.company_name = data.name;
+
+            if (Object.keys(updates).length) {
+              await supabase
+                .from("watchlist_items")
+                .update(updates)
+                .eq("id", item.id)
+                .eq("user_id", user.id);
+            }
+          } catch {}
+        })
+      );
+
+      const { data: updated = [] } = await supabase
+        .from("watchlist_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      setItems(updated);
+      return updated;
+    }
+
     return watchData;
-  }, [user?.id]);
+  };
 
   useEffect(() => {
     if (!user?.id) return;
 
-    let mounted = true;
+    load().then((watchData) => {
+      setLoading(false);
 
-    load()
-      .then((watchData) => {
-        if (!mounted) return;
-        setLoading(false);
-        syncQuotesForItems(watchData);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id, load, syncQuotesForItems]);
+      if (watchData?.length) {
+        refreshQuotes(watchData.map((i) => i.ticker.toUpperCase()));
+      }
+    });
+  }, [user?.id, refreshQuotes]);
 
   useEffect(() => {
-    if (!user?.id || !items.length) return;
-    syncQuotesForItems(items);
-  }, [items, user?.id, syncQuotesForItems]);
+    if (!user?.id) return;
+
+    const tickersToRefresh = [...new Set(items.map((i) => i.ticker?.toUpperCase()).filter(Boolean))];
+
+    if (tickersToRefresh.length) {
+      refreshQuotes(tickersToRefresh);
+    }
+  }, [items, user?.id, refreshQuotes]);
 
   useEffect(() => {
-    if (!user?.id || !items.length) return;
+    if (!user?.id) return;
 
     const interval = setInterval(() => {
-      syncQuotesForItems(items);
+      const tickersToRefresh = [...new Set(items.map((i) => i.ticker?.toUpperCase()).filter(Boolean))];
+      if (tickersToRefresh.length) {
+        refreshQuotes(tickersToRefresh);
+      }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [items, user?.id, syncQuotesForItems]);
+  }, [items, user?.id, refreshQuotes]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -610,11 +603,7 @@ export default function Watchlist() {
         "postgres_changes",
         { event: "*", schema: "public", table: "stocks", filter: `user_id=eq.${user.id}` },
         async () => {
-          const { data = [] } = await supabase
-            .from("stocks")
-            .select("*")
-            .eq("user_id", user.id);
-
+          const { data = [] } = await supabase.from("stocks").select("*").eq("user_id", user.id);
           setStocks(data);
         }
       )
@@ -641,7 +630,6 @@ export default function Watchlist() {
             .order("created_at", { ascending: false });
 
           setItems(data);
-          syncQuotesForItems(data);
         }
       )
       .subscribe();
@@ -649,44 +637,42 @@ export default function Watchlist() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, syncQuotesForItems]);
+  }, [user?.id]);
 
   const addTicker = async (symbol, exchange = "") => {
-    const normalizedSymbol = String(symbol || "").trim().toUpperCase();
-    if (!normalizedSymbol || !user?.id) return;
+    symbol = symbol.trim().toUpperCase();
+    if (!symbol) return;
 
-    if (items.find((i) => i.ticker.toUpperCase() === normalizedSymbol)) {
-      setToast(`"${normalizedSymbol}" is already in your watchlist.`);
+    if (items.find((i) => i.ticker.toUpperCase() === symbol)) {
+      setToast(`"${symbol}" is already in your watchlist.`);
       return;
     }
 
     setAdding(true);
     setShowSuggestions(false);
 
-    let companyName = "";
+    let company_name = "";
 
     try {
-      const data = await callFinnhub({ action: "profile", ticker: normalizedSymbol });
-      companyName = data?.name || "";
-      if (!exchange && data?.exchange) {
-        exchange = data.exchange;
-      }
+      const data = await callFinnhub({ action: "profile", ticker: symbol });
+      company_name = data?.name || "";
+      if (!exchange && data?.exchange) exchange = data.exchange;
     } catch {}
 
     await supabase.from("watchlist_items").insert({
       user_id: user.id,
-      ticker: normalizedSymbol,
+      ticker: symbol,
       exchange,
-      company_name: companyName,
+      company_name,
     });
 
     setTicker("");
-    setSuggestions([]);
-
-    const updatedWatchData = await load();
-    syncQuotesForItems(updatedWatchData);
-
+    const watchData = await load();
     setAdding(false);
+
+    if (watchData?.length) {
+      refreshQuotes(watchData.map((i) => i.ticker.toUpperCase()));
+    }
   };
 
   const handleAdd = (e) => {
@@ -696,17 +682,10 @@ export default function Watchlist() {
 
   const handleRemove = async (id) => {
     const previous = items;
-    const next = previous.filter((i) => i.id !== id);
-    setItems(next);
+    setItems((prev) => prev.filter((i) => i.id !== id));
 
     try {
-      await supabase
-        .from("watchlist_items")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-
-      syncQuotesForItems(next);
+      await supabase.from("watchlist_items").delete().eq("id", id).eq("user_id", user.id);
     } catch {
       setItems(previous);
       setToast("Failed to remove — please try again.");
@@ -719,12 +698,7 @@ export default function Watchlist() {
       setStocks((prev) => prev.filter((s) => s.id !== stock.id));
 
       try {
-        await supabase
-          .from("stocks")
-          .delete()
-          .eq("id", stock.id)
-          .eq("user_id", user.id);
-
+        await supabase.from("stocks").delete().eq("id", stock.id).eq("user_id", user.id);
         setToast(`${item.ticker} removed from portfolio`);
       } catch {
         setStocks(previous);
@@ -743,18 +717,8 @@ export default function Watchlist() {
     setToast(`${addedTicker} added to portfolio`);
   };
 
-  const findStock = useCallback(
-    (tickerValue) => stocks.find((s) => s.ticker.toUpperCase() === tickerValue.toUpperCase()),
-    [stocks]
-  );
-
-  const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const qa = globalQuotes[a.ticker.toUpperCase()]?.dp ?? 0;
-      const qb = globalQuotes[b.ticker.toUpperCase()]?.dp ?? 0;
-      return qb - qa;
-    });
-  }, [items, globalQuotes]);
+  const findStock = (tickerValue) =>
+    stocks.find((s) => s.ticker.toUpperCase() === tickerValue.toUpperCase());
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -795,7 +759,7 @@ export default function Watchlist() {
                 autoComplete="off"
               />
 
-              {showSuggestions && ticker.trim() && (searchLoading || suggestions.length > 0) && (
+              {showSuggestions && (searchLoading || suggestions.length > 0) && (
                 <div
                   ref={suggestionsRef}
                   className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
@@ -819,6 +783,8 @@ export default function Watchlist() {
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
                             if (alreadyAdded) return;
+                            setTicker(s.ticker);
+                            setShowSuggestions(false);
                             addTicker(s.ticker, s.exchange);
                           }}
                           className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors border-b border-gray-50 last:border-0 ${
@@ -868,17 +834,23 @@ export default function Watchlist() {
           </div>
         ) : (
           <div className="space-y-3">
-            {sortedItems.map((item, index) => (
-              <WatchlistCard
-                key={item.id}
-                item={item}
-                stock={findStock(item.ticker)}
-                quote={globalQuotes[item.ticker.toUpperCase()]}
-                onRemove={handleRemove}
-                onStarToggle={handleStarToggle}
-                index={index}
-              />
-            ))}
+            {[...items]
+              .sort((a, b) => {
+                const qa = quotes[a.ticker.toUpperCase()]?.dp ?? 0;
+                const qb = quotes[b.ticker.toUpperCase()]?.dp ?? 0;
+                return qb - qa;
+              })
+              .map((item, index) => (
+                <WatchlistCard
+                  key={item.id}
+                  item={item}
+                  stock={findStock(item.ticker)}
+                  quote={quotes[item.ticker.toUpperCase()]}
+                  onRemove={handleRemove}
+                  onStarToggle={handleStarToggle}
+                  index={index}
+                />
+              ))}
           </div>
         )}
       </div>
