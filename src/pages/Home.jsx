@@ -23,62 +23,59 @@ export default function Home() {
 
   const loadStocks = useCallback(async () => {
     if (!user?.id) {
+      console.log("No user ID found");
       setLoading(false);
       return;
     }
+
+    console.log("Loading stocks for user:", user.id);
 
     try {
       const { data, error } = await supabase
         .from("stocks")
         .select("*")
-        .eq("user_id", user.id)
+        .eq("user_id", user.id)           // ← Try changing this if needed
+        // .eq("created_by_id", user.id)  // ← Uncomment this line if user_id doesn't work
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Error loading stocks:", error);
+        console.error("Supabase error loading stocks:", error);
         setStocks([]);
       } else {
+        console.log("Stocks loaded successfully:", data?.length || 0, "records");
+        console.log("First stock sample:", data?.[0]);
         setStocks(data || []);
       }
     } catch (err) {
-      console.error("Unexpected error loading stocks:", err);
+      console.error("Unexpected error:", err);
       setStocks([]);
     } finally {
       setLoading(false);
     }
   }, [user?.id]);
 
-  // Initial load + realtime
   useEffect(() => {
     loadStocks();
 
     if (!user?.id) return;
 
     const channel = supabase
-      .channel(`home-stocks-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "stocks", filter: `user_id=eq.${user.id}` },
-        () => loadStocks()
-      )
+      .channel(`stocks-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stocks", filter: `user_id=eq.${user.id}` }, loadStocks)
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, [user?.id, loadStocks]);
 
-  // Pull to refresh
+  // Pull to refresh (same as before)
   const handleTouchStart = (e) => {
-    if (scrollRef.current?.scrollTop === 0) {
-      touchStartY.current = e.touches[0].clientY;
-    }
+    if (scrollRef.current?.scrollTop === 0) touchStartY.current = e.touches[0].clientY;
   };
 
   const handleTouchMove = (e) => {
     if (touchStartY.current === null) return;
     const delta = e.touches[0].clientY - touchStartY.current;
-    if (delta > 0) {
-      setPullDistance(Math.min(delta * 0.5, PULL_THRESHOLD + 20));
-    }
+    if (delta > 0) setPullDistance(Math.min(delta * 0.5, PULL_THRESHOLD + 20));
   };
 
   const handleTouchEnd = async () => {
@@ -95,7 +92,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}>
-      {/* Header */}
       <header className="border-b border-gray-100 sticky top-0 z-10 bg-background" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex justify-center">
           <div className="flex items-center gap-1.5">
@@ -110,26 +106,17 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Pull-to-refresh indicator */}
       <AnimatePresence>
         {(pullDistance > 0 || refreshing) && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: refreshing ? 48 : pullDistance, opacity: 1 }}
-            className="flex items-center justify-center bg-gray-50/50"
-          >
+          <motion.div className="flex items-center justify-center bg-gray-50/50 h-12">
             <RefreshCw className={`w-5 h-5 ${pullProgress >= 1 || refreshing ? "text-gray-900" : "text-gray-400"}`} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <main
-        ref={scrollRef}
-        className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 space-y-8 flex-1 overflow-y-auto"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
+      <main ref={scrollRef} className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 space-y-8 flex-1 overflow-y-auto"
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+
         {loading ? (
           <div className="flex justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -140,7 +127,6 @@ export default function Home() {
           <>
             <PortfolioSummary stocks={stocks} />
             <PortfolioGrowthChart stocks={stocks} />
-
             <div>
               <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-gray-500 mb-4 text-center">
                 Holdings · {stocks.length}
