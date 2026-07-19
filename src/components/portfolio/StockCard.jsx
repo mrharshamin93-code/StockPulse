@@ -1,80 +1,64 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { TrendingUp, TrendingDown, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-async function callFinnhub(params) {
-  const searchParams = new URLSearchParams(params).toString();
-  const res = await fetch(`/api/finnhub?${searchParams}`);
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch Finnhub data");
-  }
-
-  return res.json();
-}
-
 function BuyDialog({ open, onOpenChange, stock, onDone }) {
-  const { user } = useAuth();
   const [quantity, setQuantity] = useState("");
   const [purchasePrice, setPurchasePrice] = useState(
     stock?.current_price?.toFixed(2) || stock?.purchase_price?.toFixed(2) || ""
   );
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setPurchasePrice(stock?.current_price?.toFixed(2) || stock?.purchase_price?.toFixed(2) || "");
-    setQuantity("");
-  }, [stock, open]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!user?.id) return;
+    if (!stock?.id) return;
 
     setLoading(true);
-
-    let currentPrice = parseFloat(purchasePrice);
-
-    try {
-      const res = await callFinnhub({ action: "quote", ticker: stock.ticker });
-      if (res?.c) currentPrice = res.c;
-    } catch {}
-
     const qty = parseFloat(quantity);
     const price = parseFloat(purchasePrice);
-    const newQty = stock.quantity + qty;
-    const newAvgCost = ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty;
 
-    await Promise.all([
-      supabase
+    try {
+      // Calculate new weighted average cost
+      const newQty = stock.quantity + qty;
+      const newAvgCost = ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty;
+
+      // Update the stock holding
+      const { error: updateError } = await supabase
         .from("stocks")
         .update({
           quantity: newQty,
           purchase_price: +newAvgCost.toFixed(4),
-          current_price: currentPrice,
+          current_price: stock.current_price || price,
         })
-        .eq("id", stock.id)
-        .eq("user_id", user.id),
-      supabase.from("stock_transactions").insert({
-        user_id: user.id,
+        .eq("id", stock.id);
+
+      if (updateError) throw updateError;
+
+      // Record the transaction
+      await supabase.from("stock_transactions").insert({
+        user_id: stock.user_id,
         ticker: stock.ticker.toUpperCase(),
         company_name: stock.company_name,
         type: "buy",
         quantity: qty,
         price,
         total: qty * price,
-      }),
-    ]);
+      });
 
-    setLoading(false);
-    setQuantity("");
-    onDone();
-    onOpenChange(false);
+      onDone?.();
+      onOpenChange(false);
+      setQuantity("");
+    } catch (error) {
+      console.error("Buy error:", error);
+      alert("Failed to buy shares. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -112,7 +96,7 @@ function BuyDialog({ open, onOpenChange, stock, onDone }) {
             </div>
           </div>
           <Button type="submit" className="w-full" disabled={loading || !quantity || !purchasePrice}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             Buy
           </Button>
         </form>
@@ -122,52 +106,50 @@ function BuyDialog({ open, onOpenChange, stock, onDone }) {
 }
 
 function SellDialog({ open, onOpenChange, stock, onDone }) {
-  const { user } = useAuth();
   const [quantity, setQuantity] = useState("");
   const [loading, setLoading] = useState(false);
   const max = stock?.quantity || 0;
 
-  useEffect(() => {
-    setQuantity("");
-  }, [stock, open]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!user?.id) return;
+    if (!stock?.id) return;
 
     setLoading(true);
-
     const sellQty = parseFloat(quantity);
     const sellPrice = stock.current_price || stock.purchase_price;
 
-    await supabase.from("stock_transactions").insert({
-      user_id: user.id,
-      ticker: stock.ticker.toUpperCase(),
-      company_name: stock.company_name,
-      type: "sell",
-      quantity: sellQty,
-      price: sellPrice,
-      total: sellQty * sellPrice,
-    });
+    try {
+      // Record sell transaction
+      await supabase.from("stock_transactions").insert({
+        user_id: stock.user_id,
+        ticker: stock.ticker.toUpperCase(),
+        company_name: stock.company_name,
+        type: "sell",
+        quantity: sellQty,
+        price: sellPrice,
+        total: sellQty * sellPrice,
+      });
 
-    if (sellQty >= max) {
-      await supabase
-        .from("stocks")
-        .delete()
-        .eq("id", stock.id)
-        .eq("user_id", user.id);
-    } else {
-      await supabase
-        .from("stocks")
-        .update({ quantity: parseFloat((max - sellQty).toFixed(6)) })
-        .eq("id", stock.id)
-        .eq("user_id", user.id);
+      if (sellQty >= max) {
+        // Sell all → delete the holding
+        await supabase.from("stocks").delete().eq("id", stock.id);
+      } else {
+        // Partial sell → reduce quantity
+        await supabase
+          .from("stocks")
+          .update({ quantity: parseFloat((max - sellQty).toFixed(6)) })
+          .eq("id", stock.id);
+      }
+
+      onDone?.();
+      onOpenChange(false);
+      setQuantity("");
+    } catch (error) {
+      console.error("Sell error:", error);
+      alert("Failed to sell shares. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-    setQuantity("");
-    onDone();
-    onOpenChange(false);
   };
 
   return (
@@ -208,7 +190,7 @@ function SellDialog({ open, onOpenChange, stock, onDone }) {
             className="w-full"
             disabled={loading || !quantity || parseFloat(quantity) <= 0}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             Sell
           </Button>
         </form>
@@ -223,17 +205,29 @@ export default function StockCard({ stock, onRefresh }) {
   const gain = totalValue - totalCost;
   const gainPct = totalCost > 0 ? (gain / totalCost) * 100 : 0;
   const isPositive = gain >= 0;
+
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
 
   return (
     <>
-      <BuyDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={() => onRefresh?.()} />
-      <SellDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={() => onRefresh?.()} />
+      <BuyDialog
+        open={buyOpen}
+        onOpenChange={setBuyOpen}
+        stock={stock}
+        onDone={() => onRefresh?.()}
+      />
+      <SellDialog
+        open={sellOpen}
+        onOpenChange={setSellOpen}
+        stock={stock}
+        onDone={() => onRefresh?.()}
+      />
 
       <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200">
+        {/* Header */}
         <div className="flex items-start justify-between mb-4">
-          <Link to={`/stock/${stock.ticker}`} className="group flex-1 min-w-0">
+          <Link to={`/stock/${stock.id}`} className="group flex-1 min-w-0">
             <span className="text-xs font-mono tracking-widest text-gray-400 uppercase">{stock.sector}</span>
             <h3 className="font-heading text-lg font-bold mt-0.5 text-gray-900">{stock.ticker}</h3>
             <p className="text-sm text-gray-500 truncate max-w-[180px]">{stock.company_name}</p>
@@ -255,11 +249,14 @@ export default function StockCard({ stock, onRefresh }) {
           </div>
         </div>
 
-        <Link to={`/stock/${stock.ticker}`}>
+        {/* Stats */}
+        <Link to={`/stock/${stock.id}`}>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Price</p>
-              <p className="font-semibold text-sm text-gray-900">${stock.current_price?.toFixed(2) || "—"}</p>
+              <p className="font-semibold text-sm text-gray-900">
+                ${stock.current_price?.toFixed(2) || "—"}
+              </p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Shares</p>
@@ -268,26 +265,19 @@ export default function StockCard({ stock, onRefresh }) {
             <div>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Value</p>
               <p className="font-semibold text-sm text-gray-900">
-                ${totalValue.toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
+                ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>
 
+          {/* Footer */}
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
             <p className={`text-sm font-medium ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
               {isPositive ? "+" : ""}${gain.toFixed(2)} total
             </p>
-            <div
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-              }`}
-            >
+            <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
               {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              {isPositive ? "+" : ""}
-              {gainPct.toFixed(1)}%
+              {isPositive ? "+" : ""}{gainPct.toFixed(1)}%
             </div>
           </div>
         </Link>
