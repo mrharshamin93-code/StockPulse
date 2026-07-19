@@ -3,7 +3,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Loader2, RefreshCw, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import PortfolioSummary from "@/components/PortfolioSummary";
+import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
+
 
 export default function Home() {
   const { user, isLoadingAuth } = useAuth();
