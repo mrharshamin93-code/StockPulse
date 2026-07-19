@@ -8,19 +8,27 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        const { error } = await supabase.auth.exchangeCodeForSession();
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
 
-        if (error) {
-          console.error("OAuth Error:", error);
-          navigate(`/login?error=${encodeURIComponent(error.message)}`);
+        // Not an OAuth callback
+        if (!code) {
+          navigate('/login', { replace: true });
           return;
         }
 
-        // Success - redirect to home
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (error) {
+          console.error('OAuth Error:', error);
+          navigate('/login', { replace: true });
+          return;
+        }
+
         navigate('/', { replace: true });
       } catch (err) {
-        console.error("Unexpected error in callback:", err);
-        navigate('/login?error=unexpected_error');
+        console.error('Unexpected callback error:', err);
+        navigate('/login', { replace: true });
       }
     };
 
@@ -30,8 +38,8 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-        <p className="text-gray-600">Signing you in with Google...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4" />
+        <p className="text-gray-600">Signing you in…</p>
       </div>
     </div>
   );
