@@ -13,19 +13,16 @@ import { motion, AnimatePresence } from "framer-motion";
 function abbreviateExchange(exchange) {
   if (!exchange) return "";
   const e = exchange.toUpperCase();
-
   if (e.includes("NASDAQ")) return "NASDAQ";
   if (e.includes("NYSE AMERICAN") || e.includes("AMEX")) return "AMEX";
   if (e.includes("NEW YORK STOCK EXCHANGE") || e.includes("NYSE")) return "NYSE";
   if (e.includes("OTC") || e.includes("PINK")) return "OTC";
   if (e.includes("CBOE")) return "CBOE";
   if (e.includes("BATS")) return "BATS";
-
   if (e.includes("TSX VENTURE") || e.includes("TSXV")) return "TSXV";
   if (e.includes("TSX") || e.includes("TORONTO")) return "TSX";
   if (e.includes("CSE") || e.includes("CANADIAN SECURITIES")) return "CSE";
   if (e.includes("NEO")) return "NEO";
-
   if (e.includes("LONDON") || e.includes("LSE")) return "LSE";
   if (e.includes("EURONEXT PARIS") || e.includes("XPAR")) return "EPA";
   if (e.includes("EURONEXT AMSTERDAM") || e.includes("XAMS")) return "AMS";
@@ -51,51 +48,41 @@ function abbreviateExchange(exchange) {
   if (e.includes("ATHENS") || e.includes("ASE")) return "ATH";
   if (e.includes("ISTANBUL") || e.includes("BIST") || e.includes("BORSA ISTANBUL")) return "BIST";
   if (e.includes("MOSCOW") || e.includes("MOEX") || e.includes("MICEX")) return "MOEX";
-
   if (e.includes("ASX") || e.includes("AUSTRALIAN")) return "ASX";
   if (e.includes("NZX") || e.includes("NEW ZEALAND")) return "NZX";
   if (e.includes("CHI-X AUSTRALIA")) return "CXA";
-
   if (e.includes("TOKYO") || e.includes("TSE") || e.includes("JPX")) return "TSE";
   if (e.includes("OSAKA") || e.includes("OSE")) return "OSE";
   if (e.includes("NAGOYA") || e.includes("NSE")) return "NSE-JP";
   if (e.includes("FUKUOKA")) return "FKE";
   if (e.includes("SAPPORO")) return "SPE";
-
   if (e.includes("SHANGHAI") || e.includes("SSE") || e.includes("SHSE")) return "SSE";
   if (e.includes("SHENZHEN") || e.includes("SZSE")) return "SZSE";
   if (e.includes("HONG KONG") || e.includes("HKEX") || e.includes("HKG")) return "HKEX";
-
   if (e.includes("NSE") || e.includes("NATIONAL STOCK EXCHANGE")) return "NSE";
   if (e.includes("BSE") || e.includes("BOMBAY")) return "BSE";
-
   if (e.includes("KRX") || e.includes("KOREA EXCHANGE")) return "KRX";
   if (e.includes("KOSDAQ")) return "KOSDAQ";
   if (e.includes("KOSPI")) return "KOSPI";
-
   if (e.includes("TWSE") || e.includes("TAIWAN")) return "TWSE";
   if (e.includes("TPEX")) return "TPEX";
-
   if (e.includes("SGX") || e.includes("SINGAPORE")) return "SGX";
   if (e.includes("BURSA") || e.includes("MALAYSIA") || e.includes("KLSE")) return "KLSE";
   if (e.includes("SET") || e.includes("THAILAND")) return "SET";
   if (e.includes("IDX") || e.includes("INDONESIA")) return "IDX";
   if (e.includes("PSE") || e.includes("PHILIPPINES")) return "PSE";
   if (e.includes("HOSE") || e.includes("VIETNAM")) return "HOSE";
-
   if (e.includes("TADAWUL") || e.includes("SAUDI")) return "TADAWUL";
   if (e.includes("DFM") || e.includes("DUBAI")) return "DFM";
   if (e.includes("ADX") || e.includes("ABU DHABI")) return "ADX";
   if (e.includes("TASE") || e.includes("TEL AVIV")) return "TASE";
   if (e.includes("JSE") || e.includes("JOHANNESBURG")) return "JSE";
   if (e.includes("EGX") || e.includes("EGYPT")) return "EGX";
-
   if (e.includes("B3") || e.includes("BOVESPA") || e.includes("BRAZIL")) return "B3";
   if (e.includes("BMV") || e.includes("MEXICO")) return "BMV";
   if (e.includes("BVC") || e.includes("COLOMBIA")) return "BVC";
   if (e.includes("BVL") || e.includes("LIMA")) return "BVL";
   if (e.includes("BYMA") || e.includes("ARGENTINA")) return "BYMA";
-
   return exchange;
 }
 
@@ -114,14 +101,9 @@ function Toast({ message, onDone }) {
   }, [onDone]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 8, scale: 0.95 }}
-      className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg whitespace-nowrap"
-    >
+    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-gray-900 text-white text-sm shadow-lg">
       {message}
-    </motion.div>
+    </div>
   );
 }
 
@@ -170,39 +152,37 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-heading text-xl">Add {ticker} to Portfolio</DialogTitle>
+          <DialogTitle>Add {ticker} to Portfolio</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground -mt-2">{companyName}</p>
-        <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Shares</Label>
-              <Input
-                type="number"
-                step="any"
-                min="0.01"
-                placeholder="10"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Avg. Purchase Price</Label>
-              <Input
-                type="number"
-                step="any"
-                min="0.01"
-                placeholder="150.00"
-                value={purchasePrice}
-                onChange={(e) => setPurchasePrice(e.target.value)}
-                required
-              />
-            </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="text-sm text-gray-600">{companyName}</div>
+
+          <div className="space-y-2">
+            <Label>Shares</Label>
+            <Input
+              type="number"
+              step="any"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              required
+            />
           </div>
-          <Button type="submit" className="w-full" disabled={loading || !quantity || !purchasePrice}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Add to Portfolio
+
+          <div className="space-y-2">
+            <Label>Avg. Purchase Price</Label>
+            <Input
+              type="number"
+              step="any"
+              value={purchasePrice}
+              onChange={(e) => setPurchasePrice(e.target.value)}
+              required
+            />
+          </div>
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            <span className={loading ? "ml-2" : ""}>Add to Portfolio</span>
           </Button>
         </form>
       </DialogContent>
@@ -217,14 +197,14 @@ function MiniSparkline({ isPositive }) {
     : "2,8 8,12 14,10 20,18 26,16 32,22 38,28";
 
   return (
-    <svg width="40" height="36" viewBox="0 0 40 36" fill="none">
+    <svg width="40" height="30" viewBox="0 0 40 30" fill="none" aria-hidden="true">
       <polyline
-        points={points}
-        stroke={color}
-        strokeWidth="1.5"
         fill="none"
+        stroke={color}
+        strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
+        points={points}
       />
     </svg>
   );
@@ -247,8 +227,9 @@ function AnimatedPrice({ value }) {
 
   return (
     <span
-      className="font-semibold text-sm transition-colors duration-500"
-      style={{ color: flash === "up" ? "#10b981" : flash === "down" ? "#ef4444" : undefined }}
+      className={`text-lg font-semibold tabular-nums transition-colors ${
+        flash === "up" ? "text-emerald-600" : flash === "down" ? "text-red-600" : "text-gray-900"
+      }`}
     >
       {value !== "—" ? `
 $$
@@ -260,16 +241,23 @@ $$
 function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
   const hasStock = !!stock;
   const companyName = getCompanyName(item.ticker, stock, item);
+
   const [dragX, setDragX] = useState(0);
   const [swiped, setSwiped] = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const isDragging = useRef(false);
-  const cardRef = useRef(null);
-
   const REVEAL_WIDTH = 160;
-  const displayPrice = quote?.c ? quote.c.toFixed(2) : stock?.current_price?.toFixed(2) || "—";
-  const dailyGainPct = quote?.dp ?? null;
+
+  const livePrice = typeof quote?.c === "number" ? quote.c : null;
+  const displayPrice =
+    livePrice !== null
+      ? livePrice.toFixed(2)
+      : typeof stock?.current_price === "number"
+        ? stock.current_price.toFixed(2)
+        : "—";
+
+  const dailyGainPct = typeof quote?.dp === "number" ? quote.dp : null;
   const dailyIsPositive = (dailyGainPct ?? 0) >= 0;
   const revealRatio = Math.min(Math.abs(dragX) / REVEAL_WIDTH, 1);
 
@@ -281,11 +269,15 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
 
   const handleTouchMove = (e) => {
     if (touchStartX.current === null) return;
+
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
+
     if (!isDragging.current && Math.abs(dy) > Math.abs(dx)) return;
+
     isDragging.current = true;
     e.stopPropagation();
+
     if (dx < 0) {
       const raw = swiped ? -REVEAL_WIDTH + dx : dx;
       const clamped = Math.max(raw, -REVEAL_WIDTH - 20);
@@ -297,6 +289,7 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
 
   const handleTouchEnd = () => {
     const threshold = swiped ? REVEAL_WIDTH * 0.25 : REVEAL_WIDTH * 0.4;
+
     if (Math.abs(dragX) >= threshold) {
       setDragX(-REVEAL_WIDTH);
       setSwiped(true);
@@ -304,6 +297,7 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
       setDragX(0);
       setSwiped(false);
     }
+
     touchStartX.current = null;
     isDragging.current = false;
   };
@@ -316,6 +310,7 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
   const handleShare = (e) => {
     e.preventDefault();
     e.stopPropagation();
+
     if (navigator.share) {
       navigator
         .share({
@@ -328,6 +323,7 @@ $$
     } else {
       navigator.clipboard?.writeText(`${item.ticker} — $${displayPrice}`);
     }
+
     closeSwipe();
   };
 
@@ -345,115 +341,99 @@ $$
   };
 
   const inner = (
-    <div
-      className="border border-gray-100 rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200 h-[76px]"
-      style={{ ...cardStyle, backgroundColor: "hsl(var(--card))" }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+    <Link
+      to={`/stock/${item.ticker}`}
+      className="block rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-4 active:scale-[0.99] transition"
     >
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onStarToggle(item, stock);
-        }}
-        className="p-1 min-h-[44px] min-w-[36px] flex items-center justify-center shrink-0"
-      >
-        <Star
-          className={`w-5 h-5 transition-colors ${
-            hasStock ? "text-amber-400 fill-amber-400" : "text-gray-300 hover:text-amber-300"
-          }`}
-        />
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onStarToggle(item, stock);
+          }}
+          className="p-1 min-h-[44px] min-w-[36px] flex items-center justify-center shrink-0"
+        >
+          <Star
+            className={`h-5 w-5 ${hasStock ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+          />
+        </button>
 
-      <div className="min-w-0 flex-[2]">
-        <p className="font-heading font-bold text-base leading-tight">{item.ticker}</p>
-        <p className="text-xs text-gray-500">{companyName}</p>
-        {item.exchange && (
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide">
-            {abbreviateExchange(item.exchange)}
-          </p>
-        )}
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="font-semibold text-gray-900">{item.ticker}</div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        {quote?.c && <MiniSparkline isPositive={dailyIsPositive} />}
-        <div className="text-center min-w-[64px]">
-          <p>
-            <AnimatedPrice value={displayPrice} />
-          </p>
-          {dailyGainPct !== null ? (
-            <div
-              className={`inline-flex items-center gap-0.5 text-sm font-semibold px-1.5 py-0.5 rounded-md ${
-                dailyIsPositive ? "bg-emerald-500 text-white" : "bg-red-500 text-white"
-              }`}
-            >
-              {dailyIsPositive ? "+" : ""}
-              {dailyGainPct.toFixed(2)}%
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400">—</p>
-          )}
+            {item.exchange && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                {abbreviateExchange(item.exchange)}
+              </span>
+            )}
+          </div>
+
+          <div className="text-sm text-gray-500 truncate">{companyName}</div>
+        </div>
+
+        <div className="text-right shrink-0">
+          <AnimatedPrice value={displayPrice} />
+          <div
+            className={`text-sm font-medium ${
+              dailyGainPct === null
+                ? "text-gray-400"
+                : dailyIsPositive
+                  ? "text-emerald-600"
+                  : "text-red-600"
+            }`}
+          >
+            {dailyGainPct !== null ? `${dailyIsPositive ? "+" : ""}${dailyGainPct.toFixed(2)}%` : "—"}
+          </div>
         </div>
       </div>
-    </div>
+
+      <div className="mt-3 flex items-center justify-end">
+        <MiniSparkline isPositive={dailyIsPositive} />
+      </div>
+    </Link>
   );
 
   return (
     <motion.div
-      ref={cardRef}
-      className="relative overflow-hidden rounded-2xl"
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -80, scale: 0.94 }}
-      transition={{ duration: 0.28, delay: index * 0.04, ease: "easeOut" }}
-      layout
+      transition={{ delay: index * 0.03 }}
+      className="relative overflow-hidden rounded-2xl"
     >
-      <div
-        className="absolute inset-y-0 right-0 flex items-center gap-3 pr-3"
-        style={{ pointerEvents: revealRatio > 0.5 ? "auto" : "none" }}
-      >
+      <div className="absolute inset-y-0 right-0 flex items-stretch">
         <button
           onClick={handleShare}
-          className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full bg-black text-white text-[10px] font-semibold shadow-lg active:scale-95 transition-transform"
-          style={{
-            opacity: Math.min(Math.max((revealRatio - 0.5) / 0.5, 0), 1),
-            transform: `scale(${Math.min(Math.max((revealRatio - 0.5) / 0.5, 0), 1)})`,
-            transition: isDragging.current
-              ? "none"
-              : "opacity 0.28s ease, transform 0.32s cubic-bezier(0.34, 1.2, 0.64, 1)",
-          }}
+          className="w-20 bg-sky-500 text-white flex flex-col items-center justify-center gap-1"
+          style={{ opacity: revealRatio }}
         >
-          <Share2 className="w-5 h-5 shrink-0" />
-          <span>Share</span>
+          <Share2 className="h-5 w-5" />
+          <span className="text-xs font-medium">Share</span>
         </button>
 
         <button
           onClick={handleDelete}
-          className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full bg-red-500 text-white text-[10px] font-semibold shadow-lg active:scale-95 transition-transform"
-          style={{
-            opacity: Math.min(revealRatio / 0.5, 1),
-            transform: `scale(${Math.min(revealRatio / 0.5, 1)})`,
-            transition: isDragging.current
-              ? "none"
-              : "opacity 0.28s ease, transform 0.32s cubic-bezier(0.34, 1.2, 0.64, 1)",
-          }}
+          className="w-20 bg-red-500 text-white flex flex-col items-center justify-center gap-1"
+          style={{ opacity: revealRatio }}
         >
-          <Trash2 className="w-5 h-5 shrink-0" />
-          <span>Delete</span>
+          <Trash2 className="h-5 w-5" />
+          <span className="text-xs font-medium">Delete</span>
         </button>
       </div>
 
-      <Link
-        to={hasStock ? `/stock/${stock.id}` : `/stock/ticker-${item.ticker}`}
+      <div
+        style={cardStyle}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onClick={swiped ? (e) => {
           e.preventDefault();
           closeSwipe();
         } : undefined}
       >
         {inner}
-      </Link>
+      </div>
     </motion.div>
   );
 }
@@ -461,18 +441,19 @@ $$
 export default function Watchlist() {
   const { user } = useAuth();
   const { quotes: globalQuotes, refreshQuotes } = useMarketData();
+
   const [items, setItems] = useState([]);
   const [stocks, setStocks] = useState([]);
-  const [quotes, setQuotes] = useState(globalQuotes);
+  const [quotes, setQuotes] = useState({});
   const [loading, setLoading] = useState(true);
   const [ticker, setTicker] = useState("");
   const [adding, setAdding] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [toast, setToast] = useState(null);
   const [dialogItem, setDialogItem] = useState(null);
-
   const [suggestions, setSuggestions] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+
   const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
   const searchTimeout = useRef(null);
@@ -483,26 +464,42 @@ export default function Watchlist() {
         setShowSuggestions(false);
       }
     };
+
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   useEffect(() => {
     const q = ticker.trim();
+
     if (!q) {
       setSuggestions([]);
+      setSearchLoading(false);
       return;
     }
 
     clearTimeout(searchTimeout.current);
+
     searchTimeout.current = setTimeout(async () => {
       setSearchLoading(true);
+
       try {
         const data = await callFinnhub({ action: "search", query: q });
-        setSuggestions(data?.results || []);
+        const results = Array.isArray(data?.results) ? data.results : [];
+
+        const filtered = results.filter(
+          (s) =>
+            s?.ticker &&
+            s?.name &&
+            !s.ticker.includes(".") &&
+            s.ticker.toUpperCase().includes(q.toUpperCase())
+        );
+
+        setSuggestions(filtered.slice(0, 8));
       } catch {
         setSuggestions([]);
       }
+
       setSearchLoading(false);
     }, 300);
 
@@ -529,18 +526,21 @@ export default function Watchlist() {
 
     const seedQuotes = {};
     [...watchData, ...stockData].forEach((item) => {
-      const t = item.ticker.toUpperCase();
-      if (item.cached_price && !seedQuotes[t]) {
+      const t = item.ticker?.toUpperCase();
+      if (!t) return;
+
+      if (typeof item.cached_price === "number" && !seedQuotes[t]) {
         seedQuotes[t] = {
+          ticker: t,
           c: item.cached_price,
-          dp: item.cached_change_pct,
-          d: item.cached_change,
+          dp: item.cached_change_pct ?? null,
+          d: item.cached_change ?? null,
         };
       }
     });
 
     if (Object.keys(seedQuotes).length > 0) {
-      setQuotes((prev) => ({ ...seedQuotes, ...prev }));
+      setQuotes((prev) => ({ ...prev, ...seedQuotes }));
     }
 
     const missing = watchData.filter((i) => !i.exchange || !i.company_name);
@@ -551,6 +551,7 @@ export default function Watchlist() {
           try {
             const data = await callFinnhub({ action: "profile", ticker: item.ticker });
             const updates = {};
+
             if (data?.exchange) updates.exchange = data.exchange;
             if (data?.name) updates.company_name = data.name;
 
@@ -579,21 +580,45 @@ export default function Watchlist() {
   };
 
   useEffect(() => {
-    if (Object.keys(globalQuotes).length > 0) {
+    if (globalQuotes && typeof globalQuotes === "object") {
       setQuotes((prev) => ({ ...prev, ...globalQuotes }));
     }
   }, [globalQuotes]);
 
   useEffect(() => {
-    if (user?.id) {
-      load().then((watchData) => {
-        setLoading(false);
-        if (watchData?.length) {
-          refreshQuotes(watchData.map((i) => i.ticker.toUpperCase()));
-        }
-      });
+    if (!user?.id) return;
+
+    load().then((watchData) => {
+      setLoading(false);
+
+      if (watchData?.length) {
+        refreshQuotes(watchData.map((i) => i.ticker.toUpperCase()));
+      }
+    });
+  }, [user?.id, refreshQuotes]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const tickersToRefresh = [...new Set(items.map((i) => i.ticker?.toUpperCase()).filter(Boolean))];
+
+    if (tickersToRefresh.length) {
+      refreshQuotes(tickersToRefresh);
     }
-  }, [user?.id]);
+  }, [items, user?.id, refreshQuotes]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const interval = setInterval(() => {
+      const tickersToRefresh = [...new Set(items.map((i) => i.ticker?.toUpperCase()).filter(Boolean))];
+      if (tickersToRefresh.length) {
+        refreshQuotes(tickersToRefresh);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [items, user?.id, refreshQuotes]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -602,17 +627,13 @@ export default function Watchlist() {
       .channel(`stocks-${user.id}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "stocks",
-          filter: `user_id=eq.${user.id}`,
-        },
+        { event: "*", schema: "public", table: "stocks", filter: `user_id=eq.${user.id}` },
         async () => {
           const { data = [] } = await supabase
             .from("stocks")
             .select("*")
             .eq("user_id", user.id);
+
           setStocks(data);
         }
       )
@@ -630,12 +651,7 @@ export default function Watchlist() {
       .channel(`watchlist-${user.id}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "watchlist_items",
-          filter: `user_id=eq.${user.id}`,
-        },
+        { event: "*", schema: "public", table: "watchlist_items", filter: `user_id=eq.${user.id}` },
         async () => {
           const { data = [] } = await supabase
             .from("watchlist_items")
@@ -657,7 +673,7 @@ export default function Watchlist() {
     symbol = symbol.trim().toUpperCase();
     if (!symbol) return;
 
-    if (items.find((i) => i.ticker.toUpperCase() === symbol.toUpperCase())) {
+    if (items.find((i) => i.ticker.toUpperCase() === symbol)) {
       setToast(`"${symbol}" is already in your watchlist.`);
       return;
     }
@@ -744,20 +760,14 @@ export default function Watchlist() {
     stocks.find((s) => s.ticker.toUpperCase() === tickerValue.toUpperCase());
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)",
-        backgroundColor: "hsl(var(--background))",
-      }}
-    >
+    <div className="min-h-screen bg-gray-50 pb-24">
       <AnimatePresence>
-        {toast && <Toast key={toast} message={toast} onDone={() => setToast(null)} />}
+        {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       </AnimatePresence>
 
       {dialogItem && (
         <AddToPortfolioDialog
-          open={true}
+          open={!!dialogItem}
           onOpenChange={() => setDialogItem(null)}
           ticker={dialogItem.ticker}
           companyName={dialogItem.companyName}
@@ -766,142 +776,125 @@ export default function Watchlist() {
         />
       )}
 
-      <header
-        className="border-b border-gray-100 sticky top-0 z-10"
-        style={{
-          paddingTop: "env(safe-area-inset-top)",
-          backgroundColor: "hsl(var(--background))",
-        }}
-      >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
-          <div className="flex-1 flex justify-center">
-            <div className="flex items-center gap-2">
-              <Star className="w-7 h-7 text-amber-400 fill-amber-400" />
-              <div>
-                <h1 className="font-heading text-2xl font-bold tracking-tight leading-none">
-                  Watchlist
-                </h1>
-                <p className="text-xs text-gray-500 mt-0.5">Stocks you're watching</p>
-              </div>
-            </div>
-          </div>
+      <div className="max-w-2xl mx-auto px-4 pt-6">
+        <div className="mb-5">
+          <h1 className="text-2xl font-bold text-gray-900">Watchlist</h1>
+          <p className="text-sm text-gray-500 mt-1">Stocks you're watching</p>
         </div>
-      </header>
 
-      <main className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 space-y-4 flex-1">
-        <form onSubmit={handleAdd} className="flex gap-2 relative justify-center">
-          <div className="flex-[0_1_76%] relative">
-            <Input
-              ref={inputRef}
-              placeholder="Enter Ticker or Company Name"
-              value={ticker}
-              onChange={(e) => {
-                setTicker(e.target.value);
-                setShowSuggestions(true);
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              className="uppercase placeholder:normal-case w-full"
-              autoComplete="off"
-            />
-            {showSuggestions && (searchLoading || suggestions.length > 0) && (
-              <div
-                ref={suggestionsRef}
-                className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden"
-              >
-                {searchLoading ? (
-                  <div className="flex items-center gap-2 px-4 py-3 text-sm text-gray-500">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching…
-                  </div>
-                ) : (
-                  suggestions.map((s) => {
-                    const alreadyAdded = !!items.find(
-                      (i) => i.ticker.toUpperCase() === s.ticker.toUpperCase()
-                    );
-                    const inPortfolio = !!stocks.find(
-                      (st) => st.ticker.toUpperCase() === s.ticker.toUpperCase()
-                    );
+        <form onSubmit={handleAdd} className="mb-6">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                value={ticker}
+                placeholder="Add ticker"
+                onChange={(e) => {
+                  setTicker(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                className="uppercase placeholder:normal-case w-full"
+                autoComplete="off"
+              />
 
-                    return (
-                      <button
-                        key={s.ticker}
-                        type="button"
-                        disabled={alreadyAdded}
-                        onClick={() => {
-                          setTicker(s.ticker);
-                          setShowSuggestions(false);
-                          addTicker(s.ticker, s.exchange);
-                        }}
-                        className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors border-b border-gray-50 last:border-0 ${
-                          alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
-                        }`}
-                      >
-                        <div>
-                          <p className="font-semibold text-sm">{s.ticker}</p>
-                          <p className="text-xs text-gray-500">{s.name}</p>
-                          {s.exchange && (
-                            <p className="text-[10px] text-gray-400 uppercase tracking-wide mt-0.5">
-                              {s.exchange}
-                            </p>
-                          )}
-                        </div>
-                        {alreadyAdded && (
-                          <span className="text-[10px] text-gray-400 font-medium">Added</span>
-                        )}
-                        {!alreadyAdded && inPortfolio && (
-                          <span className="text-[10px] text-emerald-600 font-medium">
-                            In portfolio
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            )}
+              {showSuggestions && (searchLoading || suggestions.length > 0) && (
+                <div
+                  ref={suggestionsRef}
+                  className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl"
+                >
+                  {searchLoading ? (
+                    <div className="px-4 py-3 text-sm text-gray-500">Searching…</div>
+                  ) : (
+                    suggestions.map((s) => {
+                      const alreadyAdded = !!items.find(
+                        (i) => i.ticker.toUpperCase() === s.ticker.toUpperCase()
+                      );
+                      const inPortfolio = !!stocks.find(
+                        (st) => st.ticker.toUpperCase() === s.ticker.toUpperCase()
+                      );
+
+                      return (
+                        <button
+                          key={`${s.ticker}-${s.exchange || "unknown"}`}
+                          type="button"
+                          disabled={alreadyAdded}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            if (alreadyAdded) return;
+                            setTicker(s.ticker);
+                            setShowSuggestions(false);
+                            addTicker(s.ticker, s.exchange);
+                          }}
+                          className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors border-b border-gray-50 last:border-0 ${
+                            alreadyAdded ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900">{s.ticker}</div>
+                            <div className="text-sm text-gray-500 truncate">{s.name}</div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 ml-3">
+                            {s.exchange && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
+                                {s.exchange}
+                              </span>
+                            )}
+
+                            {alreadyAdded && (
+                              <span className="text-xs text-gray-400">Added</span>
+                            )}
+
+                            {!alreadyAdded && inPortfolio && (
+                              <span className="text-xs text-amber-600">In portfolio</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Button type="submit" disabled={adding || !ticker.trim()}>
+              {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            </Button>
           </div>
-          <Button type="submit" disabled={adding || !ticker.trim()} className="min-w-[44px]">
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          </Button>
         </form>
 
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-24">
-            <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <Star className="w-8 h-8 text-gray-400" />
-            </div>
-            <h2 className="font-heading text-lg font-semibold mb-1 text-gray-900">
-              Nothing here yet
-            </h2>
-            <p className="text-gray-500 text-sm">Add a ticker above to start watching it.</p>
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
+            <h2 className="text-lg font-semibold text-gray-900">Nothing here yet</h2>
+            <p className="text-sm text-gray-500 mt-2">Add a ticker above to start watching it.</p>
           </div>
         ) : (
-          <motion.div className="space-y-3" layout>
-            <AnimatePresence initial={false}>
-              {[...items]
-                .sort((a, b) => {
-                  const qa = quotes[a.ticker.toUpperCase()]?.dp ?? 0;
-                  const qb = quotes[b.ticker.toUpperCase()]?.dp ?? 0;
-                  return qb - qa;
-                })
-                .map((item, index) => (
-                  <WatchlistCard
-                    key={item.id}
-                    item={item}
-                    stock={findStock(item.ticker)}
-                    quote={quotes[item.ticker.toUpperCase()]}
-                    onRemove={handleRemove}
-                    onStarToggle={handleStarToggle}
-                    index={index}
-                  />
-                ))}
-            </AnimatePresence>
-          </motion.div>
+          <div className="space-y-3">
+            {[...items]
+              .sort((a, b) => {
+                const qa = quotes[a.ticker.toUpperCase()]?.dp ?? 0;
+                const qb = quotes[b.ticker.toUpperCase()]?.dp ?? 0;
+                return qb - qa;
+              })
+              .map((item, index) => (
+                <WatchlistCard
+                  key={item.id}
+                  item={item}
+                  stock={findStock(item.ticker)}
+                  quote={quotes[item.ticker.toUpperCase()]}
+                  onRemove={handleRemove}
+                  onStarToggle={handleStarToggle}
+                  index={index}
+                />
+              ))}
+          </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }
