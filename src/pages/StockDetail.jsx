@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,7 +19,6 @@ import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis, XAxis } from "rec
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
-import { useAuth } from "@/lib/AuthContext";
 
 const PERIODS = ["1D", "1W", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "All"];
 
@@ -172,16 +172,10 @@ function getStockMetrics(ticker, price) {
 
   const fmt = (n) =>
     n >= 1e12
-      ? `
-$$
-{(n / 1e12).toFixed(2)}T`
+      ? "$" + (n / 1e12).toFixed(2) + "T"
       : n >= 1e9
-        ? `
-$$
-{(n / 1e9).toFixed(1)}B`
-        : `
-$$
-{(n / 1e6).toFixed(0)}M`;
+        ? "$" + (n / 1e9).toFixed(1) + "B"
+        : "$" + (n / 1e6).toFixed(0) + "M";
 
   const fmtVol = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1e3).toFixed(0)}K`);
 
@@ -193,21 +187,15 @@ $$
     { label: "Mkt Cap", value: fmt(mktCapB * 1e9) },
     { label: "P/E", value: pe },
     { label: "P/S", value: ps },
-    { label: "EPS", value: `
-$$
-{eps}` },
+    { label: "EPS", value: "$" + eps },
     { label: "Beta", value: beta },
     { label: "Volume", value: fmtVol(vol) },
     { label: "Avg Vol", value: fmtVol(avgVol) },
-    { label: "52W Low", value: `
-$$
-{low52}` },
+    { label: "52W Low", value: "$" + low52 },
     { label: "D/E", value: de },
     { label: "Yield", value: yield_ > 0 ? `${yield_}%` : "—" },
     { label: "Net Margin", value: `${(profitMargin * 100).toFixed(1)}%` },
-    { label: "52W High", value: `
-$$
-{high52}` },
+    { label: "52W High", value: "$" + high52 },
   ];
 }
 
@@ -258,6 +246,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
     };
 
     loadChart();
+
     return () => {
       cancelled = true;
     };
@@ -365,9 +354,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
             <YAxis
               domain={["auto", "auto"]}
-              tickFormatter={(v) => (compareTicker ? `${v.toFixed(0)}%` : `
-$$
-{v.toFixed(0)}`)}
+              tickFormatter={(v) => (compareTicker ? `${v.toFixed(0)}%` : "$" + v.toFixed(0))}
               tick={{ fontSize: 10, fill: "#9ca3af" }}
               tickLine={false}
               axisLine={false}
@@ -400,9 +387,7 @@ $$
                       return (
                         <div key={p.dataKey} className="flex flex-col gap-1">
                           <span className="text-base font-bold text-gray-900">
-                            {compareTicker ? `${p.value?.toFixed(2)}%` : `
-$$
-{p.value?.toFixed(2)}`}
+                            {compareTicker ? `${p.value?.toFixed(2)}%` : "$" + p.value?.toFixed(2)}
                           </span>
                           {!compareTicker && (
                             <span
@@ -584,7 +569,6 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
 
 export default function StockDetail() {
   const { ticker: routeTicker } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [stock, setStock] = useState(null);
@@ -673,14 +657,15 @@ export default function StockDetail() {
   };
 
   useEffect(() => {
-    if (stock && !analysis) fetchAnalysis();
+    if (stock && !analysis) {
+      fetchAnalysis();
+    }
   }, [stock]);
 
   const handleBuyDone = async (qty, price) => {
     const existingQty = stock.quantity || 0;
     const newQty = existingQty + qty;
-    const newAvgCost =
-      ((stock.purchase_price || 0) * existingQty + price * qty) / newQty;
+    const newAvgCost = ((stock.purchase_price || 0) * existingQty + price * qty) / newQty;
 
     setStock((prev) => ({
       ...prev,
@@ -872,10 +857,7 @@ export default function StockDetail() {
       <BuyDetailDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={handleBuyDone} />
       <SellDetailDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={handleSellDone} />
 
-      <SubPageHeader
-        title={stock.ticker}
-        backPath={stock._watchlistOnly ? "/watchlist" : "/home"}
-      />
+      <SubPageHeader title={stock.ticker} backPath={stock._watchlistOnly ? "/watchlist" : "/home"} />
 
       <main className="mx-auto max-w-4xl space-y-8 px-4 py-8 pb-safe sm:px-6">
         <div className="relative rounded-2xl border border-gray-100 bg-white p-6 sm:p-8">
@@ -884,7 +866,7 @@ export default function StockDetail() {
               onClick={() => setBuyOpen(true)}
               className="h-8 rounded-md bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-95"
             >
-              {stock._watchlistOnly ? "Buy" : "Buy"}
+              Buy
             </button>
             {!stock._watchlistOnly && (
               <button
@@ -907,18 +889,14 @@ export default function StockDetail() {
 
             <div className="text-left sm:text-right">
               <p className="font-heading text-3xl font-bold">
-                ${stock.current_price?.toFixed(2) || "—"}
+                {stock.current_price ? "$" + stock.current_price.toFixed(2) : "—"}
               </p>
               <div
                 className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold ${
                   isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
                 }`}
               >
-                {isPositive ? (
-                  <TrendingUp className="h-3.5 w-3.5" />
-                ) : (
-                  <TrendingDown className="h-3.5 w-3.5" />
-                )}
+                {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                 {isPositive ? "+" : ""}
                 {gainPct.toFixed(2)}%
               </div>
@@ -929,17 +907,15 @@ export default function StockDetail() {
             <div className="mt-6 grid grid-cols-2 gap-4 border-t border-gray-100 pt-6 sm:grid-cols-4">
               {[
                 { label: "Shares", value: stock.quantity },
-                { label: "Avg. Cost", value: `
-$$
-{stock.purchase_price.toFixed(2)}` },
+                { label: "Avg. Cost", value: "$" + stock.purchase_price.toFixed(2) },
                 {
                   label: "Total Value",
-                  value: `
-$$
-{totalValue.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}`,
+                  value:
+                    "$" +
+                    totalValue.toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }),
                 },
                 {
                   label: "Gain/Loss",
@@ -1018,9 +994,7 @@ $$
                     <div className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
                     <div>
                       <p className="text-sm font-medium">{item.title}</p>
-                      <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
-                        {item.summary}
-                      </p>
+                      <p className="mt-0.5 text-sm leading-relaxed text-gray-500">{item.summary}</p>
                       {item.date && <p className="mt-1 text-xs text-gray-400">{item.date}</p>}
                     </div>
                   </div>
