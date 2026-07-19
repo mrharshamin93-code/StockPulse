@@ -20,48 +20,42 @@ export default function Home() {
 
   const touchStartY = useRef(null);
   const scrollRef = useRef(null);
-  const lastPriceRefresh = useRef(0);
-  const priceRefreshCooldown = 30000; // 30 seconds
 
-  // Load stocks from Supabase
-  const loadStocks = useCallback(async ({ refreshPrices = false } = {}) => {
-    if (!user?.id) return;
-
-    const { data, error } = await supabase
-      .from("stocks")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error loading stocks:", error);
+  const loadStocks = useCallback(async () => {
+    if (!user?.id) {
+      setLoading(false);
       return;
     }
 
-    setStocks(data || []);
+    try {
+      const { data, error } = await supabase
+        .from("stocks")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    // Optional: Price refresh logic (only if you have a Finnhub Edge Function)
-    const now = Date.now();
-    if (data?.length > 0 && (refreshPrices || now - lastPriceRefresh.current > priceRefreshCooldown)) {
-      lastPriceRefresh.current = now;
-      // TODO: Replace with your Supabase Edge Function call for Finnhub quotes if needed
-      // Example: await supabase.functions.invoke("get-stock-quotes", { body: { tickers } })
+      if (error) {
+        console.error("Error loading stocks:", error);
+        setStocks([]);
+      } else {
+        setStocks(data || []);
+      }
+    } catch (err) {
+      console.error("Unexpected error loading stocks:", err);
+      setStocks([]);
+    } finally {
+      setLoading(false);
     }
   }, [user?.id]);
 
-  // Initial load
+  // Initial load + realtime
   useEffect(() => {
-    if (user?.id) {
-      loadStocks({ refreshPrices: true }).finally(() => setLoading(false));
-    }
-  }, [user?.id, loadStocks]);
+    loadStocks();
 
-  // Realtime updates (replaces base44 subscription)
-  useEffect(() => {
     if (!user?.id) return;
 
     const channel = supabase
-      .channel(`stocks-realtime-${user.id}`)
+      .channel(`home-stocks-${user.id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "stocks", filter: `user_id=eq.${user.id}` },
@@ -72,7 +66,7 @@ export default function Home() {
     return () => supabase.removeChannel(channel);
   }, [user?.id, loadStocks]);
 
-  // Pull-to-refresh handlers
+  // Pull to refresh
   const handleTouchStart = (e) => {
     if (scrollRef.current?.scrollTop === 0) {
       touchStartY.current = e.touches[0].clientY;
@@ -90,7 +84,7 @@ export default function Home() {
   const handleTouchEnd = async () => {
     if (pullDistance >= PULL_THRESHOLD) {
       setRefreshing(true);
-      await loadStocks({ refreshPrices: true });
+      await loadStocks();
       setRefreshing(false);
     }
     setPullDistance(0);
@@ -100,22 +94,16 @@ export default function Home() {
   const pullProgress = Math.min(pullDistance / PULL_THRESHOLD, 1);
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)", backgroundColor: "hsl(var(--background))" }}
-    >
+    <div className="min-h-screen flex flex-col" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}>
       {/* Header */}
-      <header
-        className="border-b border-gray-100 sticky top-0 z-10"
-        style={{ paddingTop: "env(safe-area-inset-top)", backgroundColor: "hsl(var(--background))" }}
-      >
+      <header className="border-b border-gray-100 sticky top-0 z-10 bg-background" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex justify-center">
           <div className="flex items-center gap-1.5">
             <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
               <Briefcase className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-heading text-2xl font-bold tracking-tight text-gray-900">StockPulse</h1>
+              <h1 className="font-heading text-2xl font-bold tracking-tight">StockPulse</h1>
               <p className="text-xs text-gray-500">Stock Insights and Analysis</p>
             </div>
           </div>
@@ -128,16 +116,9 @@ export default function Home() {
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: refreshing ? 48 : pullDistance, opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="flex items-center justify-center overflow-hidden bg-gray-50/50"
+            className="flex items-center justify-center bg-gray-50/50"
           >
-            <motion.div
-              animate={{ rotate: refreshing ? 360 : pullProgress * 180 }}
-              transition={refreshing ? { repeat: Infinity, duration: 0.8, ease: "linear" } : {}}
-            >
-              <RefreshCw className={`w-5 h-5 ${pullProgress >= 1 || refreshing ? "text-gray-900" : "text-gray-400"}`} />
-            </motion.div>
+            <RefreshCw className={`w-5 h-5 ${pullProgress >= 1 || refreshing ? "text-gray-900" : "text-gray-400"}`} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -150,7 +131,7 @@ export default function Home() {
         onTouchEnd={handleTouchEnd}
       >
         {loading ? (
-          <div className="flex items-center justify-center py-32">
+          <div className="flex justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
         ) : stocks.length === 0 ? (
