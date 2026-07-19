@@ -23,11 +23,15 @@ function BuyDialog({ open, onOpenChange, stock, onDone }) {
     const price = parseFloat(purchasePrice);
 
     try {
+      // Get current user ID safely
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error("Not authenticated");
+
       // Calculate new weighted average cost
       const newQty = stock.quantity + qty;
       const newAvgCost = ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty;
 
-      // Update the stock holding
+      // Update stock
       const { error: updateError } = await supabase
         .from("stocks")
         .update({
@@ -35,13 +39,14 @@ function BuyDialog({ open, onOpenChange, stock, onDone }) {
           purchase_price: +newAvgCost.toFixed(4),
           current_price: stock.current_price || price,
         })
-        .eq("id", stock.id);
+        .eq("id", stock.id)
+        .eq("user_id", currentUser.id); // Extra safety
 
       if (updateError) throw updateError;
 
-      // Record the transaction
-      await supabase.from("stock_transactions").insert({
-        user_id: stock.user_id,
+      // Insert transaction
+      const { error: txError } = await supabase.from("stock_transactions").insert({
+        user_id: currentUser.id,
         ticker: stock.ticker.toUpperCase(),
         company_name: stock.company_name,
         type: "buy",
@@ -49,6 +54,8 @@ function BuyDialog({ open, onOpenChange, stock, onDone }) {
         price,
         total: qty * price,
       });
+
+      if (txError) throw txError;
 
       onDone?.();
       onOpenChange(false);
@@ -119,9 +126,12 @@ function SellDialog({ open, onOpenChange, stock, onDone }) {
     const sellPrice = stock.current_price || stock.purchase_price;
 
     try {
-      // Record sell transaction
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error("Not authenticated");
+
+      // Record transaction
       await supabase.from("stock_transactions").insert({
-        user_id: stock.user_id,
+        user_id: currentUser.id,
         ticker: stock.ticker.toUpperCase(),
         company_name: stock.company_name,
         type: "sell",
@@ -131,10 +141,8 @@ function SellDialog({ open, onOpenChange, stock, onDone }) {
       });
 
       if (sellQty >= max) {
-        // Sell all → delete the holding
         await supabase.from("stocks").delete().eq("id", stock.id);
       } else {
-        // Partial sell → reduce quantity
         await supabase
           .from("stocks")
           .update({ quantity: parseFloat((max - sellQty).toFixed(6)) })
@@ -185,11 +193,7 @@ function SellDialog({ open, onOpenChange, stock, onDone }) {
               </button>
             </div>
           </div>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading || !quantity || parseFloat(quantity) <= 0}
-          >
+          <Button type="submit" className="w-full" disabled={loading || !quantity || parseFloat(quantity) <= 0}>
             {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             Sell
           </Button>
@@ -211,21 +215,10 @@ export default function StockCard({ stock, onRefresh }) {
 
   return (
     <>
-      <BuyDialog
-        open={buyOpen}
-        onOpenChange={setBuyOpen}
-        stock={stock}
-        onDone={() => onRefresh?.()}
-      />
-      <SellDialog
-        open={sellOpen}
-        onOpenChange={setSellOpen}
-        stock={stock}
-        onDone={() => onRefresh?.()}
-      />
+      <BuyDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={() => onRefresh?.()} />
+      <SellDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={() => onRefresh?.()} />
 
       <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200">
-        {/* Header */}
         <div className="flex items-start justify-between mb-4">
           <Link to={`/stock/${stock.id}`} className="group flex-1 min-w-0">
             <span className="text-xs font-mono tracking-widest text-gray-400 uppercase">{stock.sector}</span>
@@ -249,14 +242,11 @@ export default function StockCard({ stock, onRefresh }) {
           </div>
         </div>
 
-        {/* Stats */}
         <Link to={`/stock/${stock.id}`}>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Price</p>
-              <p className="font-semibold text-sm text-gray-900">
-                ${stock.current_price?.toFixed(2) || "—"}
-              </p>
+              <p className="font-semibold text-sm text-gray-900">${stock.current_price?.toFixed(2) || "—"}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Shares</p>
@@ -270,7 +260,6 @@ export default function StockCard({ stock, onRefresh }) {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">
             <p className={`text-sm font-medium ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
               {isPositive ? "+" : ""}${gain.toFixed(2)} total
