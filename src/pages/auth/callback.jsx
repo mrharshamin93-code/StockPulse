@@ -6,26 +6,33 @@ export default function AuthCallback() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handleAuthCallback = async () => {
-      const { data, error } = await supabase.auth.exchangeCodeForSession();
+    const handleCallback = async () => {
+      try {
+        const { error } = await supabase.auth.exchangeCodeForSession();
 
-      if (error) {
-        console.error("=== AUTH CALLBACK ERROR ===", error);
-        // Show the real error in the URL for debugging
-        navigate(`/login?error=${encodeURIComponent(error.message)}`);
-        return;
+        if (error) {
+          console.error("OAuth Error:", error);
+          navigate(`/login?error=${encodeURIComponent(error.message)}`);
+          return;
+        }
+
+        // Success - redirect to home
+        navigate('/', { replace: true });
+      } catch (err) {
+        console.error("Unexpected error in callback:", err);
+        navigate('/login?error=unexpected_error');
       }
-
-      console.log("Auth success:", data);
-      navigate('/', { replace: true });
     };
 
-    handleAuthCallback();
+    handleCallback();
   }, [navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <p>Processing login...</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+        <p className="text-gray-600">Signing you in with Google...</p>
+      </div>
     </div>
   );
 }
