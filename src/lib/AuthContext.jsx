@@ -12,39 +12,44 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
-    const initAuth = async () => {
-      setIsLoadingAuth(true);
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
 
-      const { data, error } = await supabase.auth.getSession();
+        if (!mounted) return;
 
-      if (!mounted) return;
+        if (error) {
+          console.error('Auth session error:', error);
+          setUser(null);
+          setIsAuthenticated(false);
+          setAuthError(error);
+        } else {
+          setUser(session?.user ?? null);
+          setIsAuthenticated(!!session);
+          setAuthError(null);
+        }
+      } catch (error) {
+        if (mounted) {
+          setAuthError(error);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoadingAuth(false);
+        }
+      }
+    };
 
-      if (error) {
-        setUser(null);
-        setIsAuthenticated(false);
-        setAuthError(error);
-      } else {
-        const session = data?.session ?? null;
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!mounted) return;
+
         setUser(session?.user ?? null);
         setIsAuthenticated(!!session);
         setAuthError(null);
       }
-
-      setIsLoadingAuth(false);
-    };
-
-    initAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-
-      setUser(session?.user ?? null);
-      setIsAuthenticated(!!session);
-      setAuthError(null);
-      setIsLoadingAuth(false);
-    });
+    );
 
     return () => {
       mounted = false;
@@ -56,19 +61,27 @@ export const AuthProvider = ({ children }) => {
     await supabase.auth.signOut();
   };
 
+  const value = {
+    user,
+    isAuthenticated,
+    isLoadingAuth,
+    authError,
+    logout,
+    // Adding this to prevent errors in App.jsx
+    isLoadingPublicSettings: false,
+  };
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated,
-        isLoadingAuth,
-        authError,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
