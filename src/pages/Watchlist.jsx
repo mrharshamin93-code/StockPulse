@@ -749,9 +749,9 @@ export default function Watchlist() {
       )}
 
       <div className="max-w-2xl mx-auto px-4 pt-6">
-        {/* === UPDATED HEADER (Tighter Gap) === */}
+        {/* === UPDATED HEADER (gap-1) === */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Star className="h-7 w-7 text-yellow-500 fill-yellow-500" />
             <h1 className="text-3xl font-bold text-gray-900">Watchlist</h1>
           </div>
