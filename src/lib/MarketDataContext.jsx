@@ -1,7 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/AuthContext";
 
-const MarketDataContext = createContext({ quotes: {}, refreshQuotes: () => {} });
+const MarketDataContext = createContext({
+  quotes: {},
+  refreshQuotes: () => {},
+});
 
 export function MarketDataProvider({ children }) {
   const { user } = useAuth();
@@ -9,22 +12,36 @@ export function MarketDataProvider({ children }) {
   const tickersRef = useRef([]);
 
   const refreshQuotes = useCallback(async (tickers) => {
-    const list = tickers || tickersRef.current;
+    const rawList = Array.isArray(tickers) && tickers.length ? tickers : tickersRef.current;
+    const list = [...new Set((rawList || []).map((ticker) => String(ticker).trim().toUpperCase()).filter(Boolean))];
+
     if (!list.length) return;
+
+    tickersRef.current = list;
 
     try {
       const tickersParam = list.join(",");
       const response = await fetch(`/api/finnhub?action=quotes&tickers=${encodeURIComponent(tickersParam)}`);
-      
+
       if (!response.ok) {
         throw new Error(`Finnhub API error: ${response.status}`);
       }
 
       const data = await response.json();
-      
-      if (data.quotes) {
-        setQuotes(data.quotes);
-      } else if (data.error) {
+
+      if (Array.isArray(data?.quotes)) {
+        const mappedQuotes = data.quotes.reduce((acc, quote) => {
+          if (quote?.ticker) {
+            acc[quote.ticker] = quote;
+          }
+          return acc;
+        }, {});
+
+        setQuotes((prev) => ({
+          ...prev,
+          ...mappedQuotes,
+        }));
+      } else if (data?.error) {
         console.error("Finnhub quotes error:", data.error);
       }
     } catch (error) {
@@ -33,11 +50,15 @@ export function MarketDataProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setQuotes({});
+      tickersRef.current = [];
+      return;
+    }
 
-    // Start with a reasonable default set (can be expanded later)
-    tickersRef.current = ["AAPL", "TSLA", "NVDA"];
-    refreshQuotes(tickersRef.current);
+    if (tickersRef.current.length) {
+      refreshQuotes(tickersRef.current);
+    }
   }, [user?.id, refreshQuotes]);
 
   return (
