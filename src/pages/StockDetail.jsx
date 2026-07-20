@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 
-// ---------- Constants & helpers (unchanged) ----------
+// ---------- Constants & helpers ----------
 const PERIODS = ["1D", "1W", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "All"];
 const PERIOD_CONFIG = {
   "1D": { resolution: "5",  daysBack: 1 },
@@ -36,6 +36,7 @@ async function finnhubProxy(body) {
   return res.json();
 }
 
+// Chart data fetching – returns points sorted by time (left → right)
 async function fetchChartData(ticker, period, basePrice) {
   try {
     const cfg = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
@@ -56,7 +57,7 @@ async function fetchChartData(ticker, period, basePrice) {
     });
     const candles = data?.candles;
     if (candles?.length > 0) {
-      // Sort ascending by timestamp just in case
+      // Ensure ascending order
       candles.sort((a, b) => a.t - b.t);
       return candles.map(c => {
         const d = new Date(c.t * 1000);
@@ -118,6 +119,7 @@ function normalizeData(data, ticker, compareTicker) {
   }));
 }
 
+// ---------- Chart Component ----------
 function StockChart({ ticker, currentPrice, isPositive }) {
   const [activePeriod, setActivePeriod] = useState("1M");
   const [compareTicker, setCompareTicker] = useState("");
@@ -165,7 +167,6 @@ function StockChart({ ticker, currentPrice, isPositive }) {
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-6">
-      {/* ... (chart JSX unchanged, same as before) ... */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500">Price Chart</h2>
@@ -294,7 +295,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
   );
 }
 
-// ---------- Buy/Sell Dialogs ----------
+// ---------- Buy/Sell Dialogs (unchanged) ----------
 function BuyDetailDialog({ open, onOpenChange, stock, onDone }) {
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState(stock?.current_price?.toFixed(2) || stock?.purchase_price?.toFixed(2) || "");
@@ -392,7 +393,7 @@ function getStockMetrics(ticker, price) {
   ];
 }
 
-// ---------- MAIN COMPONENT (with slide-in animation) ----------
+// ---------- MAIN COMPONENT ----------
 export default function StockDetail() {
   const { ticker: routeParam } = useParams();
   const navigate = useNavigate();
@@ -610,11 +611,11 @@ export default function StockDetail() {
         </button>
       </div>
 
-      {/* Content with left-to-right slide animation */}
+      {/* Content with the same fade-up animation as the Portfolio tab */}
       <motion.div
-        initial={{ x: -40, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2 }}
         className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8"
         style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}
       >
