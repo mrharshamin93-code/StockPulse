@@ -235,11 +235,18 @@ function detachSystemDarkListener() {
 export function applyTheme(themeId) {
   const theme = THEMES.find(t => t.id === themeId) || THEMES[0];
   const root = document.documentElement;
-  const isDark = root.classList.contains("dark");
 
   detachSystemDarkListener();
-  const vars = theme.vars || DEFAULT_VARS;
+  const vars = {
+    ...DEFAULT_VARS,
+    ...(theme.vars || {}),
+  };
+
+  vars["--popover"] = vars["--card"];
+  vars["--popover-foreground"] = vars["--card-foreground"];
+
   Object.entries(vars).forEach(([key, value]) => root.style.setProperty(key, value));
+  root.dataset.stockpulseTheme = theme.id;
 
   localStorage.setItem("stockpulse-theme", themeId);
 }
