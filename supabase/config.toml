@@ -1,2 +1,5 @@
 [functions.stock-analysis]
 verify_jwt = true
+
+[functions.stock-screener]
+verify_jwt = true
