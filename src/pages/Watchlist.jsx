@@ -2456,7 +2456,7 @@ export default function Watchlist() {
         ) : (
           <motion.div
             layout
-            className="space-y-2.5"
+            className="space-y-[3px]"
           >
             <AnimatePresence
               initial={
