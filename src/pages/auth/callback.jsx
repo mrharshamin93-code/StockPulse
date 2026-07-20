@@ -19,6 +19,37 @@ import { supabase } from "@/lib/supabase";
  */
 let callbackPromise = null;
 
+const AUTH_STEP_TIMEOUT_MS =
+  20000;
+
+function runWithTimeout(
+  operation,
+  timeoutMessage
+) {
+  let timeoutId;
+
+  const timeoutPromise =
+    new Promise((_, reject) => {
+      timeoutId =
+        window.setTimeout(() => {
+          reject(
+            new Error(
+              timeoutMessage
+            )
+          );
+        }, AUTH_STEP_TIMEOUT_MS);
+    });
+
+  return Promise.race([
+    operation,
+    timeoutPromise,
+  ]).finally(() => {
+    window.clearTimeout(
+      timeoutId
+    );
+  });
+}
+
 function getSafeNextPath() {
   const searchParams =
     new URLSearchParams(
@@ -71,7 +102,9 @@ function getProviderError(
   }
 }
 
-async function completeOAuthCallback() {
+async function completeOAuthCallback(
+  reportStage
+) {
   const searchParams =
     new URLSearchParams(
       window.location.search
@@ -95,10 +128,17 @@ async function completeOAuthCallback() {
    * A refreshed callback may already have a persisted
    * session even though its one-use code is still visible.
    */
+  reportStage(
+    "Checking browser session…"
+  );
+
   const {
     data: existingData,
     error: existingError,
-  } = await supabase.auth.getSession();
+  } = await runWithTimeout(
+    supabase.auth.getSession(),
+    "Checking the existing browser session timed out. Please reload and try Google sign-in again."
+  );
 
   if (existingError) {
     console.warn(
@@ -121,23 +161,35 @@ async function completeOAuthCallback() {
     );
   }
 
+  reportStage(
+    "Exchanging secure Google sign-in code…"
+  );
+
   const {
     data,
     error,
-  } =
-    await supabase.auth.exchangeCodeForSession(
+  } = await runWithTimeout(
+    supabase.auth.exchangeCodeForSession(
       code
-    );
+    ),
+    "The secure Google code exchange timed out. Check that this exact preview callback URL is allowed in Supabase."
+  );
 
   if (error) {
     /*
      * If another render completed first, recover its
      * persisted session before displaying an error.
      */
+    reportStage(
+      "Recovering saved session…"
+    );
+
     const {
       data: recoveredData,
-    } =
-      await supabase.auth.getSession();
+    } = await runWithTimeout(
+      supabase.auth.getSession(),
+      "Session recovery timed out after the Google code exchange."
+    );
 
     if (recoveredData?.session?.user) {
       return nextPath;
@@ -152,10 +204,17 @@ async function completeOAuthCallback() {
     );
   }
 
+  reportStage(
+    "Saving your login session…"
+  );
+
   const {
     data: verifiedData,
     error: verificationError,
-  } = await supabase.auth.getSession();
+  } = await runWithTimeout(
+    supabase.auth.getSession(),
+    "Saving the Google login session timed out."
+  );
 
   if (verificationError) {
     throw verificationError;
@@ -170,10 +229,14 @@ async function completeOAuthCallback() {
   return nextPath;
 }
 
-function runCallbackOnce() {
+function runCallbackOnce(
+  reportStage
+) {
   if (!callbackPromise) {
     callbackPromise =
-      completeOAuthCallback();
+      completeOAuthCallback(
+        reportStage
+      );
   }
 
   return callbackPromise;
@@ -196,24 +259,13 @@ export default function AuthCallback() {
   useEffect(() => {
     let active = true;
 
-    const slowTimer =
-      window.setTimeout(() => {
-        if (active) {
-          setMessage(
-            "Still completing your sign-in…"
-          );
-        }
-      }, 8000);
-
-    runCallbackOnce()
+    runCallbackOnce(
+      setMessage
+    )
       .then(() => {
         if (!active) {
           return;
         }
-
-        window.clearTimeout(
-          slowTimer
-        );
 
         setStatus("success");
         setMessage(
@@ -229,10 +281,6 @@ export default function AuthCallback() {
           return;
         }
 
-        window.clearTimeout(
-          slowTimer
-        );
-
         console.error(
           "OAuth callback failed:",
           error
@@ -247,10 +295,6 @@ export default function AuthCallback() {
 
     return () => {
       active = false;
-
-      window.clearTimeout(
-        slowTimer
-      );
     };
   }, [nextPath]);
 
