@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 
+// ---------- Constants & helpers (unchanged) ----------
 const PERIODS = ["1D", "1W", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "All"];
-
 const PERIOD_CONFIG = {
   "1D": { resolution: "5",  daysBack: 1 },
   "1W": { resolution: "60", daysBack: 7 },
@@ -26,7 +26,6 @@ const PERIOD_CONFIG = {
   "All": { resolution: "M", daysBack: 5475 },
 };
 
-// ---------- Finnhub proxy call helper ----------
 async function finnhubProxy(body) {
   const res = await fetch("/api/finnhub", {
     method: "POST",
@@ -37,7 +36,8 @@ async function finnhubProxy(body) {
   return res.json();
 }
 
-// ---------- Chart Data Fetching ----------
+// ---------- Chart & other functions (unchanged from last full file) ----------
+// I'm including all of them to keep the file complete
 async function fetchChartData(ticker, period, basePrice) {
   try {
     const cfg = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
@@ -118,7 +118,6 @@ function normalizeData(data, ticker, compareTicker) {
   }));
 }
 
-// ---------- Chart Component ----------
 function StockChart({ ticker, currentPrice, isPositive }) {
   const [activePeriod, setActivePeriod] = useState("1M");
   const [compareTicker, setCompareTicker] = useState("");
@@ -358,7 +357,7 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
   );
 }
 
-// ---------- Key Metrics (deterministic simulation) ----------
+// ---------- Key Metrics (simulated) ----------
 function getStockMetrics(ticker, price) {
   const s = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const p = price || 100;
@@ -392,11 +391,13 @@ function getStockMetrics(ticker, price) {
   ];
 }
 
-// ---------- Main Component ----------
+// ---------- MAIN COMPONENT (FIXED) ----------
 export default function StockDetail() {
-  const { id } = useParams();
+  // ✅ FIX: the route param is named "ticker", not "id"
+  const { ticker: routeParam } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
   const [stock, setStock] = useState(null);
   const [loading, setLoading] = useState(true);
   const [news, setNews] = useState(null);
@@ -405,16 +406,18 @@ export default function StockDetail() {
   const [sellOpen, setSellOpen] = useState(false);
   const [error, setError] = useState(null);
 
-  const isTickerRoute = id?.startsWith("ticker-");
-  const tickerFromRoute = isTickerRoute ? id.replace("ticker-", "").toUpperCase() : null;
+  // Determine if it's a ticker‑based route (watchlist) or a portfolio stock ID
+  const isTickerRoute = routeParam?.startsWith("ticker-");
+  const tickerFromRoute = isTickerRoute ? routeParam.replace("ticker-", "").toUpperCase() : null;
+  const stockId = !isTickerRoute ? routeParam : null;
 
   useEffect(() => {
     const load = async () => {
       setError(null);
       setLoading(true);
 
-      // REJECT invalid id early
-      if (!id || id === "undefined" || (isTickerRoute && !tickerFromRoute)) {
+      // --- early rejection ---
+      if (!routeParam || routeParam === "undefined") {
         setStock(null);
         setError("Invalid stock link");
         setLoading(false);
@@ -423,7 +426,7 @@ export default function StockDetail() {
 
       try {
         if (isTickerRoute) {
-          console.log("Loading ticker route:", tickerFromRoute);
+          // Fetch via Finnhub proxy
           const [quoteData, profileData] = await Promise.all([
             finnhubProxy({ action: "quote", ticker: tickerFromRoute }).catch(e => {
               console.error("Quote fetch failed:", e);
@@ -445,7 +448,8 @@ export default function StockDetail() {
             _watchlistOnly: true,
           });
         } else {
-          const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+          // Portfolio stock by ID
+          const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
           if (data) {
             setStock({ ...data, _watchlistOnly: false });
           } else {
@@ -461,8 +465,9 @@ export default function StockDetail() {
         setLoading(false);
       }
     };
+
     load();
-  }, [id, isTickerRoute, tickerFromRoute]);
+  }, [routeParam, isTickerRoute, tickerFromRoute, stockId]);
 
   // Load news
   useEffect(() => {
@@ -524,11 +529,11 @@ export default function StockDetail() {
         quantity: newQty,
         purchase_price: +newAvgCost.toFixed(4),
         current_price: currentPrice,
-      }).eq("id", id);
+      }).eq("id", stockId);
     }
 
     if (!stock._watchlistOnly) {
-      const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+      const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
       if (data) setStock({ ...data, _watchlistOnly: false });
     }
   };
@@ -541,7 +546,7 @@ export default function StockDetail() {
     if (qty >= stock.quantity) {
       setSellOpen(false);
       navigate("/home");
-      await supabase.from("stocks").delete().eq("id", id);
+      await supabase.from("stocks").delete().eq("id", stockId);
       await supabase.from("stock_transactions").insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
@@ -554,7 +559,7 @@ export default function StockDetail() {
     } else {
       setStock(prev => ({ ...prev, quantity: remainingQty }));
       setSellOpen(false);
-      await supabase.from("stocks").update({ quantity: remainingQty }).eq("id", id);
+      await supabase.from("stocks").update({ quantity: remainingQty }).eq("id", stockId);
       await supabase.from("stock_transactions").insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
@@ -564,7 +569,7 @@ export default function StockDetail() {
         price: sellPrice,
         total: qty * sellPrice,
       }).catch(() => {});
-      const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+      const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
       if (data) setStock({ ...data, _watchlistOnly: false });
     }
   };
