@@ -10,8 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 
+// ---------- Constants ----------
 const PERIODS = ["1D", "1W", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "All"];
-
 const PERIOD_CONFIG = {
   "1D": { resolution: "5",  daysBack: 1 },
   "1W": { resolution: "60", daysBack: 7 },
@@ -58,8 +58,7 @@ async function fetchChartData(ticker, period, basePrice) {
     });
     const candles = data?.candles;
     if (candles?.length > 0) {
-      // ✅ Fix: sort by timestamp ascending so chart draws left → right
-      candles.sort((a, b) => a.t - b.t);
+      candles.sort((a, b) => a.t - b.t); // left-to-right order
       return candles.map(c => {
         const d = new Date(c.t * 1000);
         const label = (period === "1D")
@@ -118,7 +117,7 @@ function normalizeData(data, ticker, compareTicker) {
   }));
 }
 
-// ---------- Chart component ----------
+// ---------- Chart Component ----------
 function StockChart({ ticker, currentPrice, isPositive }) {
   const [activePeriod, setActivePeriod] = useState("1M");
   const [compareTicker, setCompareTicker] = useState("");
@@ -270,7 +269,6 @@ function StockChart({ ticker, currentPrice, isPositive }) {
                 );
               }}
             />
-            {/* ✅ animationDuration added for left‑to‑right draw */}
             <Line type="monotone" dataKey={ticker} stroke={primaryColor} strokeWidth={2} dot={false} animationDuration={800} />
             {compareTicker && (
               <Line type="monotone" dataKey={compareTicker} stroke={compareColor} strokeWidth={2} dot={false} strokeDasharray="4 2" animationDuration={800} />
@@ -295,7 +293,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
   );
 }
 
-// ---------- Buy / Sell dialogs (unchanged) ----------
+// ---------- Buy/Sell Dialogs ----------
 function BuyDetailDialog({ open, onOpenChange, stock, onDone }) {
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState(stock?.current_price?.toFixed(2) || stock?.purchase_price?.toFixed(2) || "");
@@ -359,7 +357,7 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
   );
 }
 
-// ---------- Key metrics (unchanged) ----------
+// ---------- Key Metrics (unchanged) ----------
 function getStockMetrics(ticker, price) {
   const s = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const p = price || 100;
@@ -395,9 +393,11 @@ function getStockMetrics(ticker, price) {
 
 // ---------- Main Component ----------
 export default function StockDetail() {
-  const { id } = useParams();
+  // ✅ FIX: The route is /stock/:ticker, so use the correct param name
+  const { ticker } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+
   const [stock, setStock] = useState(null);
   const [loading, setLoading] = useState(true);
   const [news, setNews] = useState(null);
@@ -405,10 +405,10 @@ export default function StockDetail() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
 
-  const isTickerRoute = id?.startsWith("ticker-");
-  const tickerFromRoute = isTickerRoute ? id.replace("ticker-", "").toUpperCase() : null;
+  const isTickerRoute = ticker?.startsWith("ticker-");
+  const tickerFromRoute = isTickerRoute ? ticker.replace("ticker-", "").toUpperCase() : null;
+  const stockId = !isTickerRoute ? ticker : null;   // for portfolio stocks, ticker is the UUID
 
-  // Load stock data
   useEffect(() => {
     const load = async () => {
       if (isTickerRoute) {
@@ -417,15 +417,13 @@ export default function StockDetail() {
             finnhubProxy({ action: "quote", ticker: tickerFromRoute }),
             finnhubProxy({ action: "profile", ticker: tickerFromRoute }),
           ]);
-          const q = quoteRes;
-          const p = profileRes;
           setStock({
             ticker: tickerFromRoute,
-            company_name: p?.name || tickerFromRoute,
-            sector: p?.finnhubIndustry || "",
-            logo_url: p?.logo || "",
-            current_price: q?.c || 0,
-            purchase_price: q?.pc || q?.c || 0,
+            company_name: profileRes?.name || tickerFromRoute,
+            sector: profileRes?.finnhubIndustry || "",
+            logo_url: profileRes?.logo || "",
+            current_price: quoteRes?.c || 0,
+            purchase_price: quoteRes?.pc || quoteRes?.c || 0,
             quantity: 0,
             _watchlistOnly: true,
           });
@@ -433,7 +431,8 @@ export default function StockDetail() {
           setStock(null);
         }
       } else {
-        const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+        // Portfolio stock by UUID
+        const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
         if (data) {
           setStock({ ...data, _watchlistOnly: false });
         } else {
@@ -443,9 +442,9 @@ export default function StockDetail() {
       setLoading(false);
     };
     load();
-  }, [id, isTickerRoute, tickerFromRoute]);
+  }, [ticker, isTickerRoute, tickerFromRoute, stockId]);
 
-  // Fetch news from Finnhub
+  // Load news
   useEffect(() => {
     if (!stock) return;
     const fetchNews = async () => {
@@ -469,7 +468,6 @@ export default function StockDetail() {
       ? ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty
       : price;
 
-    // Optimistic update
     setStock(prev => ({ ...prev, quantity: newQty, purchase_price: +newAvgCost.toFixed(4) }));
     setBuyOpen(false);
 
@@ -479,7 +477,6 @@ export default function StockDetail() {
       if (res?.c) currentPrice = res.c;
     } catch {}
 
-    // Record transaction
     await supabase.from("stock_transactions").insert({
       user_id: user.id,
       ticker: stock.ticker.toUpperCase(),
@@ -491,7 +488,6 @@ export default function StockDetail() {
     }).catch(err => console.warn("Transaction log failed:", err));
 
     if (stock._watchlistOnly) {
-      // Create new stock in portfolio
       const { error } = await supabase.from("stocks").insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
@@ -506,13 +502,12 @@ export default function StockDetail() {
         return;
       }
     } else {
-      // Update existing stock
       await supabase.from("stocks").update({
         quantity: newQty,
         purchase_price: +newAvgCost.toFixed(4),
         current_price: currentPrice,
-      }).eq("id", id);
-      const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+      }).eq("id", stockId);
+      const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
       if (data) setStock({ ...data, _watchlistOnly: false });
     }
   };
@@ -525,7 +520,7 @@ export default function StockDetail() {
     if (qty >= stock.quantity) {
       setSellOpen(false);
       navigate("/home");
-      await supabase.from("stocks").delete().eq("id", id);
+      await supabase.from("stocks").delete().eq("id", stockId);
       await supabase.from("stock_transactions").insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
@@ -538,7 +533,7 @@ export default function StockDetail() {
     } else {
       setStock(prev => ({ ...prev, quantity: remainingQty }));
       setSellOpen(false);
-      await supabase.from("stocks").update({ quantity: remainingQty }).eq("id", id);
+      await supabase.from("stocks").update({ quantity: remainingQty }).eq("id", stockId);
       await supabase.from("stock_transactions").insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
@@ -548,7 +543,7 @@ export default function StockDetail() {
         price: sellPrice,
         total: qty * sellPrice,
       }).catch(() => {});
-      const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+      const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
       if (data) setStock({ ...data, _watchlistOnly: false });
     }
   };
