@@ -124,7 +124,7 @@ export default function Settings() {
             Refer
           </p>
           <Link
-            to="/referral"
+            to="/referrals"
             className="block rounded-2xl p-5 hover:opacity-90 hover:-translate-y-0.5 transition-all text-white shadow-md hover:shadow-lg"
             style={{ background: "hsl(var(--primary))" }}
           >
@@ -182,7 +182,7 @@ export default function Settings() {
             </Link>
 
             <Link
-              to="/currency"
+              to="/settings/currency"
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -231,7 +231,7 @@ export default function Settings() {
             style={{ backgroundColor: "hsl(var(--card))" }}
           >
             <Link
-              to="/contact"
+              to="/contact-us"
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
