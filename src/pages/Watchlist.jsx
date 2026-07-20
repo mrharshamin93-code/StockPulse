@@ -8,10 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
-// ==================== HELPERS ====================
+// ==================== IMPROVED ABBREVIATE FUNCTION ====================
 function abbreviateExchange(exchange) {
   if (!exchange) return "";
   const e = exchange.toUpperCase();
+
   if (e.includes("NEW YORK STOCK EXCHANGE") || e.includes("NYSE")) return "NYSE";
   if (e.includes("NYSE AMERICAN") || e.includes("AMEX")) return "AMEX";
   if (e.includes("NASDAQ")) return "NASDAQ";
@@ -24,6 +25,7 @@ function abbreviateExchange(exchange) {
   if (e.includes("HKEX")) return "HKEX";
   if (e.includes("NSE")) return "NSE";
   if (e.includes("KRX")) return "KRX";
+
   return exchange;
 }
 
@@ -39,7 +41,7 @@ function Toast({ message, onDone }) {
     return () => clearTimeout(t);
   }, [onDone]);
   return (
-    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-gray-900 text-white text-sm shadow-lg">
+    <div className="fixed bottom-24 left-1/2 -translate-x/1/2 z-50 px-4 py-2 rounded-full bg-gray-900 text-white text-sm shadow-lg">
       {message}
     </div>
   );
@@ -52,7 +54,6 @@ async function callFinnhub(params) {
   return res.json();
 }
 
-// ==================== REAL SPARKLINE (1 MONTH) ====================
 function RealSparkline({ data, isPositive }) {
   if (!data || data.length < 2) return null;
 
@@ -171,10 +172,10 @@ export default function Watchlist() {
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
 
-  // ==================== FIXED: 1 MONTH SPARKLINE ====================
+  // ==================== 1 MONTH SPARKLINE ====================
   const loadSparklines = async (tickers) => {
     const newData = {};
-    const oneMonthAgo = Math.floor(Date.now() / 1000) - 30 * 86400; // Exactly 1 month
+    const oneMonthAgo = Math.floor(Date.now() / 1000) - 30 * 86400; // Exactly 1 month of data
 
     await Promise.all(
       tickers.map(async (t) => {
@@ -190,7 +191,7 @@ export default function Watchlist() {
             newData[t] = res.candles.map((c) => ({ close: c.v ?? c.c }));
           }
         } catch (err) {
-          console.warn(`Sparkline failed for ${t}`, err);
+          console.warn(`Failed to load sparkline for ${t}`, err);
         }
       })
     );
@@ -315,12 +316,9 @@ export default function Watchlist() {
         {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       </AnimatePresence>
 
-      {/* ⚠️ BROKEN DIALOG - COMMENTED TO PREVENT CRASH */}
-      {/* TODO: Fix this after migration.
-          Either:
-          1. Create a proper controlled AddToPortfolioDialog, or
-          2. Adapt AddStockDialog.jsx to accept `open`, `ticker`, `companyName`, `onAdded`, `userId`
-          Currently clicking the star does nothing visual (safe). */}
+      {/* ⚠️ DIALOG TEMPORARILY DISABLED TO FIX BUILD
+          This was referencing a non-existent component (AddToPortfolioDialog).
+          Uncomment and fix after you resolve the dialog (see previous review). */}
       {/*
       {dialogItem && (
         <AddToPortfolioDialog
@@ -339,6 +337,7 @@ export default function Watchlist() {
       */}
 
       <div className="max-w-2xl mx-auto px-4 pt-6">
+        {/* Header */}
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="flex items-center gap-1">
             <Star className="h-7 w-7 text-yellow-500 fill-yellow-500" />
@@ -369,7 +368,28 @@ export default function Watchlist() {
 
             <AnimatePresence>
               {showSuggestions && (suggestions.length > 0 || searchLoading) && (
-                <motion.div ... > {/* same as before */} </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute z-[60] mt-1.5 w-full rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
+                >
+                  {searchLoading && <div className="px-4 py-3 text-sm text-gray-500">Searching...</div>}
+                  {suggestions.map((sugg, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleSelectSuggestion(sugg)}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex justify-between items-center text-sm active:bg-gray-100"
+                    >
+                      <div>
+                        <span className="font-semibold">{sugg.symbol}</span>
+                        <span className="ml-2 text-gray-500">{sugg.description}</span>
+                      </div>
+                      <span className="text-xs text-gray-400">{sugg.type}</span>
+                    </button>
+                  ))}
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
