@@ -516,6 +516,13 @@ export default function Watchlist() {
 
   const findStock = (t) => stocks.find(s => s.ticker.toUpperCase() === t.toUpperCase());
 
+  // ---------- SORT ITEMS BY HIGHEST DAILY GAINER FIRST ----------
+  const sortedItems = [...items].sort((a, b) => {
+    const aGain = quotes[a.ticker.toUpperCase()]?.dp ?? -Infinity;
+    const bGain = quotes[b.ticker.toUpperCase()]?.dp ?? -Infinity;
+    return bGain - aGain;
+  });
+
   return (
     <div className="min-h-screen flex flex-col" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}>
       <AnimatePresence>{toast && <Toast message={toast} onDone={() => setToast(null)} />}</AnimatePresence>
@@ -598,7 +605,7 @@ export default function Watchlist() {
         ) : (
           <motion.div className="space-y-3" layout>
             <AnimatePresence>
-              {items.map((item, index) => (
+              {sortedItems.map((item, index) => (
                 <WatchlistCard
                   key={item.id}
                   item={item}
