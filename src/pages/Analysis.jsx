@@ -278,11 +278,7 @@ export default function Analysis() {
                 disabled={isLoading || !q}
                 className="min-w-[44px] gap-2"
               >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
-                )}
+                <Search className="h-4 w-4" />
               </Button>
             </div>
 
@@ -292,8 +288,10 @@ export default function Analysis() {
 
         {loadingInsights && (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card p-12">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-              <Sparkles className="h-6 w-6 animate-pulse text-primary" />
+            <div className="relative mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+              <span className="absolute inset-0 animate-pulse rounded-2xl bg-primary/25 blur-md" />
+              <span className="absolute -inset-1 animate-ping rounded-2xl border border-primary/30" />
+              <Sparkles className="relative h-6 w-6 animate-pulse text-primary drop-shadow-[0_0_8px_hsl(var(--primary))]" />
             </div>
             <p className="mb-1 font-heading font-semibold">Analyzing {q}</p>
             <p className="text-sm text-muted-foreground">
