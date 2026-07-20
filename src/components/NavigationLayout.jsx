@@ -2,7 +2,6 @@ import React, { useCallback, useRef, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { BriefcaseBusiness, TrendingUp, Settings, Star, SlidersHorizontal } from "lucide-react";
 import AddStockDialog from "@/components/portfolio/AddStockDialog";
-import { motion, AnimatePresence } from "framer-motion";
 
 const tabs = [
   { label: "Watchlist", path: "/watchlist", icon: Star },
@@ -51,25 +50,16 @@ export default function NavigationLayout() {
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden">
-      {/* Stable content area - no more forced remounts */}
-      <div className="relative flex-1 overflow-hidden" style={{ minHeight: "calc(100dvh - 70px)" }}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 overflow-y-auto"
-          >
-            <Outlet />
-          </motion.div>
-        </AnimatePresence>
+      {/* Content area – no animation, always visible */}
+      <div className="relative flex-1" style={{ minHeight: "calc(100dvh - 70px)" }}>
+        <div className="absolute inset-0 overflow-y-auto">
+          <Outlet />
+        </div>
       </div>
 
       {/* Floating Add button */}
       {pathname === "/home" && (
-        <div className="fixed left-1/2 z-50 -translate-x-1/2" 
+        <div className="fixed left-1/2 z-50 -translate-x-1/2"
              style={{ bottom: "calc(env(safe-area-inset-bottom) + 68px)" }}>
           <AddStockDialog />
         </div>
