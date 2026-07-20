@@ -55,7 +55,6 @@ async function finnhubGet(path, params = {}, retries = 2) {
   }
 
   if (!res.ok) {
-    // Don't throw here – we'll catch it in the action and return empty data
     const text = await res.text().catch(() => "");
     throw new Error(`Finnhub error: ${res.status} ${res.statusText} - ${text}`);
   }
@@ -65,15 +64,30 @@ async function finnhubGet(path, params = {}, retries = 2) {
 
 function getBody(req) {
   if (req.method === "GET") {
-    const { action, ticker, query, q, resolution, from, to, tickers } = req.query;
+    const {
+      action,
+      ticker,
+      query,
+      q,
+      resolution,
+      from,
+      to,
+      tickers,
+    } = req.query;
+
     let parsedTickers = tickers;
+
     if (typeof tickers === "string") {
       try {
         parsedTickers = JSON.parse(tickers);
       } catch {
-        parsedTickers = tickers.split(",").map(t => t.trim().toUpperCase()).filter(Boolean);
+        parsedTickers = tickers
+          .split(",")
+          .map((t) => t.trim().toUpperCase())
+          .filter(Boolean);
       }
     }
+
     return {
       action,
       ticker: ticker ? String(ticker).trim().toUpperCase() : undefined,
@@ -82,18 +96,19 @@ function getBody(req) {
       from: from ? Number(from) : undefined,
       to: to ? Number(to) : undefined,
       tickers: Array.isArray(parsedTickers)
-        ? parsedTickers.map(t => String(t).trim().toUpperCase()).filter(Boolean)
+        ? parsedTickers.map((t) => String(t).trim().toUpperCase()).filter(Boolean)
         : [],
     };
   }
 
   const body = req.body || {};
+
   return {
     ...body,
     ticker: body.ticker ? String(body.ticker).trim().toUpperCase() : undefined,
     query: body.query || body.q,
     tickers: Array.isArray(body.tickers)
-      ? body.tickers.map(t => String(t).trim().toUpperCase()).filter(Boolean)
+      ? body.tickers.map((t) => String(t).trim().toUpperCase()).filter(Boolean)
       : [],
   };
 }
@@ -115,9 +130,56 @@ function mapQuoteData(ticker, data) {
 function emptyQuote(ticker, error = null) {
   return {
     ticker,
-    c: null, dp: null, d: null, pc: null, h: null, l: null, o: null, t: null,
+    c: null,
+    dp: null,
+    d: null,
+    pc: null,
+    h: null,
+    l: null,
+    o: null,
+    t: null,
     ...(error ? { error } : {}),
   };
+}
+
+// Helper function to fetch candles from Yahoo Finance
+async function fetchYahooCandles(ticker, fromTs, toTs, resolution) {
+  // Yahoo only supports daily (1d) data for this free endpoint
+  const url = `https://query1.finance.yahoo.com/v7/finance/download/${ticker.toUpperCase()}?period1=${fromTs}&period2=${toTs}&interval=1d&events=history&includeAdjustedClose=true`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(`Yahoo fetch failed for ${ticker}: ${res.status}`);
+    return { candles: [] };
+  }
+
+  const csv = await res.text();
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) {
+    console.warn(`No data from Yahoo for ${ticker}`);
+    return { candles: [] };
+  }
+
+  const header = lines[0].split(',');
+  const closeIndex = header.indexOf('Close');
+  if (closeIndex === -1) {
+    console.error('Close column not found in Yahoo CSV');
+    return { candles: [] };
+  }
+
+  const candles = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    const dateStr = cols[0];
+    const close = parseFloat(cols[closeIndex]);
+    if (!isNaN(close) && dateStr) {
+      const date = new Date(dateStr + 'T00:00:00');
+      const timestamp = Math.floor(date.getTime() / 1000);
+      candles.push({ t: timestamp, v: close });
+    }
+  }
+
+  return { candles };
 }
 
 export default async function handler(req, res) {
@@ -133,6 +195,7 @@ export default async function handler(req, res) {
     const body = getBody(req);
     const { action, ticker, tickers } = body;
 
+    // Quotes (unchanged)
     if (action === "quote") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const result = await withCache(`quote:${ticker}`, 15_000, async () => {
@@ -146,7 +209,7 @@ export default async function handler(req, res) {
       if (!Array.isArray(tickers) || tickers.length === 0)
         return res.status(400).json({ error: "Missing tickers" });
       const results = await Promise.all(
-        tickers.map(async t => {
+        tickers.map(async (t) => {
           const nt = String(t).trim().toUpperCase();
           try {
             return await withCache(`quote:${nt}`, 15_000, async () => {
@@ -161,62 +224,31 @@ export default async function handler(req, res) {
       return res.status(200).json({ quotes: results });
     }
 
-    // ------------------------------------------
-    // CANDLES – graceful fallback
-    // ------------------------------------------
+    // CANDLES (yearly) - now using Yahoo Finance
     if (action === "candles") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
-      try {
-        const result = await withCache(`candles:${ticker}`, 5 * 60_000, async () => {
-          const toTs = Math.floor(Date.now() / 1000);
-          const fromTs = toTs - 365 * 24 * 60 * 60;
-          const data = await finnhubGet("/stock/candle", {
-            symbol: ticker,
-            resolution: "W",
-            from: String(fromTs),
-            to: String(toTs),
-          });
-          if (data.s !== "ok") return { candles: [] };
-          const candles = (data.c || []).map((close, i) => ({ t: data.t[i], v: close }));
-          return { candles };
-        });
-        return res.status(200).json(result);
-      } catch (error) {
-        console.error(`Candles error for ${ticker}:`, error);
-        return res.status(200).json({ candles: [] });
-      }
+      const toTs = Math.floor(Date.now() / 1000);
+      const fromTs = toTs - 365 * 24 * 60 * 60;
+      const result = await withCache(`candles:${ticker}`, 5 * 60_000, async () =>
+        fetchYahooCandles(ticker, fromTs, toTs, "W")
+      );
+      return res.status(200).json(result);
     }
 
-    // ------------------------------------------
-    // CANDLES_RANGE – graceful fallback
-    // ------------------------------------------
+    // CANDLES_RANGE (30-day sparkline) - using Yahoo Finance
     if (action === "candles_range") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
-      const { resolution = "D", from, to } = body;
+      const { from, to } = body;
       const toTs = to || Math.floor(Date.now() / 1000);
       const fromTs = from || toTs - 30 * 86400;
-      const cacheKey = `candles_range:${ticker}:${resolution}:${fromTs}:${toTs}`;
-
-      try {
-        const result = await withCache(cacheKey, 5 * 60_000, async () => {
-          const data = await finnhubGet("/stock/candle", {
-            symbol: ticker,
-            resolution: String(resolution),
-            from: String(fromTs),
-            to: String(toTs),
-          });
-          if (data.s !== "ok") return { candles: [] };
-          const candles = (data.c || []).map((close, i) => ({ t: data.t[i], v: close }));
-          return { candles };
-        });
-        return res.status(200).json(result);
-      } catch (error) {
-        console.error(`Candles_range error for ${ticker}:`, error);
-        return res.status(200).json({ candles: [] });
-      }
+      const cacheKey = `candles_range:${ticker}:D:${fromTs}:${toTs}`;
+      const result = await withCache(cacheKey, 5 * 60_000, async () =>
+        fetchYahooCandles(ticker, fromTs, toTs, "D")
+      );
+      return res.status(200).json(result);
     }
 
-    // ... (news, profile, search remain exactly the same as before)
+    // NEWS, PROFILE, SEARCH (unchanged)
     if (action === "news") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const result = await withCache(`news:${ticker}`, 10 * 60_000, async () => {
@@ -235,10 +267,7 @@ export default async function handler(req, res) {
         );
         const relevant = all.filter((a) => {
           const text = `${a.headline || ""} ${a.summary || ""}`.toLowerCase();
-          return (
-            text.includes(tickerLower) ||
-            (companyName && text.includes(companyName))
-          );
+          return text.includes(tickerLower) || (companyName && text.includes(companyName));
         });
         const seenSources = {};
         const articles = [];
@@ -264,18 +293,14 @@ export default async function handler(req, res) {
 
     if (action === "profile") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
-      const result = await withCache(
-        `profile:${ticker}`,
-        24 * 60 * 60_000,
-        async () => {
-          const data = await finnhubGet("/stock/profile2", { symbol: ticker });
-          return {
-            exchange: data.exchange || null,
-            name: data.name || null,
-            ticker: data.ticker || ticker,
-          };
-        }
-      );
+      const result = await withCache(`profile:${ticker}`, 24 * 60 * 60_000, async () => {
+        const data = await finnhubGet("/stock/profile2", { symbol: ticker });
+        return {
+          exchange: data.exchange || null,
+          name: data.name || null,
+          ticker: data.ticker || ticker,
+        };
+      });
       return res.status(200).json(result);
     }
 
@@ -283,45 +308,33 @@ export default async function handler(req, res) {
       const query = body.query || ticker;
       if (!query) return res.status(400).json({ error: "Missing query" });
       const normalizedQuery = String(query).trim();
-      const result = await withCache(
-        `search:${normalizedQuery.toUpperCase()}`,
-        5 * 60_000,
-        async () => {
-          const data = await finnhubGet("/search", { q: normalizedQuery });
-          const results = (data.result || [])
-            .filter((r) => {
-              const symbol = String(r?.symbol || "").trim();
-              const type = String(r?.type || "").toLowerCase();
-              return (
-                symbol &&
-                !symbol.includes(".") &&
-                (type.includes("stock") ||
-                  type.includes("equity") ||
-                  type === "" ||
-                  type.includes("common"))
-              );
-            })
-            .slice(0, 8)
-            .map((r) => ({
-              ticker: String(r.symbol || "").trim().toUpperCase(),
-              name: String(
-                r.description || r.displaySymbol || r.symbol || ""
-              ).trim(),
-              exchange: String(
-                r.primaryExchange || r.exchange || ""
-              ).trim(),
-              symbol: String(r.symbol || "").trim().toUpperCase(),
-              description: String(
-                r.description || r.displaySymbol || r.symbol || ""
-              ).trim(),
-              primaryExchange: String(
-                r.primaryExchange || r.exchange || ""
-              ).trim(),
-            }))
-            .filter((r) => r.ticker);
-          return { results, result: results };
-        }
-      );
+      const result = await withCache(`search:${normalizedQuery.toUpperCase()}`, 5 * 60_000, async () => {
+        const data = await finnhubGet("/search", { q: normalizedQuery });
+        const results = (data.result || [])
+          .filter((r) => {
+            const symbol = String(r?.symbol || "").trim();
+            const type = String(r?.type || "").toLowerCase();
+            return (
+              symbol &&
+              !symbol.includes(".") &&
+              (type.includes("stock") ||
+                type.includes("equity") ||
+                type === "" ||
+                type.includes("common"))
+            );
+          })
+          .slice(0, 8)
+          .map((r) => ({
+            ticker: String(r.symbol || "").trim().toUpperCase(),
+            name: String(r.description || r.displaySymbol || r.symbol || "").trim(),
+            exchange: String(r.primaryExchange || r.exchange || "").trim(),
+            symbol: String(r.symbol || "").trim().toUpperCase(),
+            description: String(r.description || r.displaySymbol || r.symbol || "").trim(),
+            primaryExchange: String(r.primaryExchange || r.exchange || "").trim(),
+          }))
+          .filter((r) => r.ticker);
+        return { results, result: results };
+      });
       return res.status(200).json(result);
     }
 
