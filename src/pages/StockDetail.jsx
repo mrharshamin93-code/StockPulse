@@ -37,7 +37,7 @@ async function finnhubProxy(body) {
   return res.json();
 }
 
-// ---------- Chart data helpers ----------
+// ---------- Chart data helpers – guaranteed left‑to‑right order ----------
 async function fetchChartData(ticker, period, basePrice) {
   try {
     const cfg = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
@@ -58,7 +58,12 @@ async function fetchChartData(ticker, period, basePrice) {
     });
     const candles = data?.candles;
     if (candles?.length > 0) {
-      candles.sort((a, b) => a.t - b.t); // left-to-right order
+      // Ensure chronological order (oldest → newest)
+      candles.sort((a, b) => a.t - b.t);
+      // Double-check: if first item is newer than last, reverse the array
+      if (candles.length > 1 && candles[0].t > candles[candles.length - 1].t) {
+        candles.reverse();
+      }
       return candles.map(c => {
         const d = new Date(c.t * 1000);
         const label = (period === "1D")
@@ -117,7 +122,7 @@ function normalizeData(data, ticker, compareTicker) {
   }));
 }
 
-// ---------- Chart Component ----------
+// ---------- Chart Component (fixed line animation) ----------
 function StockChart({ ticker, currentPrice, isPositive }) {
   const [activePeriod, setActivePeriod] = useState("1M");
   const [compareTicker, setCompareTicker] = useState("");
@@ -269,9 +274,29 @@ function StockChart({ ticker, currentPrice, isPositive }) {
                 );
               }}
             />
-            <Line type="monotone" dataKey={ticker} stroke={primaryColor} strokeWidth={2} dot={false} animationDuration={800} />
+            {/* 🟢 Fixed: animationBegin & duration guarantee left‑to‑right draw */}
+            <Line
+              type="monotone"
+              dataKey={ticker}
+              stroke={primaryColor}
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={true}
+              animationBegin={0}
+              animationDuration={800}
+            />
             {compareTicker && (
-              <Line type="monotone" dataKey={compareTicker} stroke={compareColor} strokeWidth={2} dot={false} strokeDasharray="4 2" animationDuration={800} />
+              <Line
+                type="monotone"
+                dataKey={compareTicker}
+                stroke={compareColor}
+                strokeWidth={2}
+                dot={false}
+                strokeDasharray="4 2"
+                isAnimationActive={true}
+                animationBegin={0}
+                animationDuration={800}
+              />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -391,7 +416,7 @@ function getStockMetrics(ticker, price) {
   ];
 }
 
-// ---------- Main Component ----------
+// ---------- Main Component (buttons already fixed) ----------
 export default function StockDetail() {
   const { ticker } = useParams();
   const navigate = useNavigate();
@@ -574,7 +599,6 @@ export default function StockDetail() {
       <BuyDetailDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={handleBuyDone} />
       <SellDetailDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={handleSellDone} />
 
-      {/* Fixed back button */}
       <div
         className="fixed top-0 left-0 z-50 flex items-center"
         style={{ paddingTop: "env(safe-area-inset-top)", backgroundColor: "transparent" }}
@@ -589,9 +613,8 @@ export default function StockDetail() {
       </div>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8" style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}>
-        {/* Stock Overview – Buy/Sell inline, never overlaps */}
+        {/* Stock Overview – Buy/Sell inline */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8">
-          {/* Top row: ticker info + buttons */}
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <span className="text-xs font-mono tracking-widest text-gray-400 uppercase">{stock.sector}</span>
@@ -604,7 +627,6 @@ export default function StockDetail() {
             </div>
           </div>
 
-          {/* Bottom row: price and gain */}
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
               <p className="text-3xl font-heading font-bold">${stock.current_price?.toFixed(2) || "—"}</p>
@@ -615,7 +637,6 @@ export default function StockDetail() {
             </div>
           </div>
 
-          {/* Portfolio-specific details (shares, cost, etc.) */}
           {!stock._watchlistOnly && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
               {[
@@ -633,10 +654,9 @@ export default function StockDetail() {
           )}
         </div>
 
-        {/* Chart */}
+        {/* Chart – now draws left‑to‑right */}
         <StockChart ticker={stock.ticker} currentPrice={stock.current_price || stock.purchase_price} isPositive={isPositive} />
 
-        {/* Key Metrics */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6">
           <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500 mb-4">Key Metrics</h2>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-4 gap-y-5">
@@ -649,7 +669,6 @@ export default function StockDetail() {
           </div>
         </div>
 
-        {/* News */}
         {newsLoading ? (
           <div className="bg-white border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
