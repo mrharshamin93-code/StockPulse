@@ -38,38 +38,27 @@ function clamp(value, minimum = 0, maximum = 1) {
 function smoothstep(value) {
   const normalized = clamp(value);
 
-  return (
-    normalized *
-    normalized *
-    (3 - 2 * normalized)
-  );
+  return normalized * normalized * (3 - 2 * normalized);
 }
 
 function abbreviateExchange(exchange) {
   if (!exchange) return "";
 
-  const normalized =
-    exchange.toUpperCase();
+  const normalized = exchange.toUpperCase();
 
-  if (
-    normalized.includes("NASDAQ")
-  ) {
+  if (normalized.includes("NASDAQ")) {
     return "NASDAQ";
   }
 
   if (
-    normalized.includes(
-      "NYSE AMERICAN"
-    ) ||
+    normalized.includes("NYSE AMERICAN") ||
     normalized.includes("AMEX")
   ) {
     return "AMEX";
   }
 
   if (
-    normalized.includes(
-      "NEW YORK STOCK EXCHANGE"
-    ) ||
+    normalized.includes("NEW YORK STOCK EXCHANGE") ||
     normalized.includes("NYSE")
   ) {
     return "NYSE";
@@ -90,9 +79,7 @@ function abbreviateExchange(exchange) {
   }
 
   if (
-    normalized.includes(
-      "TSX VENTURE"
-    ) ||
+    normalized.includes("TSX VENTURE") ||
     normalized.includes("TSXV")
   ) {
     return "TSXV";
@@ -107,9 +94,7 @@ function abbreviateExchange(exchange) {
 
   if (
     normalized.includes("CSE") ||
-    normalized.includes(
-      "CANADIAN SECURITIES"
-    )
+    normalized.includes("CANADIAN SECURITIES")
   ) {
     return "CSE";
   }
@@ -126,43 +111,33 @@ function abbreviateExchange(exchange) {
   }
 
   if (
-    normalized.includes(
-      "EURONEXT PARIS"
-    ) ||
+    normalized.includes("EURONEXT PARIS") ||
     normalized.includes("XPAR")
   ) {
     return "EPA";
   }
 
   if (
-    normalized.includes(
-      "EURONEXT AMSTERDAM"
-    ) ||
+    normalized.includes("EURONEXT AMSTERDAM") ||
     normalized.includes("XAMS")
   ) {
     return "AMS";
   }
 
   if (
-    normalized.includes(
-      "EURONEXT BRUSSELS"
-    ) ||
+    normalized.includes("EURONEXT BRUSSELS") ||
     normalized.includes("XBRU")
   ) {
     return "EBR";
   }
 
-  if (
-    normalized.includes("EURONEXT")
-  ) {
+  if (normalized.includes("EURONEXT")) {
     return "ENX";
   }
 
   if (
     normalized.includes("XETRA") ||
-    normalized.includes(
-      "FRANKFURT"
-    ) ||
+    normalized.includes("FRANKFURT") ||
     normalized.includes("FSE") ||
     normalized.includes("FWB")
   ) {
@@ -179,9 +154,7 @@ function abbreviateExchange(exchange) {
 
   if (
     normalized.includes("MILAN") ||
-    normalized.includes(
-      "BORSA ITALIANA"
-    )
+    normalized.includes("BORSA ITALIANA")
   ) {
     return "BIT";
   }
@@ -201,27 +174,21 @@ function abbreviateExchange(exchange) {
   }
 
   if (
-    normalized.includes(
-      "STOCKHOLM"
-    ) ||
+    normalized.includes("STOCKHOLM") ||
     normalized.includes("OMX")
   ) {
     return "STO";
   }
 
   if (
-    normalized.includes(
-      "COPENHAGEN"
-    ) ||
+    normalized.includes("COPENHAGEN") ||
     normalized.includes("CPH")
   ) {
     return "CPH";
   }
 
   if (
-    normalized.includes(
-      "HELSINKI"
-    ) ||
+    normalized.includes("HELSINKI") ||
     normalized.includes("HEL")
   ) {
     return "HEL";
@@ -229,18 +196,14 @@ function abbreviateExchange(exchange) {
 
   if (
     normalized.includes("ASX") ||
-    normalized.includes(
-      "AUSTRALIAN"
-    )
+    normalized.includes("AUSTRALIAN")
   ) {
     return "ASX";
   }
 
   if (
     normalized.includes("NZX") ||
-    normalized.includes(
-      "NEW ZEALAND"
-    )
+    normalized.includes("NEW ZEALAND")
   ) {
     return "NZX";
   }
@@ -254,61 +217,45 @@ function abbreviateExchange(exchange) {
   }
 
   if (
-    normalized.includes(
-      "SHANGHAI"
-    ) ||
+    normalized.includes("SHANGHAI") ||
     normalized.includes("SHSE")
   ) {
     return "SSE";
   }
 
   if (
-    normalized.includes(
-      "SHENZHEN"
-    ) ||
+    normalized.includes("SHENZHEN") ||
     normalized.includes("SZSE")
   ) {
     return "SZSE";
   }
 
   if (
-    normalized.includes(
-      "HONG KONG"
-    ) ||
+    normalized.includes("HONG KONG") ||
     normalized.includes("HKEX") ||
     normalized.includes("HKG")
   ) {
     return "HKEX";
   }
 
-  if (
-    normalized.includes(
-      "NATIONAL STOCK EXCHANGE"
-    )
-  ) {
+  if (normalized.includes("NATIONAL STOCK EXCHANGE")) {
     return "NSE";
   }
 
-  if (
-    normalized.includes("BOMBAY")
-  ) {
+  if (normalized.includes("BOMBAY")) {
     return "BSE";
   }
 
   if (
     normalized.includes("KRX") ||
-    normalized.includes(
-      "KOREA EXCHANGE"
-    )
+    normalized.includes("KOREA EXCHANGE")
   ) {
     return "KRX";
   }
 
   if (
     normalized.includes("SGX") ||
-    normalized.includes(
-      "SINGAPORE"
-    )
+    normalized.includes("SINGAPORE")
   ) {
     return "SGX";
   }
@@ -322,18 +269,14 @@ function abbreviateExchange(exchange) {
 
   if (
     normalized.includes("JSE") ||
-    normalized.includes(
-      "JOHANNESBURG"
-    )
+    normalized.includes("JOHANNESBURG")
   ) {
     return "JSE";
   }
 
   if (
     normalized.includes("B3") ||
-    normalized.includes(
-      "BOVESPA"
-    ) ||
+    normalized.includes("BOVESPA") ||
     normalized.includes("BRAZIL")
   ) {
     return "B3";
@@ -342,11 +285,7 @@ function abbreviateExchange(exchange) {
   return exchange;
 }
 
-function getCompanyName(
-  ticker,
-  stock,
-  item
-) {
+function getCompanyName(ticker, stock, item) {
   if (
     stock?.company_name &&
     stock.company_name !== ticker
@@ -368,27 +307,18 @@ function getCompanyName(
   );
 }
 
-async function callFinnhub(
-  params,
-  signal
-) {
-  const searchParams =
-    new URLSearchParams();
+async function callFinnhub(params, signal) {
+  const searchParams = new URLSearchParams();
 
-  Object.entries(params).forEach(
-    ([key, value]) => {
-      if (
-        value !== undefined &&
-        value !== null &&
-        value !== ""
-      ) {
-        searchParams.set(
-          key,
-          String(value)
-        );
-      }
+  Object.entries(params).forEach(([key, value]) => {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      searchParams.set(key, String(value));
     }
-  );
+  });
 
   const response = await fetch(
     `/api/finnhub?${searchParams.toString()}`,
@@ -411,19 +341,16 @@ async function callFinnhub(
   return payload;
 }
 
-function Toast({
-  message,
-  onDone,
-}) {
+function Toast({ message, onDone }) {
   useEffect(() => {
-    const timeout =
-      window.setTimeout(
-        onDone,
-        2500
-      );
+    const timeout = window.setTimeout(
+      onDone,
+      2500
+    );
 
-    return () =>
+    return () => {
       window.clearTimeout(timeout);
+    };
   }, [onDone]);
 
   return (
@@ -458,25 +385,11 @@ function AddToPortfolioDialog({
   onAdded,
   userId,
 }) {
-  const [
-    quantity,
-    setQuantity,
-  ] = useState("");
-
-  const [
-    purchasePrice,
-    setPurchasePrice,
-  ] = useState("");
-
-  const [
-    loading,
-    setLoading,
-  ] = useState(false);
-
-  const [
-    formError,
-    setFormError,
-  ] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [purchasePrice, setPurchasePrice] =
+    useState("");
+  const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     if (!open) {
@@ -487,26 +400,18 @@ function AddToPortfolioDialog({
     }
   }, [open]);
 
-  async function handleSubmit(
-    event
-  ) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    const parsedQuantity =
-      Number(quantity);
-
+    const parsedQuantity = Number(quantity);
     const parsedPurchasePrice =
       Number(purchasePrice);
 
     if (
       !userId ||
-      !Number.isFinite(
-        parsedQuantity
-      ) ||
+      !Number.isFinite(parsedQuantity) ||
       parsedQuantity <= 0 ||
-      !Number.isFinite(
-        parsedPurchasePrice
-      ) ||
+      !Number.isFinite(parsedPurchasePrice) ||
       parsedPurchasePrice <= 0
     ) {
       setFormError(
@@ -520,24 +425,19 @@ function AddToPortfolioDialog({
     setFormError("");
 
     try {
-      let currentPrice =
-        parsedPurchasePrice;
+      let currentPrice = parsedPurchasePrice;
 
       try {
-        const quote =
-          await callFinnhub({
-            action: "quote",
-            ticker,
-          });
+        const quote = await callFinnhub({
+          action: "quote",
+          ticker,
+        });
 
         if (
-          Number.isFinite(
-            Number(quote?.c)
-          ) &&
+          Number.isFinite(Number(quote?.c)) &&
           Number(quote.c) > 0
         ) {
-          currentPrice =
-            Number(quote.c);
+          currentPrice = Number(quote.c);
         }
       } catch (error) {
         console.warn(
@@ -546,23 +446,17 @@ function AddToPortfolioDialog({
         );
       }
 
-      const { error } =
-        await supabase
-          .from("stocks")
-          .insert({
-            user_id: userId,
-            ticker:
-              ticker.toUpperCase(),
-            company_name:
-              companyName,
-            quantity:
-              parsedQuantity,
-            purchase_price:
-              parsedPurchasePrice,
-            current_price:
-              currentPrice,
-            sector: "",
-          });
+      const { error } = await supabase
+        .from("stocks")
+        .insert({
+          user_id: userId,
+          ticker: ticker.toUpperCase(),
+          company_name: companyName,
+          quantity: parsedQuantity,
+          purchase_price: parsedPurchasePrice,
+          current_price: currentPrice,
+          sector: "",
+        });
 
       if (error) {
         throw error;
@@ -589,15 +483,12 @@ function AddToPortfolioDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={
-        onOpenChange
-      }
+      onOpenChange={onOpenChange}
     >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Add {ticker} to
-            Portfolio
+            Add {ticker} to Portfolio
           </DialogTitle>
         </DialogHeader>
 
@@ -606,9 +497,7 @@ function AddToPortfolioDialog({
         </p>
 
         <form
-          onSubmit={
-            handleSubmit
-          }
+          onSubmit={handleSubmit}
           className="space-y-4"
         >
           <div className="space-y-2">
@@ -623,10 +512,7 @@ function AddToPortfolioDialog({
               step="any"
               value={quantity}
               onChange={(event) =>
-                setQuantity(
-                  event.target
-                    .value
-                )
+                setQuantity(event.target.value)
               }
               required
             />
@@ -634,8 +520,7 @@ function AddToPortfolioDialog({
 
           <div className="space-y-2">
             <Label htmlFor="portfolio-price">
-              Average Purchase
-              Price
+              Average Purchase Price
             </Label>
 
             <Input
@@ -643,13 +528,10 @@ function AddToPortfolioDialog({
               type="number"
               min="0.01"
               step="0.01"
-              value={
-                purchasePrice
-              }
+              value={purchasePrice}
               onChange={(event) =>
                 setPurchasePrice(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               required
@@ -664,9 +546,7 @@ function AddToPortfolioDialog({
 
           <Button
             type="submit"
-            disabled={
-              loading
-            }
+            disabled={loading}
             className="w-full"
           >
             {loading && (
@@ -685,70 +565,48 @@ async function fetchSparklineData(
   ticker,
   signal
 ) {
-  const cacheKey =
-    ticker.toUpperCase();
-
-  const cached =
-    sparklineCache.get(
-      cacheKey
-    );
+  const cacheKey = ticker.toUpperCase();
+  const cached = sparklineCache.get(cacheKey);
 
   if (
     cached &&
-    Date.now() -
-      cached.timestamp <
+    Date.now() - cached.timestamp <
       SPARKLINE_CACHE_DURATION
   ) {
     return cached.data;
   }
 
-  const now = Math.floor(
-    Date.now() / 1000
-  );
-
+  const now = Math.floor(Date.now() / 1000);
   const thirtyDaysAgo =
     now - 30 * 24 * 60 * 60;
 
-  const result =
-    await callFinnhub(
-      {
-        action:
-          "candles_range",
-        ticker,
-        resolution: "D",
-        from:
-          thirtyDaysAgo,
-        to: now,
-      },
-      signal
-    );
+  const result = await callFinnhub(
+    {
+      action: "candles_range",
+      ticker,
+      resolution: "D",
+      from: thirtyDaysAgo,
+      to: now,
+    },
+    signal
+  );
 
-  const closePrices =
-    Array.isArray(
-      result?.candles
-    )
-      ? result.candles
-          .map((candle) =>
-            Number(candle?.v)
-          )
-          .filter(
-            Number.isFinite
-          )
-      : [];
+  const closePrices = Array.isArray(
+    result?.candles
+  )
+    ? result.candles
+        .map((candle) => Number(candle?.v))
+        .filter(Number.isFinite)
+    : [];
 
-  if (
-    closePrices.length < 2
-  ) {
+  if (closePrices.length < 2) {
     return null;
   }
 
-  sparklineCache.set(
-    cacheKey,
-    {
-      data: closePrices,
-      timestamp: Date.now(),
-    }
-  );
+  sparklineCache.set(cacheKey, {
+    data: closePrices,
+    timestamp: Date.now(),
+  });
 
   return closePrices;
 }
@@ -765,14 +623,10 @@ function MiniSparkline({
     ? "#10b981"
     : "#ef4444";
 
-  if (
-    !data ||
-    data.length < 2
-  ) {
-    const fallbackPoints =
-      isPositive
-        ? "2,25 8,20 14,22 20,16 26,18 32,10 40,7"
-        : "2,7 8,11 14,9 20,16 26,14 32,21 40,25";
+  if (!data || data.length < 2) {
+    const fallbackPoints = isPositive
+      ? "2,25 8,20 14,22 20,16 26,18 32,10 40,7"
+      : "2,7 8,11 14,9 20,16 26,14 32,21 40,25";
 
     return (
       <svg
@@ -782,9 +636,7 @@ function MiniSparkline({
         aria-hidden="true"
       >
         <polyline
-          points={
-            fallbackPoints
-          }
+          points={fallbackPoints}
           fill="none"
           stroke={color}
           strokeWidth="2"
@@ -795,43 +647,24 @@ function MiniSparkline({
     );
   }
 
-  const minimum =
-    Math.min(...data);
-
-  const maximum =
-    Math.max(...data);
-
-  const range =
-    maximum -
-      minimum ||
-    1;
+  const minimum = Math.min(...data);
+  const maximum = Math.max(...data);
+  const range = maximum - minimum || 1;
 
   const points = data
-    .map(
-      (
-        price,
-        index
-      ) => {
-        const x =
-          padding +
-          (index /
-            (data.length -
-              1)) *
-            (width -
-              padding * 2);
+    .map((price, index) => {
+      const x =
+        padding +
+        (index / (data.length - 1)) *
+          (width - padding * 2);
 
-        const y =
-          padding +
-          ((maximum -
-            price) /
-            range) *
-            (height -
-              padding *
-                2);
+      const y =
+        padding +
+        ((maximum - price) / range) *
+          (height - padding * 2);
 
-        return `${x},${y}`;
-      }
-    )
+      return `${x},${y}`;
+    })
     .join(" ");
 
   return (
@@ -857,27 +690,19 @@ function SparklineWrapper({
   ticker,
   isPositive,
 }) {
-  const [
-    sparklineData,
-    setSparklineData,
-  ] = useState(null);
+  const [sparklineData, setSparklineData] =
+    useState(null);
 
   useEffect(() => {
-    const controller =
-      new AbortController();
+    const controller = new AbortController();
 
     fetchSparklineData(
       ticker,
       controller.signal
     )
-      .then(
-        setSparklineData
-      )
+      .then(setSparklineData)
       .catch((error) => {
-        if (
-          error?.name !==
-          "AbortError"
-        ) {
+        if (error?.name !== "AbortError") {
           console.warn(
             `Sparkline fetch failed for ${ticker}:`,
             error
@@ -885,78 +710,58 @@ function SparklineWrapper({
         }
       });
 
-    return () =>
+    return () => {
       controller.abort();
+    };
   }, [ticker]);
 
   return (
     <MiniSparkline
       data={sparklineData}
-      isPositive={
-        isPositive
-      }
+      isPositive={isPositive}
     />
   );
 }
 
-function AnimatedPrice({
-  value,
-}) {
-  const [
-    flash,
-    setFlash,
-  ] = useState(null);
-
-  const previousValueRef =
-    useRef(value);
+function AnimatedPrice({ value }) {
+  const [flash, setFlash] = useState(null);
+  const previousValueRef = useRef(value);
 
   useEffect(() => {
     if (
-      previousValueRef.current !==
-        value &&
+      previousValueRef.current !== value &&
       value !== "—"
     ) {
-      const previous =
-        Number(
-          previousValueRef.current
-        );
+      const previous = Number(
+        previousValueRef.current
+      );
 
-      const next =
-        Number(value);
+      const next = Number(value);
 
       if (
-        Number.isFinite(
-          previous
-        ) &&
+        Number.isFinite(previous) &&
         Number.isFinite(next)
       ) {
         setFlash(
-          next > previous
-            ? "up"
-            : "down"
+          next > previous ? "up" : "down"
         );
 
-        const timeout =
-          window.setTimeout(
-            () =>
-              setFlash(
-                null
-              ),
-            700
-          );
+        const timeout = window.setTimeout(
+          () => {
+            setFlash(null);
+          },
+          700
+        );
 
-        previousValueRef.current =
-          value;
+        previousValueRef.current = value;
 
-        return () =>
-          window.clearTimeout(
-            timeout
-          );
+        return () => {
+          window.clearTimeout(timeout);
+        };
       }
     }
 
-    previousValueRef.current =
-      value;
+    previousValueRef.current = value;
 
     return undefined;
   }, [value]);
@@ -968,15 +773,12 @@ function AnimatedPrice({
         color:
           flash === "up"
             ? "#10b981"
-            : flash ===
-                "down"
+            : flash === "down"
               ? "#ef4444"
               : undefined,
       }}
     >
-      {value !== "—"
-        ? `$${value}`
-        : "—"}
+      {value !== "—" ? `$${value}` : "—"}
     </span>
   );
 }
@@ -989,56 +791,17 @@ function SwipeActionButton({
   icon: Icon,
   label,
 }) {
-  const isDelete =
-    type === "delete";
-
-  const easedProgress =
-    smoothstep(progress);
+  const isDelete = type === "delete";
+  const easedProgress = smoothstep(progress);
 
   const scale =
-    0.56 +
-    easedProgress * 0.44;
+    0.55 + easedProgress * 0.45;
 
   const translateX =
-    (1 - easedProgress) *
-    22;
+    (1 - easedProgress) * 22;
 
   const translateY =
-    (1 - easedProgress) *
-    4;
-
-  const rotate =
-    (1 - easedProgress) *
-    (isDelete ? 8 : -8);
-
-  const outerShadow =
-    isDelete
-      ? `0 ${
-          5 +
-          easedProgress *
-            5
-        }px ${
-          12 +
-          easedProgress *
-            12
-        }px rgba(239, 68, 68, ${
-          0.12 +
-          easedProgress *
-            0.2
-        })`
-      : `0 ${
-          5 +
-          easedProgress *
-            5
-        }px ${
-          12 +
-          easedProgress *
-            12
-        }px rgba(15, 23, 42, ${
-          0.12 +
-          easedProgress *
-            0.18
-        })`;
+    (1 - easedProgress) * 3;
 
   return (
     <button
@@ -1046,46 +809,32 @@ function SwipeActionButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={`group relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[14px] border text-white outline-none transition-[filter] duration-200 hover:brightness-105 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
+      className={`group relative flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full border bg-white outline-none transition-[background-color,border-color,box-shadow,filter] duration-200 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
         isDelete
-          ? "border-red-400/70 bg-gradient-to-br from-red-400 via-red-500 to-rose-600 focus-visible:ring-red-400"
-          : "border-slate-600/70 bg-gradient-to-br from-slate-700 via-slate-900 to-black focus-visible:ring-slate-500"
+          ? "border-red-100 text-red-500 hover:border-red-200 hover:bg-red-50 focus-visible:ring-red-300"
+          : "border-gray-100 text-gray-700 hover:border-gray-200 hover:bg-gray-50 focus-visible:ring-gray-300"
       }`}
       style={{
-        opacity:
-          easedProgress,
-        transform: `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotate}deg)`,
-        transformOrigin:
-          "right center",
-        boxShadow: `${outerShadow}, inset 0 1px 0 rgba(255, 255, 255, 0.38), inset 0 -1px 0 rgba(0, 0, 0, 0.2)`,
+        opacity: easedProgress,
+        transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
+        transformOrigin: "right center",
+        boxShadow: `
+          0 5px 14px rgba(15, 23, 42, ${
+            0.05 + easedProgress * 0.06
+          }),
+          0 1px 3px rgba(15, 23, 42, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.95)
+        `,
         pointerEvents:
-          disabled ||
-          easedProgress <
-            0.76
+          disabled || easedProgress < 0.76
             ? "none"
             : "auto",
       }}
     >
-      <span
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-1 top-1 h-[42%] rounded-[10px] bg-gradient-to-b from-white/30 to-transparent opacity-80"
-      />
+      <Icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110 group-active:scale-90" />
 
-      <span
-        aria-hidden="true"
-        className={`pointer-events-none absolute -bottom-5 -right-4 h-10 w-10 rounded-full blur-xl ${
-          isDelete
-            ? "bg-white/30"
-            : "bg-slate-300/20"
-        }`}
-      />
-
-      <span className="relative z-10 flex flex-col items-center gap-0.5 transition-transform duration-150 group-hover:-translate-y-0.5 group-active:scale-90">
-        <Icon className="h-4 w-4 drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-105" />
-
-        <span className="text-[8px] font-bold leading-none tracking-[0.01em] text-white/95 drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
-          {label}
-        </span>
+      <span className="text-[8px] font-semibold leading-none">
+        {label}
       </span>
     </button>
   );
@@ -1099,45 +848,24 @@ function WatchlistCard({
   onStarToggle,
   index,
 }) {
-  const hasStock =
-    Boolean(stock);
+  const hasStock = Boolean(stock);
 
-  const companyName =
-    getCompanyName(
-      item.ticker,
-      stock,
-      item
-    );
+  const companyName = getCompanyName(
+    item.ticker,
+    stock,
+    item
+  );
 
-  const [
-    dragX,
-    setDragX,
-  ] = useState(0);
+  const [dragX, setDragX] = useState(0);
+  const [swiped, setSwiped] = useState(false);
+  const [deleting, setDeleting] =
+    useState(false);
 
-  const [
-    swiped,
-    setSwiped,
-  ] = useState(false);
-
-  const [
-    deleting,
-    setDeleting,
-  ] = useState(false);
-
-  const touchStartXRef =
-    useRef(null);
-
-  const touchStartYRef =
-    useRef(null);
-
-  const startDragXRef =
-    useRef(0);
-
-  const draggingRef =
-    useRef(false);
-
-  const suppressClickRef =
-    useRef(false);
+  const touchStartXRef = useRef(null);
+  const touchStartYRef = useRef(null);
+  const startDragXRef = useRef(0);
+  const draggingRef = useRef(false);
+  const suppressClickRef = useRef(false);
 
   const ACTION_SIZE = 44;
   const ACTION_GAP = 8;
@@ -1149,14 +877,12 @@ function WatchlistCard({
     ACTION_PADDING * 2;
 
   const livePrice =
-    typeof quote?.c ===
-    "number"
+    typeof quote?.c === "number"
       ? quote.c
       : null;
 
   const storedPrice =
-    typeof stock?.current_price ===
-    "number"
+    typeof stock?.current_price === "number"
       ? stock.current_price
       : null;
 
@@ -1164,154 +890,99 @@ function WatchlistCard({
     livePrice !== null
       ? livePrice.toFixed(2)
       : storedPrice !== null
-        ? storedPrice.toFixed(
-            2
-          )
+        ? storedPrice.toFixed(2)
         : "—";
 
   const dailyGainPct =
-    typeof quote?.dp ===
-    "number"
+    typeof quote?.dp === "number"
       ? quote.dp
       : null;
 
   const dailyIsPositive =
-    (dailyGainPct ?? 0) >=
-    0;
+    (dailyGainPct ?? 0) >= 0;
 
-  const revealProgress =
-    clamp(
-      Math.abs(dragX) /
-        REVEAL_WIDTH
-    );
+  const revealProgress = clamp(
+    Math.abs(dragX) / REVEAL_WIDTH
+  );
 
   /*
-   * Delete is positioned closest
-   * to the right edge, so it grows
-   * into view first.
+   * Delete is closest to the right edge,
+   * so it reveals first.
    */
-  const deleteProgress =
-    clamp(
-      revealProgress / 0.55
-    );
+  const deleteProgress = clamp(
+    revealProgress / 0.55
+  );
 
   /*
-   * Share begins growing after
-   * Delete is already mostly
-   * visible.
+   * Share begins appearing once Delete
+   * is mostly visible.
    */
-  const shareProgress =
-    clamp(
-      (revealProgress -
-        0.34) /
-        0.66
-    );
-
-  const railProgress =
-    smoothstep(
-      clamp(
-        (revealProgress -
-          0.04) /
-          0.45
-      )
-    );
-
-  const railWidth =
-    24 +
-    railProgress *
-      (REVEAL_WIDTH - 24);
+  const shareProgress = clamp(
+    (revealProgress - 0.34) / 0.66
+  );
 
   const linkTo =
     hasStock &&
     stock?.id &&
-    stock.id !==
-      "undefined"
+    stock.id !== "undefined"
       ? `/stock/${stock.id}`
       : `/stock/ticker-${item.ticker}`;
 
-  function handleTouchStart(
-    event
-  ) {
-    if (deleting) {
-      return;
-    }
+  function handleTouchStart(event) {
+    if (deleting) return;
 
     touchStartXRef.current =
-      event.touches[0]
-        .clientX;
+      event.touches[0].clientX;
 
     touchStartYRef.current =
-      event.touches[0]
-        .clientY;
+      event.touches[0].clientY;
 
-    startDragXRef.current =
-      dragX;
-
-    draggingRef.current =
-      false;
-
-    suppressClickRef.current =
-      false;
+    startDragXRef.current = dragX;
+    draggingRef.current = false;
+    suppressClickRef.current = false;
   }
 
-  function handleTouchMove(
-    event
-  ) {
+  function handleTouchMove(event) {
     if (
       deleting ||
-      touchStartXRef.current ===
-        null ||
-      touchStartYRef.current ===
-        null
+      touchStartXRef.current === null ||
+      touchStartYRef.current === null
     ) {
       return;
     }
 
     const currentX =
-      event.touches[0]
-        .clientX;
+      event.touches[0].clientX;
 
     const currentY =
-      event.touches[0]
-        .clientY;
+      event.touches[0].clientY;
 
     const deltaX =
-      currentX -
-      touchStartXRef.current;
+      currentX - touchStartXRef.current;
 
     const deltaY =
-      currentY -
-      touchStartYRef.current;
+      currentY - touchStartYRef.current;
 
     if (
       !draggingRef.current &&
-      Math.abs(deltaY) >
-        Math.abs(deltaX)
+      Math.abs(deltaY) > Math.abs(deltaX)
     ) {
       return;
     }
 
-    if (
-      Math.abs(deltaX) > 5
-    ) {
-      draggingRef.current =
-        true;
-
-      suppressClickRef.current =
-        true;
+    if (Math.abs(deltaX) > 5) {
+      draggingRef.current = true;
+      suppressClickRef.current = true;
     }
 
-    if (
-      !draggingRef.current
-    ) {
+    if (!draggingRef.current) {
       return;
     }
 
     event.stopPropagation();
 
     const nextX =
-      startDragXRef.current +
-      deltaX;
+      startDragXRef.current + deltaX;
 
     setDragX(
       clamp(
@@ -1323,43 +994,29 @@ function WatchlistCard({
   }
 
   function handleTouchEnd() {
-    if (deleting) {
-      return;
-    }
+    if (deleting) return;
 
     const openThreshold =
       swiped
-        ? REVEAL_WIDTH *
-          0.28
-        : REVEAL_WIDTH *
-          0.42;
+        ? REVEAL_WIDTH * 0.28
+        : REVEAL_WIDTH * 0.42;
 
     if (
-      Math.abs(dragX) >=
-      openThreshold
+      Math.abs(dragX) >= openThreshold
     ) {
-      setDragX(
-        -REVEAL_WIDTH
-      );
-
+      setDragX(-REVEAL_WIDTH);
       setSwiped(true);
     } else {
       setDragX(0);
       setSwiped(false);
     }
 
-    touchStartXRef.current =
-      null;
-
-    touchStartYRef.current =
-      null;
-
-    draggingRef.current =
-      false;
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    draggingRef.current = false;
 
     window.setTimeout(() => {
-      suppressClickRef.current =
-        false;
+      suppressClickRef.current = false;
     }, 100);
   }
 
@@ -1368,15 +1025,12 @@ function WatchlistCard({
     setSwiped(false);
   }
 
-  async function handleShare(
-    event
-  ) {
+  async function handleShare(event) {
     event.preventDefault();
     event.stopPropagation();
 
     const shareUrl =
-      typeof window !==
-      "undefined"
+      typeof window !== "undefined"
         ? `${window.location.origin}${linkTo}`
         : "";
 
@@ -1399,10 +1053,7 @@ function WatchlistCard({
         );
       }
     } catch (error) {
-      if (
-        error?.name !==
-        "AbortError"
-      ) {
+      if (error?.name !== "AbortError") {
         console.warn(
           "Share failed:",
           error
@@ -1413,33 +1064,23 @@ function WatchlistCard({
     }
   }
 
-  async function handleDelete(
-    event
-  ) {
+  async function handleDelete(event) {
     event.preventDefault();
     event.stopPropagation();
 
-    if (deleting) {
-      return;
-    }
+    if (deleting) return;
 
     setDeleting(true);
     setDragX(-420);
 
-    await new Promise(
-      (resolve) =>
-        window.setTimeout(
-          resolve,
-          240
-        )
-    );
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 240);
+    });
 
     await onRemove(item.id);
   }
 
-  function handleLinkClick(
-    event
-  ) {
+  function handleLinkClick(event) {
     if (
       swiped ||
       suppressClickRef.current ||
@@ -1463,13 +1104,9 @@ function WatchlistCard({
         y: 20,
       }}
       animate={{
-        opacity:
-          deleting ? 0 : 1,
+        opacity: deleting ? 0 : 1,
         y: 0,
-        scale:
-          deleting
-            ? 0.96
-            : 1,
+        scale: deleting ? 0.96 : 1,
       }}
       exit={{
         opacity: 0,
@@ -1478,38 +1115,10 @@ function WatchlistCard({
       }}
       transition={{
         duration: 0.24,
-        delay:
-          index * 0.035,
+        delay: index * 0.035,
       }}
       layout
     >
-      <div
-        className="pointer-events-none absolute inset-y-1.5 right-1.5 overflow-hidden rounded-[18px] border border-white/70 bg-white/60 backdrop-blur-xl"
-        style={{
-          width: `${railWidth}px`,
-          opacity:
-            railProgress,
-          boxShadow:
-            "0 8px 24px rgba(15, 23, 42, 0.09), inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(148,163,184,0.12)",
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.82) 0%, rgba(248,250,252,0.64) 55%, rgba(241,245,249,0.74) 100%)",
-          transition:
-            draggingRef.current
-              ? "none"
-              : "width 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease",
-        }}
-      >
-        <span
-          aria-hidden="true"
-          className="absolute inset-x-2 top-1 h-px bg-gradient-to-r from-transparent via-white to-transparent"
-        />
-
-        <span
-          aria-hidden="true"
-          className="absolute -bottom-8 right-0 h-16 w-24 rounded-full bg-slate-300/20 blur-2xl"
-        />
-      </div>
-
       <div
         className="absolute inset-y-0 right-0 flex items-center"
         style={{
@@ -1521,26 +1130,18 @@ function WatchlistCard({
           type="share"
           label="Share"
           icon={Share2}
-          progress={
-            shareProgress
-          }
+          progress={shareProgress}
           disabled={deleting}
-          onClick={
-            handleShare
-          }
+          onClick={handleShare}
         />
 
         <SwipeActionButton
           type="delete"
           label="Delete"
           icon={Trash2}
-          progress={
-            deleteProgress
-          }
+          progress={deleteProgress}
           disabled={deleting}
-          onClick={
-            handleDelete
-          }
+          onClick={handleDelete}
         />
       </div>
 
@@ -1549,36 +1150,23 @@ function WatchlistCard({
         state={{
           from: "/watchlist",
         }}
-        onClick={
-          handleLinkClick
-        }
+        onClick={handleLinkClick}
         className="block"
       >
         <div
-          className="flex h-[76px] items-center gap-3 rounded-2xl border border-gray-100 px-3.5 py-3 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] duration-200 hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
+          className="flex h-[76px] items-center gap-3 rounded-2xl border border-gray-100 bg-white px-3.5 py-3 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] duration-200 hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
           style={{
             backgroundColor:
               "hsl(var(--card))",
             transform: `translateX(${dragX}px)`,
-            transition:
-              cardTransition,
-            touchAction:
-              "pan-y",
-            willChange:
-              "transform",
+            transition: cardTransition,
+            touchAction: "pan-y",
+            willChange: "transform",
           }}
-          onTouchStart={
-            handleTouchStart
-          }
-          onTouchMove={
-            handleTouchMove
-          }
-          onTouchEnd={
-            handleTouchEnd
-          }
-          onTouchCancel={
-            handleTouchEnd
-          }
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
         >
           <button
             type="button"
@@ -1586,10 +1174,7 @@ function WatchlistCard({
               event.preventDefault();
               event.stopPropagation();
 
-              onStarToggle(
-                item,
-                stock
-              );
+              onStarToggle(item, stock);
             }}
             className="flex min-h-[44px] min-w-[36px] shrink-0 items-center justify-center p-1"
             aria-label={
@@ -1630,26 +1215,19 @@ function WatchlistCard({
           <div className="flex shrink-0 items-center gap-2">
             <div className="hidden sm:block">
               <SparklineWrapper
-                ticker={
-                  item.ticker
-                }
-                isPositive={
-                  dailyIsPositive
-                }
+                ticker={item.ticker}
+                isPositive={dailyIsPositive}
               />
             </div>
 
             <div className="min-w-[68px] text-right">
               <p>
                 <AnimatedPrice
-                  value={
-                    displayPrice
-                  }
+                  value={displayPrice}
                 />
               </p>
 
-              {dailyGainPct !==
-              null ? (
+              {dailyGainPct !== null ? (
                 <div
                   className={`mt-0.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold text-white ${
                     dailyIsPositive
@@ -1657,13 +1235,8 @@ function WatchlistCard({
                       : "bg-red-500"
                   }`}
                 >
-                  {dailyIsPositive
-                    ? "+"
-                    : ""}
-                  {dailyGainPct.toFixed(
-                    2
-                  )}
-                  %
+                  {dailyIsPositive ? "+" : ""}
+                  {dailyGainPct.toFixed(2)}%
                 </div>
               ) : (
                 <p className="text-xs text-gray-400">
@@ -1679,93 +1252,56 @@ function WatchlistCard({
 }
 
 export default function Watchlist() {
-  const { user } =
-    useAuth();
+  const { user } = useAuth();
 
   const {
-    quotes:
-      globalQuotes,
+    quotes: globalQuotes,
     refreshQuotes,
   } = useMarketData();
 
-  const [
-    items,
-    setItems,
-  ] = useState([]);
-
-  const [
-    stocks,
-    setStocks,
-  ] = useState([]);
-
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
-
-  const [
-    ticker,
-    setTicker,
-  ] = useState("");
-
-  const [
-    adding,
-    setAdding,
-  ] = useState(false);
+  const [items, setItems] = useState([]);
+  const [stocks, setStocks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [ticker, setTicker] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const [
     showSuggestions,
     setShowSuggestions,
   ] = useState(false);
 
-  const [
-    suggestions,
-    setSuggestions,
-  ] = useState([]);
+  const [suggestions, setSuggestions] =
+    useState([]);
 
   const [
     searchLoading,
     setSearchLoading,
   ] = useState(false);
 
-  const [
-    toast,
-    setToast,
-  ] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  const [
-    dialogItem,
-    setDialogItem,
-  ] = useState(null);
+  const [dialogItem, setDialogItem] =
+    useState(null);
 
-  const inputContainerRef =
-    useRef(null);
-
-  const suggestionsRef =
-    useRef(null);
-
-  const searchTimeoutRef =
-    useRef(null);
+  const inputContainerRef = useRef(null);
+  const suggestionsRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
 
   const quotes =
     globalQuotes &&
-    typeof globalQuotes ===
-      "object"
+    typeof globalQuotes === "object"
       ? globalQuotes
       : {};
 
   const normalizeSearchResults =
     useCallback((data) => {
-      const rawResults =
-        Array.isArray(
-          data?.result
-        )
-          ? data.result
-          : Array.isArray(
-                data?.results
-              )
-            ? data.results
-            : [];
+      const rawResults = Array.isArray(
+        data?.result
+      )
+        ? data.result
+        : Array.isArray(data?.results)
+          ? data.results
+          : [];
 
       return rawResults
         .map((item) => ({
@@ -1798,118 +1334,77 @@ export default function Watchlist() {
         );
     }, []);
 
-  const syncQuotesForItems =
-    useCallback(
-      (watchItems) => {
-        const tickersToRefresh =
-          [
-            ...new Set(
-              (
-                watchItems ||
-                []
-              )
-                .map(
-                  (item) =>
-                    String(
-                      item?.ticker ||
-                        ""
-                    )
-                      .trim()
-                      .toUpperCase()
-                )
-                .filter(
-                  Boolean
-                )
-            ),
-          ];
+  const syncQuotesForItems = useCallback(
+    (watchItems) => {
+      const tickersToRefresh = [
+        ...new Set(
+          (watchItems || [])
+            .map((item) =>
+              String(item?.ticker || "")
+                .trim()
+                .toUpperCase()
+            )
+            .filter(Boolean)
+        ),
+      ];
 
-        if (
-          tickersToRefresh.length
-        ) {
-          refreshQuotes(
-            tickersToRefresh
-          );
-        }
-      },
-      [refreshQuotes]
+      if (tickersToRefresh.length) {
+        refreshQuotes(tickersToRefresh);
+      }
+    },
+    [refreshQuotes]
+  );
+
+  const load = useCallback(async () => {
+    if (!user?.id) {
+      return [];
+    }
+
+    const [
+      watchlistResponse,
+      stocksResponse,
+    ] = await Promise.all([
+      supabase
+        .from("watchlist_items")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", {
+          ascending: false,
+        }),
+
+      supabase
+        .from("stocks")
+        .select("*")
+        .eq("user_id", user.id),
+    ]);
+
+    if (watchlistResponse.error) {
+      throw watchlistResponse.error;
+    }
+
+    if (stocksResponse.error) {
+      throw stocksResponse.error;
+    }
+
+    const watchlistData =
+      watchlistResponse.data || [];
+
+    const stockData = (
+      stocksResponse.data || []
+    ).filter(
+      (stock) =>
+        stock?.id &&
+        stock.id !== "undefined"
     );
 
-  const load =
-    useCallback(async () => {
-      if (!user?.id) {
-        return [];
-      }
+    setItems(watchlistData);
+    setStocks(stockData);
 
-      const [
-        watchlistResponse,
-        stocksResponse,
-      ] =
-        await Promise.all([
-          supabase
-            .from(
-              "watchlist_items"
-            )
-            .select("*")
-            .eq(
-              "user_id",
-              user.id
-            )
-            .order(
-              "created_at",
-              {
-                ascending:
-                  false,
-              }
-            ),
-
-          supabase
-            .from("stocks")
-            .select("*")
-            .eq(
-              "user_id",
-              user.id
-            ),
-        ]);
-
-      if (
-        watchlistResponse.error
-      ) {
-        throw watchlistResponse.error;
-      }
-
-      if (
-        stocksResponse.error
-      ) {
-        throw stocksResponse.error;
-      }
-
-      const watchlistData =
-        watchlistResponse.data ||
-        [];
-
-      const stockData = (
-        stocksResponse.data ||
-        []
-      ).filter(
-        (stock) =>
-          stock?.id &&
-          stock.id !==
-            "undefined"
-      );
-
-      setItems(
-        watchlistData
-      );
-
-      setStocks(stockData);
-
-      return watchlistData;
-    }, [user?.id]);
+    return watchlistData;
+  }, [user?.id]);
 
   useEffect(() => {
-    function handleDocumentMouseDown(
-      event
-    ) {
+    function handleDocumentMouseDown(event) {
       const clickedInput =
         inputContainerRef.current?.contains(
           event.target
@@ -1924,9 +1419,7 @@ export default function Watchlist() {
         !clickedInput &&
         !clickedSuggestions
       ) {
-        setShowSuggestions(
-          false
-        );
+        setShowSuggestions(false);
       }
     }
 
@@ -1944,8 +1437,7 @@ export default function Watchlist() {
   }, []);
 
   useEffect(() => {
-    const query =
-      ticker.trim();
+    const query = ticker.trim();
 
     if (!query) {
       setSuggestions([]);
@@ -1962,80 +1454,57 @@ export default function Watchlist() {
       new AbortController();
 
     searchTimeoutRef.current =
-      window.setTimeout(
-        async () => {
-          setSearchLoading(
-            true
+      window.setTimeout(async () => {
+        setSearchLoading(true);
+
+        try {
+          const result = await callFinnhub(
+            {
+              action: "search",
+              query,
+            },
+            controller.signal
           );
 
-          try {
-            const result =
-              await callFinnhub(
-                {
-                  action:
-                    "search",
-                  query,
-                },
-                controller.signal
-              );
+          const normalizedResults =
+            normalizeSearchResults(result);
 
-            const normalizedResults =
-              normalizeSearchResults(
-                result
-              );
+          const uppercaseQuery =
+            query.toUpperCase();
 
-            const uppercaseQuery =
-              query.toUpperCase();
-
-            const filtered =
-              normalizedResults.filter(
-                (
-                  suggestion
-                ) =>
-                  suggestion.ticker.includes(
-                    uppercaseQuery
-                  ) ||
-                  suggestion.name
-                    .toUpperCase()
-                    .includes(
-                      uppercaseQuery
-                    )
-              );
-
-            setSuggestions(
-              filtered.slice(
-                0,
-                8
-              )
+          const filtered =
+            normalizedResults.filter(
+              (suggestion) =>
+                suggestion.ticker.includes(
+                  uppercaseQuery
+                ) ||
+                suggestion.name
+                  .toUpperCase()
+                  .includes(uppercaseQuery)
             );
-          } catch (error) {
-            if (
-              error?.name !==
-              "AbortError"
-            ) {
-              console.warn(
-                "Ticker search failed:",
-                error
-              );
 
-              setSuggestions(
-                []
-              );
-            }
-          } finally {
-            if (
-              !controller
-                .signal
-                .aborted
-            ) {
-              setSearchLoading(
-                false
-              );
-            }
+          setSuggestions(
+            filtered.slice(0, 8)
+          );
+        } catch (error) {
+          if (
+            error?.name !== "AbortError"
+          ) {
+            console.warn(
+              "Ticker search failed:",
+              error
+            );
+
+            setSuggestions([]);
           }
-        },
-        250
-      );
+        } finally {
+          if (
+            !controller.signal.aborted
+          ) {
+            setSearchLoading(false);
+          }
+        }
+      }, 250);
 
     return () => {
       window.clearTimeout(
@@ -2044,10 +1513,7 @@ export default function Watchlist() {
 
       controller.abort();
     };
-  }, [
-    ticker,
-    normalizeSearchResults,
-  ]);
+  }, [ticker, normalizeSearchResults]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -2061,21 +1527,15 @@ export default function Watchlist() {
     setLoading(true);
 
     load()
-      .then(
-        (
-          watchlistData
-        ) => {
-          if (mounted) {
-            syncQuotesForItems(
-              watchlistData
-            );
-          }
+      .then((watchlistData) => {
+        if (mounted) {
+          syncQuotesForItems(
+            watchlistData
+          );
         }
-      )
+      })
       .catch((error) => {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
 
         console.error(
           "Watchlist load failed:",
@@ -2110,19 +1570,13 @@ export default function Watchlist() {
     }
 
     const interval =
-      window.setInterval(
-        () => {
-          syncQuotesForItems(
-            items
-          );
-        },
-        30000
-      );
+      window.setInterval(() => {
+        syncQuotesForItems(items);
+      }, 30000);
 
-    return () =>
-      window.clearInterval(
-        interval
-      );
+    return () => {
+      window.clearInterval(interval);
+    };
   }, [
     items,
     user?.id,
@@ -2134,44 +1588,40 @@ export default function Watchlist() {
       return undefined;
     }
 
-    const stocksChannel =
-      supabase
-        .channel(
-          `watchlist-stocks-${user.id}`
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "stocks",
-            filter: `user_id=eq.${user.id}`,
-          },
-          async () => {
-            const {
-              data = [],
-              error,
-            } = await supabase
-              .from("stocks")
-              .select("*")
-              .eq(
-                "user_id",
-                user.id
-              );
+    const stocksChannel = supabase
+      .channel(
+        `watchlist-stocks-${user.id}`
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "stocks",
+          filter: `user_id=eq.${user.id}`,
+        },
+        async () => {
+          const {
+            data = [],
+            error,
+          } = await supabase
+            .from("stocks")
+            .select("*")
+            .eq("user_id", user.id);
 
-            if (!error) {
-              setStocks(
-                data.filter(
-                  (stock) =>
-                    stock?.id &&
-                    stock.id !==
-                      "undefined"
-                )
-              );
-            }
+          if (!error) {
+            setStocks(
+              data.filter(
+                (stock) =>
+                  stock?.id &&
+                  stock.id !==
+                    "undefined"
+              )
+            );
           }
-        )
-        .subscribe();
+        }
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(
@@ -2185,51 +1635,37 @@ export default function Watchlist() {
       return undefined;
     }
 
-    const watchlistChannel =
-      supabase
-        .channel(
-          `watchlist-items-${user.id}`
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table:
-              "watchlist_items",
-            filter: `user_id=eq.${user.id}`,
-          },
-          async () => {
-            const {
-              data = [],
-              error,
-            } = await supabase
-              .from(
-                "watchlist_items"
-              )
-              .select("*")
-              .eq(
-                "user_id",
-                user.id
-              )
-              .order(
-                "created_at",
-                {
-                  ascending:
-                    false,
-                }
-              );
+    const watchlistChannel = supabase
+      .channel(
+        `watchlist-items-${user.id}`
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "watchlist_items",
+          filter: `user_id=eq.${user.id}`,
+        },
+        async () => {
+          const {
+            data = [],
+            error,
+          } = await supabase
+            .from("watchlist_items")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", {
+              ascending: false,
+            });
 
-            if (!error) {
-              setItems(data);
-
-              syncQuotesForItems(
-                data
-              );
-            }
+          if (!error) {
+            setItems(data);
+            syncQuotesForItems(data);
           }
-        )
-        .subscribe();
+        }
+      )
+      .subscribe();
 
     return () => {
       supabase.removeChannel(
@@ -2245,10 +1681,11 @@ export default function Watchlist() {
     symbol,
     exchange = ""
   ) {
-    const normalizedSymbol =
-      String(symbol || "")
-        .trim()
-        .toUpperCase();
+    const normalizedSymbol = String(
+      symbol || ""
+    )
+      .trim()
+      .toUpperCase();
 
     if (
       !normalizedSymbol ||
@@ -2258,12 +1695,11 @@ export default function Watchlist() {
       return;
     }
 
-    const alreadyAdded =
-      items.some(
-        (item) =>
-          item.ticker.toUpperCase() ===
-          normalizedSymbol
-      );
+    const alreadyAdded = items.some(
+      (item) =>
+        item.ticker.toUpperCase() ===
+        normalizedSymbol
+    );
 
     if (alreadyAdded) {
       setToast(
@@ -2278,17 +1714,13 @@ export default function Watchlist() {
 
     try {
       let companyName = "";
-
-      let resolvedExchange =
-        exchange;
+      let resolvedExchange = exchange;
 
       try {
-        const profile =
-          await callFinnhub({
-            action: "profile",
-            ticker:
-              normalizedSymbol,
-          });
+        const profile = await callFinnhub({
+          action: "profile",
+          ticker: normalizedSymbol,
+        });
 
         companyName =
           profile?.name || "";
@@ -2307,22 +1739,17 @@ export default function Watchlist() {
         );
       }
 
-      const { error } =
-        await supabase
-          .from(
-            "watchlist_items"
-          )
-          .insert({
-            user_id: user.id,
-            ticker:
-              normalizedSymbol,
-            exchange:
-              resolvedExchange ||
-              "",
-            company_name:
-              companyName ||
-              normalizedSymbol,
-          });
+      const { error } = await supabase
+        .from("watchlist_items")
+        .insert({
+          user_id: user.id,
+          ticker: normalizedSymbol,
+          exchange:
+            resolvedExchange || "",
+          company_name:
+            companyName ||
+            normalizedSymbol,
+        });
 
       if (error) {
         throw error;
@@ -2358,44 +1785,31 @@ export default function Watchlist() {
 
   function handleAdd(event) {
     event.preventDefault();
-
     addTicker(ticker);
   }
 
-  async function handleRemove(
-    id
-  ) {
-    const previousItems =
-      items;
+  async function handleRemove(id) {
+    const previousItems = items;
 
     const nextItems =
       previousItems.filter(
-        (item) =>
-          item.id !== id
+        (item) => item.id !== id
       );
 
     setItems(nextItems);
 
     try {
-      const { error } =
-        await supabase
-          .from(
-            "watchlist_items"
-          )
-          .delete()
-          .eq("id", id)
-          .eq(
-            "user_id",
-            user.id
-          );
+      const { error } = await supabase
+        .from("watchlist_items")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
 
       if (error) {
         throw error;
       }
 
-      syncQuotesForItems(
-        nextItems
-      );
+      syncQuotesForItems(nextItems);
 
       setToast(
         "Removed from watchlist"
@@ -2419,35 +1833,21 @@ export default function Watchlist() {
     stock
   ) {
     if (stock) {
-      const previousStocks =
-        stocks;
+      const previousStocks = stocks;
 
-      setStocks(
-        (
-          currentStocks
-        ) =>
-          currentStocks.filter(
-            (
-              currentStock
-            ) =>
-              currentStock.id !==
-              stock.id
-          )
+      setStocks((currentStocks) =>
+        currentStocks.filter(
+          (currentStock) =>
+            currentStock.id !== stock.id
+        )
       );
 
       try {
-        const { error } =
-          await supabase
-            .from("stocks")
-            .delete()
-            .eq(
-              "id",
-              stock.id
-            )
-            .eq(
-              "user_id",
-              user.id
-            );
+        const { error } = await supabase
+          .from("stocks")
+          .delete()
+          .eq("id", stock.id)
+          .eq("user_id", user.id);
 
         if (error) {
           throw error;
@@ -2462,9 +1862,7 @@ export default function Watchlist() {
           error
         );
 
-        setStocks(
-          previousStocks
-        );
+        setStocks(previousStocks);
 
         setToast(
           "Failed to update portfolio."
@@ -2476,12 +1874,11 @@ export default function Watchlist() {
 
     setDialogItem({
       ticker: item.ticker,
-      companyName:
-        getCompanyName(
-          item.ticker,
-          null,
-          item
-        ),
+      companyName: getCompanyName(
+        item.ticker,
+        null,
+        item
+      ),
     });
   }
 
@@ -2500,38 +1897,31 @@ export default function Watchlist() {
     }
   }
 
-  const findStock =
-    useCallback(
-      (tickerValue) =>
-        stocks.find(
-          (stock) =>
-            stock.ticker.toUpperCase() ===
-            tickerValue.toUpperCase()
-        ),
-      [stocks]
-    );
+  const findStock = useCallback(
+    (tickerValue) =>
+      stocks.find(
+        (stock) =>
+          stock.ticker.toUpperCase() ===
+          tickerValue.toUpperCase()
+      ),
+    [stocks]
+  );
 
-  const sortedItems =
-    useMemo(() => {
-      return [...items].sort(
-        (a, b) => {
-          const firstGain =
-            quotes[
-              a.ticker.toUpperCase()
-            ]?.dp ?? 0;
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const firstGain =
+        quotes[
+          a.ticker.toUpperCase()
+        ]?.dp ?? 0;
 
-          const secondGain =
-            quotes[
-              b.ticker.toUpperCase()
-            ]?.dp ?? 0;
+      const secondGain =
+        quotes[
+          b.ticker.toUpperCase()
+        ]?.dp ?? 0;
 
-          return (
-            secondGain -
-            firstGain
-          );
-        }
-      );
-    }, [items, quotes]);
+      return secondGain - firstGain;
+    });
+  }, [items, quotes]);
 
   return (
     <div className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6">
@@ -2548,21 +1938,13 @@ export default function Watchlist() {
 
       {dialogItem && (
         <AddToPortfolioDialog
-          open={Boolean(
-            dialogItem
-          )}
-          onOpenChange={(
-            open
-          ) => {
+          open={Boolean(dialogItem)}
+          onOpenChange={(open) => {
             if (!open) {
-              setDialogItem(
-                null
-              );
+              setDialogItem(null);
             }
           }}
-          ticker={
-            dialogItem.ticker
-          }
+          ticker={dialogItem.ticker}
           companyName={
             dialogItem.companyName
           }
@@ -2580,42 +1962,30 @@ export default function Watchlist() {
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Stocks you&apos;re
-            watching
+            Stocks you&apos;re watching
           </p>
         </div>
 
         <form
-          onSubmit={
-            handleAdd
-          }
+          onSubmit={handleAdd}
           className="relative mb-6"
         >
           <div className="flex gap-2">
             <div
-              ref={
-                inputContainerRef
-              }
+              ref={inputContainerRef}
               className="relative flex-1"
             >
               <Input
                 value={ticker}
-                onChange={(
-                  event
-                ) => {
+                onChange={(event) => {
                   setTicker(
-                    event.target
-                      .value
+                    event.target.value
                   );
 
-                  setShowSuggestions(
-                    true
-                  );
+                  setShowSuggestions(true);
                 }}
                 onFocus={() =>
-                  setShowSuggestions(
-                    true
-                  )
+                  setShowSuggestions(true)
                 }
                 placeholder="Search ticker or company"
                 className="w-full uppercase placeholder:normal-case"
@@ -2628,9 +1998,7 @@ export default function Watchlist() {
                   suggestions.length >
                     0) && (
                   <div
-                    ref={
-                      suggestionsRef
-                    }
+                    ref={suggestionsRef}
                     className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"
                   >
                     {searchLoading ? (
@@ -2640,23 +2008,17 @@ export default function Watchlist() {
                       </div>
                     ) : (
                       suggestions.map(
-                        (
-                          suggestion
-                        ) => {
+                        (suggestion) => {
                           const alreadyAdded =
                             items.some(
-                              (
-                                item
-                              ) =>
+                              (item) =>
                                 item.ticker.toUpperCase() ===
                                 suggestion.ticker.toUpperCase()
                             );
 
                           const inPortfolio =
                             stocks.some(
-                              (
-                                stock
-                              ) =>
+                              (stock) =>
                                 stock.ticker.toUpperCase() ===
                                 suggestion.ticker.toUpperCase()
                             );
@@ -2670,18 +2032,20 @@ export default function Watchlist() {
                               }
                               onMouseDown={(
                                 event
-                              ) =>
-                                event.preventDefault()
-                              }
+                              ) => {
+                                event.preventDefault();
+                              }}
                               onClick={() => {
                                 if (
-                                  !alreadyAdded
+                                  alreadyAdded
                                 ) {
-                                  addTicker(
-                                    suggestion.ticker,
-                                    suggestion.exchange
-                                  );
+                                  return;
                                 }
+
+                                addTicker(
+                                  suggestion.ticker,
+                                  suggestion.exchange
+                                );
                               }}
                               className={`flex w-full items-center justify-between gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-0 ${
                                 alreadyAdded
@@ -2723,8 +2087,7 @@ export default function Watchlist() {
                                 {!alreadyAdded &&
                                   inPortfolio && (
                                     <span className="text-xs font-medium text-amber-500">
-                                      In
-                                      portfolio
+                                      In portfolio
                                     </span>
                                   )}
                               </div>
@@ -2762,8 +2125,7 @@ export default function Watchlist() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
           </div>
-        ) : items.length ===
-          0 ? (
+        ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center">
             <Star className="mx-auto h-8 w-8 text-gray-300" />
 
@@ -2772,9 +2134,8 @@ export default function Watchlist() {
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Add a ticker above
-              to start watching
-              it.
+              Add a ticker above to start
+              watching it.
             </p>
           </div>
         ) : (
@@ -2787,14 +2148,9 @@ export default function Watchlist() {
               mode="popLayout"
             >
               {sortedItems.map(
-                (
-                  item,
-                  index
-                ) => (
+                (item, index) => (
                   <WatchlistCard
-                    key={
-                      item.id
-                    }
+                    key={item.id}
                     item={item}
                     stock={findStock(
                       item.ticker
