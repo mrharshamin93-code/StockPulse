@@ -347,7 +347,15 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
           <Trash2 className="w-5 h-5 shrink-0" /><span>Delete</span>
         </button>
       </div>
-      <Link to={hasStock ? `/stock/${stock.id}` : `/stock/ticker-${item.ticker}`} onClick={swiped ? (e) => { e.preventDefault(); closeSwipe(); } : undefined}>
+      {/* SAFE LINK: avoids /stock/undefined */}
+      <Link
+        to={
+          hasStock && stock.id
+            ? `/stock/${stock.id}`
+            : `/stock/ticker-${item.ticker}`
+        }
+        onClick={swiped ? (e) => { e.preventDefault(); closeSwipe(); } : undefined}
+      >
         {inner}
       </Link>
     </motion.div>
@@ -516,7 +524,7 @@ export default function Watchlist() {
 
   const findStock = (t) => stocks.find(s => s.ticker.toUpperCase() === t.toUpperCase());
 
-  // ---------- SORT ITEMS BY HIGHEST DAILY GAINER FIRST ----------
+  // Sort items by highest daily gainer first
   const sortedItems = [...items].sort((a, b) => {
     const aGain = quotes[a.ticker.toUpperCase()]?.dp ?? -Infinity;
     const bGain = quotes[b.ticker.toUpperCase()]?.dp ?? -Infinity;
