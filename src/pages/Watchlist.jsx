@@ -555,7 +555,7 @@ export default function Watchlist() {
               onFocus={() => setShowSuggestions(true)}
               className="uppercase"
             />
-            {/* Suggestion dropdown */}
+            {/* Suggestion dropdown - clicking auto-adds */}
             <AnimatePresence>
               {showSuggestions && suggestions.length > 0 && (
                 <motion.div
@@ -573,10 +573,9 @@ export default function Watchlist() {
                       type="button"
                       className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center justify-between"
                       onClick={() => {
-                        setTicker(s.symbol);
+                        addTicker(s.symbol, s.primaryExchange || s.exchange || "");
+                        setTicker(""); // clear input after adding
                         setShowSuggestions(false);
-                        // Optionally auto-add? The original just set the ticker, but you can also add directly:
-                        // addTicker(s.symbol, s.primaryExchange || s.exchange);
                       }}
                     >
                       <span className="font-medium">{s.symbol}</span>
