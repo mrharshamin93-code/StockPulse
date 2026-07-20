@@ -11,7 +11,7 @@ import { supabase } from "./supabase";
 
 const AuthContext = createContext(null);
 
-function usersAreEqual(currentUser, nextUser) {
+function areUsersEqual(currentUser, nextUser) {
   if (!currentUser && !nextUser) {
     return true;
   }
@@ -22,8 +22,7 @@ function usersAreEqual(currentUser, nextUser) {
 
   return (
     currentUser.id === nextUser.id &&
-    currentUser.email === nextUser.email &&
-    currentUser.updated_at === nextUser.updated_at
+    currentUser.email === nextUser.email
   );
 }
 
@@ -40,20 +39,26 @@ export function AuthProvider({ children }) {
     setAuthError,
   ] = useState(null);
 
-  const applySession = useCallback(
-    (session) => {
+  useEffect(() => {
+    let mounted = true;
+    let initializationComplete = false;
+
+    function finishInitialization() {
+      if (initializationComplete) {
+        return;
+      }
+
+      initializationComplete = true;
+      setIsLoadingAuth(false);
+    }
+
+    function applySession(session) {
       const nextUser =
         session?.user ?? null;
 
-      /*
-       * Supabase can emit TOKEN_REFRESHED and
-       * SIGNED_IN more than once. Avoid updating
-       * the entire application when the user
-       * object has not actually changed.
-       */
       setUser((currentUser) => {
         if (
-          usersAreEqual(
+          areUsersEqual(
             currentUser,
             nextUser
           )
@@ -63,20 +68,16 @@ export function AuthProvider({ children }) {
 
         return nextUser;
       });
-    },
-    []
-  );
 
-  useEffect(() => {
-    let active = true;
+      setAuthError(null);
+    }
 
     /*
-     * Register the listener before reading the
-     * initial session so an auth event cannot be
-     * missed between mounting and getSession().
+     * The current Supabase client automatically processes
+     * the OAuth code because detectSessionInUrl is enabled.
      *
-     * Keep this callback synchronous. Do not await
-     * other Supabase calls inside it.
+     * INITIAL_SESSION fires after that initialization has
+     * completed. Keep this callback synchronous.
      */
     const {
       data: {
@@ -84,64 +85,70 @@ export function AuthProvider({ children }) {
       },
     } =
       supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          if (!active) {
+        (event, session) => {
+          if (!mounted) {
             return;
           }
 
-          applySession(session);
-          setAuthError(null);
-          setIsLoadingAuth(false);
+          switch (event) {
+            case "INITIAL_SESSION":
+            case "SIGNED_IN":
+            case "TOKEN_REFRESHED":
+            case "USER_UPDATED":
+            case "PASSWORD_RECOVERY":
+              applySession(session);
+              finishInitialization();
+              break;
+
+            case "SIGNED_OUT":
+              applySession(null);
+              finishInitialization();
+              break;
+
+            default:
+              break;
+          }
         }
       );
 
-    async function initializeAuth() {
-      try {
-        const {
-          data,
-          error,
-        } =
-          await supabase.auth.getSession();
-
-        if (!active) {
+    /*
+     * Never leave the application on an infinite loading
+     * screen if browser storage or initialization fails.
+     */
+    const timeoutId =
+      window.setTimeout(() => {
+        if (
+          !mounted ||
+          initializationComplete
+        ) {
           return;
         }
 
-        if (error) {
-          throw error;
-        }
-
-        applySession(
-          data?.session ?? null
-        );
-
-        setAuthError(null);
-      } catch (error) {
-        if (!active) {
-          return;
-        }
+        const timeoutError =
+          new Error(
+            "Authentication initialization timed out."
+          );
 
         console.error(
-          "Auth initialization failed:",
-          error
+          "Supabase auth initialization timed out:",
+          timeoutError
         );
 
-        setUser(null);
-        setAuthError(error);
-      } finally {
-        if (active) {
-          setIsLoadingAuth(false);
-        }
-      }
-    }
-
-    initializeAuth();
+        initializationComplete = true;
+        setAuthError(timeoutError);
+        setIsLoadingAuth(false);
+      }, 15000);
 
     return () => {
-      active = false;
+      mounted = false;
+
+      window.clearTimeout(
+        timeoutId
+      );
+
       subscription.unsubscribe();
     };
-  }, [applySession]);
+  }, []);
 
   const logout = useCallback(
     async () => {
@@ -169,7 +176,7 @@ export function AuthProvider({ children }) {
       logout,
 
       /*
-       * Preserve the property expected by App.jsx.
+       * Kept because App.jsx currently expects it.
        */
       isLoadingPublicSettings:
         false,
