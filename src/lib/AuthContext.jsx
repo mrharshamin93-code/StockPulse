@@ -1,87 +1,205 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { supabase } from './supabase';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+import { supabase } from "./supabase";
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+function usersAreEqual(currentUser, nextUser) {
+  if (!currentUser && !nextUser) {
+    return true;
+  }
+
+  if (!currentUser || !nextUser) {
+    return false;
+  }
+
+  return (
+    currentUser.id === nextUser.id &&
+    currentUser.email === nextUser.email &&
+    currentUser.updated_at === nextUser.updated_at
+  );
+}
+
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [authError, setAuthError] = useState(null);
+
+  const [
+    isLoadingAuth,
+    setIsLoadingAuth,
+  ] = useState(true);
+
+  const [
+    authError,
+    setAuthError,
+  ] = useState(null);
+
+  const applySession = useCallback(
+    (session) => {
+      const nextUser =
+        session?.user ?? null;
+
+      /*
+       * Supabase can emit TOKEN_REFRESHED and
+       * SIGNED_IN more than once. Avoid updating
+       * the entire application when the user
+       * object has not actually changed.
+       */
+      setUser((currentUser) => {
+        if (
+          usersAreEqual(
+            currentUser,
+            nextUser
+          )
+        ) {
+          return currentUser;
+        }
+
+        return nextUser;
+      });
+    },
+    []
+  );
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
-    const initializeAuth = async () => {
+    /*
+     * Register the listener before reading the
+     * initial session so an auth event cannot be
+     * missed between mounting and getSession().
+     *
+     * Keep this callback synchronous. Do not await
+     * other Supabase calls inside it.
+     */
+    const {
+      data: {
+        subscription,
+      },
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          if (!active) {
+            return;
+          }
+
+          applySession(session);
+          setAuthError(null);
+          setIsLoadingAuth(false);
+        }
+      );
+
+    async function initializeAuth() {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth.getSession();
 
-        if (!mounted) return;
+        if (!active) {
+          return;
+        }
 
         if (error) {
-          console.error('Auth session error:', error);
-          setUser(null);
-          setIsAuthenticated(false);
-          setAuthError(error);
-        } else {
-          setUser(session?.user ?? null);
-          setIsAuthenticated(!!session);
-          setAuthError(null);
+          throw error;
         }
+
+        applySession(
+          data?.session ?? null
+        );
+
+        setAuthError(null);
       } catch (error) {
-        if (mounted) {
-          setAuthError(error);
+        if (!active) {
+          return;
         }
+
+        console.error(
+          "Auth initialization failed:",
+          error
+        );
+
+        setUser(null);
+        setAuthError(error);
       } finally {
-        if (mounted) {
+        if (active) {
           setIsLoadingAuth(false);
         }
       }
-    };
+    }
 
     initializeAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!mounted) return;
-
-        setUser(session?.user ?? null);
-        setIsAuthenticated(!!session);
-        setAuthError(null);
-      }
-    );
-
     return () => {
-      mounted = false;
+      active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [applySession]);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-  };
+  const logout = useCallback(
+    async () => {
+      const { error } =
+        await supabase.auth.signOut();
 
-  const value = {
-    user,
-    isAuthenticated,
-    isLoadingAuth,
-    authError,
-    logout,
-    // Adding this to prevent errors in App.jsx
-    isLoadingPublicSettings: false,
-  };
+      if (error) {
+        throw error;
+      }
+    },
+    []
+  );
+
+  const value = useMemo(
+    () => ({
+      user,
+
+      isAuthenticated:
+        Boolean(user),
+
+      isLoadingAuth,
+
+      authError,
+
+      logout,
+
+      /*
+       * Preserve the property expected by App.jsx.
+       */
+      isLoadingPublicSettings:
+        false,
+    }),
+    [
+      user,
+      isLoadingAuth,
+      authError,
+      logout,
+    ]
+  );
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={value}
+    >
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
+export function useAuth() {
+  const context =
+    useContext(AuthContext);
+
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error(
+      "useAuth must be used within an AuthProvider"
+    );
   }
+
   return context;
-};
+}
