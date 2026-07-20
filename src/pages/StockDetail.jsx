@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 
-// ---------- Constants (unchanged) ----------
+// ---------- Constants ----------
 const PERIODS = ["1D", "1W", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "All"];
 const PERIOD_CONFIG = {
   "1D": { resolution: "5",  daysBack: 1 },
@@ -37,7 +37,7 @@ async function finnhubProxy(body) {
   return res.json();
 }
 
-// ---------- Chart data helpers – guaranteed left‑to‑right order ----------
+// ---------- Chart data helpers ----------
 async function fetchChartData(ticker, period, basePrice) {
   try {
     const cfg = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
@@ -58,12 +58,8 @@ async function fetchChartData(ticker, period, basePrice) {
     });
     const candles = data?.candles;
     if (candles?.length > 0) {
-      // Ensure chronological order (oldest → newest)
+      // Ensure chronological order (oldest first)
       candles.sort((a, b) => a.t - b.t);
-      // Double-check: if first item is newer than last, reverse the array
-      if (candles.length > 1 && candles[0].t > candles[candles.length - 1].t) {
-        candles.reverse();
-      }
       return candles.map(c => {
         const d = new Date(c.t * 1000);
         const label = (period === "1D")
@@ -122,7 +118,7 @@ function normalizeData(data, ticker, compareTicker) {
   }));
 }
 
-// ---------- Chart Component (fixed line animation) ----------
+// ---------- Chart Component ----------
 function StockChart({ ticker, currentPrice, isPositive }) {
   const [activePeriod, setActivePeriod] = useState("1M");
   const [compareTicker, setCompareTicker] = useState("");
@@ -274,7 +270,6 @@ function StockChart({ ticker, currentPrice, isPositive }) {
                 );
               }}
             />
-            {/* 🟢 Fixed: animationBegin & duration guarantee left‑to‑right draw */}
             <Line
               type="monotone"
               dataKey={ticker}
@@ -416,7 +411,7 @@ function getStockMetrics(ticker, price) {
   ];
 }
 
-// ---------- Main Component (buttons already fixed) ----------
+// ---------- Main Component ----------
 export default function StockDetail() {
   const { ticker } = useParams();
   const navigate = useNavigate();
@@ -613,7 +608,7 @@ export default function StockDetail() {
       </div>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8" style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}>
-        {/* Stock Overview – Buy/Sell inline */}
+        {/* Stock Overview – Buy/Sell inline, no overlap */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
@@ -654,7 +649,7 @@ export default function StockDetail() {
           )}
         </div>
 
-        {/* Chart – now draws left‑to‑right */}
+        {/* Chart – now responsive to period changes */}
         <StockChart ticker={stock.ticker} currentPrice={stock.current_price || stock.purchase_price} isPositive={isPositive} />
 
         <div className="bg-white border border-gray-100 rounded-2xl p-6">
