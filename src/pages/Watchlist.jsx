@@ -10,11 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
 
+// ==================== CACHE FOR SPARKLINE DATA ====================
+const sparklineCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 // ==================== HELPER FUNCTIONS ====================
 function abbreviateExchange(exchange) {
   if (!exchange) return "";
   const e = exchange.toUpperCase();
-
   if (e.includes("NASDAQ")) return "NASDAQ";
   if (e.includes("NYSE AMERICAN") || e.includes("AMEX")) return "AMEX";
   if (e.includes("NEW YORK STOCK EXCHANGE") || e.includes("NYSE")) return "NYSE";
@@ -40,7 +43,6 @@ function abbreviateExchange(exchange) {
   if (e.includes("TADAWUL")) return "TADAWUL";
   if (e.includes("JSE")) return "JSE";
   if (e.includes("B3")) return "B3";
-
   return exchange;
 }
 
@@ -81,7 +83,6 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
     e.preventDefault();
     setLoading(true);
     let currentPrice = parseFloat(purchasePrice);
-
     try {
       const res = await fetch("/api/finnhub", {
         method: "POST",
@@ -91,7 +92,6 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
       const data = await res.json();
       if (data?.c) currentPrice = data.c;
     } catch {}
-
     const { error } = await supabase.from("stocks").insert({
       user_id: user.id,
       ticker: ticker.toUpperCase(),
@@ -101,7 +101,6 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
       current_price: currentPrice,
       sector: "",
     });
-
     setLoading(false);
     if (error) {
       console.error(error);
@@ -140,10 +139,7 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
   );
 }
 
-// ==================== CACHE FOR SPARKLINE DATA ====================
-const sparklineCache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
+// ==================== SPARKLINE FUNCTIONS ====================
 async function fetchSparklineData(ticker) {
   const cacheKey = ticker.toUpperCase();
   const cached = sparklineCache.get(cacheKey);
@@ -154,106 +150,77 @@ async function fetchSparklineData(ticker) {
   try {
     const now = Math.floor(Date.now() / 1000);
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60;
-
     const res = await fetch("/api/finnhub", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "candles_range",   // ✅ matches your Finnhub proxy
+        action: "candles_range",
         ticker,
         resolution: "D",
         from: thirtyDaysAgo,
         to: now,
       }),
     });
-
     const json = await res.json();
-
-    // Proxy returns { candles: [{ t, v }, ...] }
     if (json?.candles && Array.isArray(json.candles) && json.candles.length >= 2) {
-      const closePrices = json.candles.map(c => c.v);  // v = close price
+      const closePrices = json.candles.map(c => c.v);
       sparklineCache.set(cacheKey, { data: closePrices, timestamp: Date.now() });
       return closePrices;
     }
-    return null; // signals fallback to static line
+    return null;
   } catch (error) {
     console.error(`Sparkline fetch error for ${ticker}:`, error);
     return null;
   }
 }
 
-// ==================== MiniSparkline (static fallback kept) ====================
 function MiniSparkline({ data, isPositive }) {
-  // Use real data if available; otherwise draw the static generic line
+  // Real data
   if (data && data.length >= 2) {
     const width = 40;
     const height = 36;
     const padding = 2;
-
     const min = Math.min(...data);
     const max = Math.max(...data);
     const range = max - min || 1;
-
-    const points = data
-      .map((price, i) => {
-        const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
-        const y = padding + ((max - price) / range) * (height - 2 * padding);
-        return `${x},${y}`;
-      })
-      .join(" ");
-
+    const points = data.map((price, i) => {
+      const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
+      const y = padding + ((max - price) / range) * (height - 2 * padding);
+      return `${x},${y}`;
+    }).join(" ");
     const color = isPositive ? "#10b981" : "#ef4444";
-
     return (
       <svg width="40" height="36" viewBox={`0 0 ${width} ${height}`} fill="none">
-        <polyline
-          points={points}
-          stroke={color}
-          strokeWidth="1.5"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <polyline points={points} stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
 
-  // Static fallback (your original design)
+  // Static fallback
   const color = isPositive ? "#10b981" : "#ef4444";
   const points = isPositive
     ? "2,28 8,22 14,26 20,18 26,20 32,12 38,8"
     : "2,8 8,12 14,10 20,18 26,16 32,22 38,28";
-
   return (
     <svg width="40" height="36" viewBox="0 0 40 36" fill="none">
-      <polyline
-        points={points}
-        stroke={color}
-        strokeWidth="1.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <polyline points={points} stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-// ==================== SparklineWrapper ====================
 function SparklineWrapper({ ticker, isPositive }) {
   const [sparklineData, setSparklineData] = useState(null);
-
   useEffect(() => {
     let mounted = true;
-    fetchSparklineData(ticker).then((data) => {
+    fetchSparklineData(ticker).then(data => {
       if (mounted) setSparklineData(data);
     });
     return () => { mounted = false; };
   }, [ticker]);
-
   return <MiniSparkline data={sparklineData} isPositive={isPositive} />;
 }
 
-// ==================== AnimatedPrice ====================
+// ==================== ANIMATED PRICE ====================
 function AnimatedPrice({ value }) {
   const [flash, setFlash] = useState(null);
   const prevRef = useRef(value);
@@ -284,7 +251,6 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const isDragging = useRef(false);
-
   const REVEAL_WIDTH = 160;
   const displayPrice = quote?.c ? quote.c.toFixed(2) : (stock?.current_price?.toFixed(2) || "—");
   const dailyGainPct = quote?.dp ?? null;
@@ -296,7 +262,6 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     touchStartY.current = e.touches[0].clientY;
     isDragging.current = false;
   };
-
   const handleTouchMove = (e) => {
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
@@ -311,7 +276,6 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
       setDragX(Math.min(0, -REVEAL_WIDTH + dx));
     }
   };
-
   const handleTouchEnd = () => {
     const threshold = swiped ? REVEAL_WIDTH * 0.25 : REVEAL_WIDTH * 0.4;
     if (Math.abs(dragX) >= threshold) {
@@ -324,9 +288,7 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     touchStartX.current = null;
     isDragging.current = false;
   };
-
   const closeSwipe = () => { setDragX(0); setSwiped(false); };
-
   const handleShare = (e) => {
     e.preventDefault(); e.stopPropagation();
     if (navigator.share) {
@@ -336,7 +298,6 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     }
     closeSwipe();
   };
-
   const handleDelete = async (e) => {
     e.preventDefault(); e.stopPropagation();
     setDragX(-400);
@@ -357,13 +318,11 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
         className="p-1 min-h-[44px] min-w-[36px] flex items-center justify-center shrink-0">
         <Star className={`w-5 h-5 transition-colors ${hasStock ? "text-amber-400 fill-amber-400" : "text-gray-300 hover:text-amber-300"}`} />
       </button>
-
       <div className="min-w-0 flex-[2]">
         <p className="font-heading font-bold text-base leading-tight">{item.ticker}</p>
         <p className="text-xs text-gray-500">{companyName}</p>
         {item.exchange && <p className="text-[10px] text-gray-400 uppercase tracking-wide">{abbreviateExchange(item.exchange)}</p>}
       </div>
-
       <div className="flex items-center gap-2 shrink-0">
         {quote?.c && <SparklineWrapper ticker={item.ticker} isPositive={dailyIsPositive} />}
         <div className="text-center min-w-[64px]">
@@ -388,7 +347,6 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
           <Trash2 className="w-5 h-5 shrink-0" /><span>Delete</span>
         </button>
       </div>
-
       <Link to={hasStock ? `/stock/${stock.id}` : `/stock/ticker-${item.ticker}`} onClick={swiped ? (e) => { e.preventDefault(); closeSwipe(); } : undefined}>
         {inner}
       </Link>
@@ -417,6 +375,7 @@ export default function Watchlist() {
   const suggestionsRef = useRef(null);
   const searchTimeout = useRef(null);
 
+  // Close suggestions when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (!inputRef.current?.contains(e.target) && !suggestionsRef.current?.contains(e.target)) {
@@ -451,15 +410,12 @@ export default function Watchlist() {
   // Load data from Supabase
   const load = async () => {
     if (!user?.id) return [];
-
     const [watchRes, stockRes] = await Promise.all([
       supabase.from("watchlist_items").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("stocks").select("*").eq("user_id", user.id),
     ]);
-
     const watchData = watchRes.data || [];
     const stockData = stockRes.data || [];
-
     setItems(watchData);
     setStocks(stockData);
     return watchData;
@@ -483,7 +439,6 @@ export default function Watchlist() {
   // Realtime subscription
   useEffect(() => {
     if (!user?.id) return;
-
     const channel = supabase
       .channel("watchlist-realtime")
       .on("postgres_changes", {
@@ -497,22 +452,18 @@ export default function Watchlist() {
           .then(({ data }) => setItems(data || []));
       })
       .subscribe();
-
     return () => supabase.removeChannel(channel);
   }, [user?.id]);
 
   const addTicker = async (symbol, exchange = "") => {
     symbol = symbol.trim().toUpperCase();
     if (!symbol || !user) return;
-
     if (items.find(i => i.ticker.toUpperCase() === symbol)) {
       setToast(`"${symbol}" is already in your watchlist.`);
       return;
     }
-
     setAdding(true);
     setShowSuggestions(false);
-
     let company_name = "";
     try {
       const res = await fetch("/api/finnhub", {
@@ -524,22 +475,18 @@ export default function Watchlist() {
       company_name = data.name || "";
       if (!exchange && data.exchange) exchange = data.exchange;
     } catch {}
-
     const { error } = await supabase.from("watchlist_items").insert({
       user_id: user.id,
       ticker: symbol,
       exchange,
       company_name,
     });
-
     setTicker("");
     setAdding(false);
-
     if (error) {
       setToast("Failed to add ticker");
       return;
     }
-
     const watchData = await load();
     if (watchData?.length) refreshQuotes(watchData.map(i => i.ticker.toUpperCase()));
   };
@@ -572,7 +519,6 @@ export default function Watchlist() {
   return (
     <div className="min-h-screen flex flex-col" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}>
       <AnimatePresence>{toast && <Toast message={toast} onDone={() => setToast(null)} />}</AnimatePresence>
-
       {dialogItem && (
         <AddToPortfolioDialog
           open={true}
@@ -598,6 +544,7 @@ export default function Watchlist() {
       </header>
 
       <main className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 space-y-4 flex-1">
+        {/* Search form with dropdown */}
         <form onSubmit={handleAdd} className="flex gap-2 relative justify-center">
           <div className="flex-[0_1_76%] relative">
             <Input
@@ -608,6 +555,37 @@ export default function Watchlist() {
               onFocus={() => setShowSuggestions(true)}
               className="uppercase"
             />
+            {/* Suggestion dropdown */}
+            <AnimatePresence>
+              {showSuggestions && suggestions.length > 0 && (
+                <motion.div
+                  ref={suggestionsRef}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full mt-1 left-0 right-0 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto"
+                >
+                  {searchLoading && <div className="px-3 py-2 text-sm text-gray-400">Searching…</div>}
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={s.symbol + i}
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center justify-between"
+                      onClick={() => {
+                        setTicker(s.symbol);
+                        setShowSuggestions(false);
+                        // Optionally auto-add? The original just set the ticker, but you can also add directly:
+                        // addTicker(s.symbol, s.primaryExchange || s.exchange);
+                      }}
+                    >
+                      <span className="font-medium">{s.symbol}</span>
+                      <span className="text-xs text-gray-500 truncate ml-2">{s.description}</span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           <Button type="submit" disabled={adding || !ticker.trim()}>
             {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
