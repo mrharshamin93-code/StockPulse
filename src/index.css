@@ -115,3 +115,60 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/*
+ * Several migrated screens still use Tailwind's neutral colour utilities.
+ * Map those shared surfaces to the active StockPulse theme so one selection
+ * consistently colours every authenticated tab while feature-specific accent
+ * colours (gain/loss, bullish/bearish, alerts) remain meaningful.
+ */
+:root[data-stockpulse-theme] .bg-white {
+  background-color: hsl(var(--card));
+}
+
+:root[data-stockpulse-theme] .bg-gray-50,
+:root[data-stockpulse-theme] [class~="bg-gray-50/50"],
+:root[data-stockpulse-theme] [class~="bg-gray-50/95"] {
+  background-color: hsl(var(--background));
+}
+
+:root[data-stockpulse-theme] [class~="bg-white/70"],
+:root[data-stockpulse-theme] [class~="bg-white/80"] {
+  background-color: hsl(var(--card) / 0.8);
+}
+
+:root[data-stockpulse-theme] .bg-gray-100 {
+  background-color: hsl(var(--muted));
+}
+
+:root[data-stockpulse-theme] .bg-gray-900 {
+  background-color: hsl(var(--primary));
+}
+
+:root[data-stockpulse-theme] .text-gray-900,
+:root[data-stockpulse-theme] .text-gray-800 {
+  color: hsl(var(--foreground));
+}
+
+:root[data-stockpulse-theme] .text-gray-700,
+:root[data-stockpulse-theme] .text-gray-600,
+:root[data-stockpulse-theme] .text-gray-500,
+:root[data-stockpulse-theme] .text-gray-400 {
+  color: hsl(var(--muted-foreground));
+}
+
+:root[data-stockpulse-theme] .border-gray-50,
+:root[data-stockpulse-theme] .border-gray-100,
+:root[data-stockpulse-theme] .border-gray-200,
+:root[data-stockpulse-theme] .border-gray-300 {
+  border-color: hsl(var(--border));
+}
+
+:root[data-stockpulse-theme] .divide-gray-50 > :not([hidden]) ~ :not([hidden]),
+:root[data-stockpulse-theme] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: hsl(var(--border));
+}
+
+:root[data-stockpulse-theme] [class~="hover:bg-gray-50"]:hover {
+  background-color: hsl(var(--muted));
+}
