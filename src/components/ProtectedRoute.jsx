@@ -1,5 +1,11 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import React from "react";
+import {
+  Navigate,
+  Outlet,
+  useLocation,
+} from "react-router-dom";
 import { Loader2 } from "lucide-react";
+
 import { useAuth } from "@/lib/AuthContext";
 
 export default function ProtectedRoute({
@@ -10,12 +16,13 @@ export default function ProtectedRoute({
     isLoadingAuth,
   } = useAuth();
 
-  const location = useLocation();
+  const location =
+    useLocation();
 
   if (isLoadingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
+      <div className="flex min-h-[100dvh] items-center justify-center bg-gray-50">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
       </div>
     );
   }
@@ -25,8 +32,12 @@ export default function ProtectedRoute({
       unauthenticatedElement ?? (
         <Navigate
           to="/login"
-          state={{ from: location }}
           replace
+          state={{
+            from:
+              location.pathname +
+              location.search,
+          }}
         />
       )
     );
