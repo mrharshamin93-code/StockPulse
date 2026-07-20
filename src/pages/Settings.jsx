@@ -208,7 +208,7 @@ export default function Settings() {
             style={{ backgroundColor: "hsl(var(--card))" }}
           >
             <Link
-              to="/theme"
+              to="/settings/theme"
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
