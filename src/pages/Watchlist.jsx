@@ -13,24 +13,14 @@ function abbreviateExchange(exchange) {
   if (!exchange) return "";
   const e = exchange.toUpperCase();
   if (e.includes("NASDAQ")) return "NASDAQ";
-  if (e.includes("NYSE AMERICAN") || e.includes("AMEX")) return "AMEX";
-  if (e.includes("NEW YORK STOCK EXCHANGE") || e.includes("NYSE")) return "NYSE";
-  if (e.includes("OTC") || e.includes("PINK")) return "OTC";
-  if (e.includes("CBOE")) return "CBOE";
-  if (e.includes("BATS")) return "BATS";
+  if (e.includes("NYSE")) return "NYSE";
   if (e.includes("TSX")) return "TSX";
-  if (e.includes("TSXV")) return "TSXV";
   if (e.includes("LSE")) return "LSE";
-  if (e.includes("EURONEXT")) return "ENX";
-  if (e.includes("XETRA") || e.includes("FRANKFURT")) return "FRA";
   if (e.includes("ASX")) return "ASX";
-  if (e.includes("TSE") || e.includes("TOKYO")) return "TSE";
+  if (e.includes("TSE")) return "TSE";
   if (e.includes("HKEX")) return "HKEX";
   if (e.includes("NSE")) return "NSE";
-  if (e.includes("BSE")) return "BSE";
   if (e.includes("KRX")) return "KRX";
-  if (e.includes("TWSE")) return "TWSE";
-  if (e.includes("SGX")) return "SGX";
   return exchange;
 }
 
@@ -123,7 +113,7 @@ function AnimatedPrice({ value }) {
   );
 }
 
-// ==================== WATCHLIST CARD (NO BIN BUTTON) ====================
+// ==================== WATCHLIST CARD ====================
 function WatchlistCard({ item, stock, quote, sparklineData, onStarToggle }) {
   const hasStock = !!stock;
   const companyName = getCompanyName(item.ticker, stock, item);
@@ -132,20 +122,13 @@ function WatchlistCard({ item, stock, quote, sparklineData, onStarToggle }) {
   const dailyIsPositive = (dailyGainPct ?? 0) >= 0;
 
   return (
-    <Link
-      to={`/stock/${item.ticker}`}
-      className="block rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-4 active:scale-[0.99] transition"
-    >
+    <Link to={`/stock/${item.ticker}`} className="block rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-4 active:scale-[0.99] transition">
       <div className="flex items-center justify-between gap-3">
         <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onStarToggle(item, stock);
-          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStarToggle(item, stock); }}
           className="p-1 min-h-[44px] min-w-[36px] flex items-center justify-center shrink-0"
         >
-          <Star className={`h-5 w-5 transition-all ${hasStock ? "fill-yellow-400 text-yellow-400" : "text-gray-300 hover:text-yellow-400"}`} />
+          <Star className={`h-5 w-5 ${hasStock ? "fill-yellow-400 text-yellow-400" : "text-gray-300 hover:text-yellow-400"}`} />
         </button>
 
         <div className="min-w-0 flex-1">
@@ -172,7 +155,7 @@ function WatchlistCard({ item, stock, quote, sparklineData, onStarToggle }) {
   );
 }
 
-// ==================== MAIN WATCHLIST COMPONENT ====================
+// ==================== MAIN COMPONENT ====================
 export default function Watchlist() {
   const { user } = useAuth();
   const { quotes, fetchQuotes } = useMarketData();
@@ -192,9 +175,10 @@ export default function Watchlist() {
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
 
-  // Load sparklines
+  // ==================== DEBUG VERSION OF SPARKLINE ====================
   const loadSparklines = async (tickers) => {
     const newData = {};
+
     await Promise.all(
       tickers.map(async (t) => {
         try {
@@ -206,14 +190,21 @@ export default function Watchlist() {
             to: Math.floor(Date.now() / 1000),
           });
 
-          if (res?.candles && res.candles.length > 1) {
-            newData[t] = res.candles.map((c) => ({ close: c.v }));
+          // ← TEMPORARY DEBUG LOG - Please copy this from console
+          console.log(`Sparkline response for ${t}:`, res);
+
+          if (res?.candles && Array.isArray(res.candles) && res.candles.length > 1) {
+            // Try both c.v and c.c just in case
+            newData[t] = res.candles.map((c) => ({ 
+              close: c.v ?? c.c 
+            }));
           }
         } catch (err) {
-          console.error("Sparkline error for", t);
+          console.error("Sparkline error for", t, err);
         }
       })
     );
+
     setSparklines((prev) => ({ ...prev, ...newData }));
   };
 
@@ -240,6 +231,8 @@ export default function Watchlist() {
     if (!user?.id) return;
     load().then(() => setLoading(false));
   }, [user?.id]);
+
+  // ... (rest of the functions are the same as before)
 
   const handleInputChange = (e) => {
     const value = e.target.value.toUpperCase().trim();
@@ -361,13 +354,7 @@ export default function Watchlist() {
           <p className="text-sm text-gray-500 mt-1.5">Stocks you're watching</p>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (ticker.trim()) handleAdd(ticker);
-          }}
-          className="mb-6"
-        >
+        <form onSubmit={(e) => { e.preventDefault(); if (ticker.trim()) handleAdd(ticker); }} className="mb-6">
           <div className="relative">
             <div className="flex gap-2">
               <Input
@@ -382,34 +369,17 @@ export default function Watchlist() {
               />
               <Button type="submit" disabled={adding || !ticker.trim()}>
                 {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                <span className="ml-2 hidden sm:inline">Add</span>
+                Add
               </Button>
             </div>
 
             <AnimatePresence>
               {showSuggestions && (suggestions.length > 0 || searchLoading) && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute z-[60] mt-1.5 w-full rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden"
-                >
-                  {searchLoading && (
-                    <div className="flex items-center gap-2 px-4 py-3 text-sm text-gray-500">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Searching...
-                    </div>
-                  )}
+                <motion.div className="absolute z-[60] mt-1.5 w-full rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden">
+                  {searchLoading && <div className="px-4 py-3 text-sm text-gray-500">Searching...</div>}
                   {suggestions.map((sugg, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(sugg)}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 flex justify-between items-center text-sm active:bg-gray-100"
-                    >
-                      <div>
-                        <span className="font-semibold">{sugg.symbol}</span>
-                        <span className="ml-2 text-gray-500">{sugg.description}</span>
-                      </div>
+                    <button key={index} type="button" onClick={() => handleSelectSuggestion(sugg)} className="w-full px-4 py-3 text-left hover:bg-gray-50 flex justify-between text-sm">
+                      <div><span className="font-semibold">{sugg.symbol}</span> <span className="text-gray-500">{sugg.description}</span></div>
                       <span className="text-xs text-gray-400">{sugg.type}</span>
                     </button>
                   ))}
@@ -420,12 +390,10 @@ export default function Watchlist() {
         </form>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-          </div>
+          <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-            <h2 className="text-lg font-semibold text-gray-900">Nothing here yet</h2>
+            <h2 className="text-lg font-semibold">Nothing here yet</h2>
             <p className="text-sm text-gray-500 mt-2">Add a ticker above to start watching it.</p>
           </div>
         ) : (
