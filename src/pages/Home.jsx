@@ -11,15 +11,92 @@ import PortfolioOnboarding from "@/components/portfolio/PortfolioOnboarding";
 
 const PULL_THRESHOLD = 72;
 
+function onboardingStorageKey(userId) {
+  return `stockpulse:portfolio-onboarding-seen:${userId}`;
+}
+
+function hasSeenPortfolioOnboarding(user) {
+  if (
+    user?.user_metadata?.portfolio_onboarding_seen ||
+    user?.user_metadata?.onboarding_completed
+  ) {
+    return true;
+  }
+
+  try {
+    return (
+      window.localStorage.getItem(
+        onboardingStorageKey(user?.id)
+      ) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function markPortfolioOnboardingSeen(userId) {
+  try {
+    window.localStorage.setItem(
+      onboardingStorageKey(userId),
+      "true"
+    );
+  } catch {
+    // Supabase metadata remains the cross-device source of truth.
+  }
+
+  try {
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        portfolio_onboarding_seen: true,
+      },
+    });
+
+    if (!error) {
+      return;
+    }
+
+    console.warn(
+      "Failed to persist portfolio onboarding state:",
+      error
+    );
+  } catch (error) {
+    console.warn(
+      "Failed to persist portfolio onboarding state:",
+      error
+    );
+  }
+}
+
+function EmptyPortfolio() {
+  return (
+    <div className="mx-auto flex max-w-sm flex-col items-center justify-center px-4 py-16 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
+        <Briefcase className="h-7 w-7 text-gray-500" />
+      </div>
+
+      <h2 className="mt-5 font-heading text-xl font-bold text-gray-900">
+        Empty portfolio
+      </h2>
+
+      <p className="mt-2 text-sm text-gray-500">
+        Tap the <strong>+</strong> button below to add a stock.
+      </p>
+    </div>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
   const [stocks, setStocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [showPortfolioOnboarding, setShowPortfolioOnboarding] = useState(false);
 
   const touchStartY = useRef(null);
   const scrollRef = useRef(null);
+  const onboardingDecisionMade = useRef(false);
+  const onboardingMarked = useRef(false);
 
   const loadStocks = useCallback(async () => {
     if (!user?.id) {
@@ -38,7 +115,33 @@ export default function Home() {
         console.error("Error loading stocks:", error);
         setStocks([]);
       } else {
-        setStocks(data || []);
+        const nextStocks = data || [];
+        const alreadySeen = hasSeenPortfolioOnboarding(user);
+
+        setStocks(nextStocks);
+
+        if (!onboardingDecisionMade.current) {
+          const showFirstVisit =
+            nextStocks.length === 0 && !alreadySeen;
+
+          onboardingDecisionMade.current = true;
+          setShowPortfolioOnboarding(showFirstVisit);
+
+          if (showFirstVisit) {
+            onboardingMarked.current = true;
+            void markPortfolioOnboardingSeen(user.id);
+          }
+        }
+
+        if (
+          nextStocks.length > 0 &&
+          !alreadySeen &&
+          !onboardingMarked.current
+        ) {
+          onboardingMarked.current = true;
+          setShowPortfolioOnboarding(false);
+          void markPortfolioOnboardingSeen(user.id);
+        }
       }
     } catch (err) {
       console.error("Unexpected error:", err);
@@ -46,6 +149,12 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }, [user]);
+
+  useEffect(() => {
+    onboardingDecisionMade.current = false;
+    onboardingMarked.current = false;
+    setShowPortfolioOnboarding(false);
   }, [user?.id]);
 
   useEffect(() => {
@@ -134,7 +243,11 @@ export default function Home() {
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
         ) : stocks.length === 0 ? (
-          <PortfolioOnboarding onStockAdded={loadStocks} />
+          showPortfolioOnboarding ? (
+            <PortfolioOnboarding />
+          ) : (
+            <EmptyPortfolio />
+          )
         ) : (
           <>
             <PortfolioSummary stocks={stocks} />
