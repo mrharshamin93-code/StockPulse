@@ -1378,6 +1378,10 @@ function WatchlistCard({
               {item.ticker}
             </p>
 
+            <p className="mt-1 truncate text-[11px] leading-tight text-gray-500">
+              {companyName}
+            </p>
+
             {item.exchange ? (
               <p className="mt-1 truncate text-[9px] font-semibold uppercase leading-none tracking-[0.08em] text-gray-400">
                 {abbreviateExchange(
@@ -1387,10 +1391,6 @@ function WatchlistCard({
             ) : (
               <span className="mt-1 h-[9px]" />
             )}
-
-            <p className="mt-1 truncate text-[11px] leading-tight text-gray-500">
-              {companyName}
-            </p>
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
@@ -2456,7 +2456,7 @@ export default function Watchlist() {
         ) : (
           <motion.div
             layout
-            className="space-y-3"
+            className="space-y-[3px]"
           >
             <AnimatePresence
               initial={

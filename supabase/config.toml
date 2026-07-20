@@ -1,0 +1,2 @@
+[functions.stock-analysis]
+verify_jwt = true
