@@ -6,6 +6,11 @@ const supabaseUrl =
 const supabaseAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+const isOAuthCallback =
+  typeof window !== "undefined" &&
+  window.location.pathname ===
+    "/auth/callback";
+
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     "Missing Supabase environment variables. " +
@@ -36,6 +41,14 @@ export const supabase = createClient(
        * disabled avoids racing the callback component.
        */
       detectSessionInUrl: false,
+
+      /*
+       * On the callback page, exchange the new PKCE code
+       * before attempting to recover an older session.
+       * A normal page load still initializes automatically.
+       */
+      skipAutoInitialize:
+        isOAuthCallback,
 
       /*
        * Use the OAuth authorization-code PKCE flow.
