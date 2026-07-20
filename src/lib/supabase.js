@@ -9,7 +9,8 @@ const supabaseAnonKey =
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     "Missing Supabase environment variables. " +
-      "Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
+      "Check VITE_SUPABASE_URL and " +
+      "VITE_SUPABASE_ANON_KEY in Vercel."
   );
 }
 
@@ -19,25 +20,27 @@ export const supabase = createClient(
   {
     auth: {
       /*
-       * Preserve login across reloads and mobile
-       * browser restarts.
+       * Keep the user signed in across page reloads
+       * and mobile browser restarts.
        */
       persistSession: true,
 
       /*
-       * Automatically renew expired access tokens.
+       * Refresh expired access tokens automatically.
        */
       autoRefreshToken: true,
 
       /*
-       * The dedicated callback page manually exchanges
-       * the returned authorization code.
+       * Automatically detect ?code=... on the OAuth
+       * callback and complete the PKCE exchange.
+       *
+       * Do not also call exchangeCodeForSession()
+       * manually in callback.jsx.
        */
-      detectSessionInUrl: false,
+      detectSessionInUrl: true,
 
       /*
-       * signInWithOAuth will create a PKCE verifier,
-       * and /auth/callback will exchange the returned code.
+       * Use the OAuth authorization-code PKCE flow.
        */
       flowType: "pkce",
     },
