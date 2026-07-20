@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -25,6 +26,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
+const LONG_PRESS_MS = 600;
+const TOOLTIP_VISIBLE_MS = 5000;
+
 const SECTORS = [
   "Technology",
   "Healthcare",
@@ -42,7 +46,7 @@ const POPULAR_SCREENS = [
   {
     label: "Large Cap Tech",
     filters: {
-      sector: "Technology",
+      sectors: ["Technology"],
       minMarketCapB: 10,
     },
   },
@@ -93,8 +97,57 @@ function removeUndefinedValues(object) {
       ([, value]) =>
         value !== undefined &&
         value !== null &&
-        value !== ""
-    )
+        value !== "",
+    ),
+  );
+}
+
+function normalizeFilters(rawFilters = {}) {
+  const next =
+    removeUndefinedValues(rawFilters);
+
+  /*
+   * Convert old saved screens that used:
+   * sector: "Technology"
+   *
+   * Into the new multi-sector format:
+   * sectors: ["Technology"]
+   */
+  if (Array.isArray(next.sectors)) {
+    const validSectors = [
+      ...new Set(next.sectors),
+    ]
+      .map((sector) =>
+        String(sector).trim(),
+      )
+      .filter((sector) =>
+        SECTORS.includes(sector),
+      );
+
+    if (validSectors.length > 0) {
+      next.sectors = validSectors;
+    } else {
+      delete next.sectors;
+    }
+  } else if (
+    typeof next.sector === "string" &&
+    SECTORS.includes(next.sector)
+  ) {
+    next.sectors = [next.sector];
+  }
+
+  delete next.sector;
+
+  return next;
+}
+
+function getSelectedSectors(filters) {
+  if (!Array.isArray(filters?.sectors)) {
+    return [];
+  }
+
+  return filters.sectors.filter((sector) =>
+    SECTORS.includes(sector),
   );
 }
 
@@ -113,70 +166,165 @@ function FilterChip({
   const buttonRef =
     useRef(null);
 
-  const hideTimeoutRef =
+  const pressTimerRef =
     useRef(null);
+
+  const hideTimerRef =
+    useRef(null);
+
+  const longPressTriggeredRef =
+    useRef(false);
+
+  const clearPressTimer =
+    useCallback(() => {
+      window.clearTimeout(
+        pressTimerRef.current,
+      );
+
+      pressTimerRef.current = null;
+    }, []);
+
+  const closeTooltip =
+    useCallback(() => {
+      window.clearTimeout(
+        hideTimerRef.current,
+      );
+
+      hideTimerRef.current = null;
+
+      setShowTip(false);
+    }, []);
+
+  const openTooltip =
+    useCallback(() => {
+      if (
+        !tooltip ||
+        !buttonRef.current
+      ) {
+        return;
+      }
+
+      const rect =
+        buttonRef.current.getBoundingClientRect();
+
+      const tooltipWidth =
+        Math.min(
+          280,
+          window.innerWidth - 24,
+        );
+
+      const left =
+        Math.max(
+          12,
+          Math.min(
+            rect.left,
+            window.innerWidth -
+              tooltipWidth -
+              12,
+          ),
+        );
+
+      /*
+       * If the chip is close to the top of the viewport,
+       * display the description below it instead.
+       */
+      const displayBelow =
+        rect.top < 110;
+
+      setTipStyle({
+        position: "fixed",
+        top: displayBelow
+          ? rect.bottom + 8
+          : rect.top - 8,
+        transform: displayBelow
+          ? "none"
+          : "translateY(-100%)",
+        left,
+        width: tooltipWidth,
+        zIndex: 9999,
+      });
+
+      setShowTip(true);
+
+      window.clearTimeout(
+        hideTimerRef.current,
+      );
+
+      hideTimerRef.current =
+        window.setTimeout(() => {
+          setShowTip(false);
+
+          hideTimerRef.current =
+            null;
+        }, TOOLTIP_VISIBLE_MS);
+    }, [tooltip]);
 
   useEffect(() => {
     return () => {
+      clearPressTimer();
+
       window.clearTimeout(
-        hideTimeoutRef.current
+        hideTimerRef.current,
       );
     };
-  }, []);
+  }, [clearPressTimer]);
 
-  const openTip = () => {
+  const handlePointerDown = (event) => {
+    /*
+     * Sector and preset chips do not have tooltips,
+     * so they continue behaving as normal buttons.
+     */
     if (!tooltip) {
       return;
     }
 
-    window.clearTimeout(
-      hideTimeoutRef.current
-    );
-
-    if (buttonRef.current) {
-      const rect =
-        buttonRef.current.getBoundingClientRect();
-
-      const tipWidth = 240;
-
-      let left =
-        rect.left;
-
-      left = Math.min(
-        left,
-        window.innerWidth -
-          tipWidth -
-          12
-      );
-
-      left = Math.max(
-        12,
-        left
-      );
-
-      setTipStyle({
-        position: "fixed",
-        top: rect.top - 8,
-        transform:
-          "translateY(-100%)",
-        left,
-        width: tipWidth,
-        zIndex: 9999,
-      });
+    /*
+     * Ignore non-primary mouse buttons.
+     * Touch and pen pointer events normally use button 0.
+     */
+    if (
+      event.pointerType === "mouse" &&
+      event.button !== 0
+    ) {
+      return;
     }
 
-    setShowTip(true);
+    longPressTriggeredRef.current =
+      false;
+
+    clearPressTimer();
+
+    pressTimerRef.current =
+      window.setTimeout(() => {
+        longPressTriggeredRef.current =
+          true;
+
+        openTooltip();
+      }, LONG_PRESS_MS);
   };
 
-  const hideTipLater = () => {
-    window.clearTimeout(
-      hideTimeoutRef.current
-    );
+  const handlePointerEnd = () => {
+    clearPressTimer();
+  };
 
-    hideTimeoutRef.current =
-      window.setTimeout(() => {
-        setShowTip(false);
-      }, 1800);
+  const handleClick = (event) => {
+    /*
+     * A completed long press displays the tooltip but
+     * must not also toggle the metric.
+     */
+    if (
+      longPressTriggeredRef.current
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      longPressTriggeredRef.current =
+        false;
+
+      return;
+    }
+
+    onClick?.(event);
   };
 
   return (
@@ -184,26 +332,30 @@ function FilterChip({
       <button
         ref={buttonRef}
         type="button"
-        onClick={onClick}
-        onMouseEnter={
-          openTip
+        onClick={handleClick}
+        onPointerDown={
+          handlePointerDown
         }
-        onMouseLeave={() =>
-          setShowTip(false)
+        onPointerUp={
+          handlePointerEnd
         }
-        onFocus={
-          openTip
+        onPointerCancel={
+          handlePointerEnd
         }
-        onBlur={() =>
-          setShowTip(false)
+        onPointerLeave={
+          handlePointerEnd
         }
-        onTouchStart={
-          openTip
+        onContextMenu={(event) => {
+          if (tooltip) {
+            event.preventDefault();
+          }
+        }}
+        aria-expanded={
+          tooltip
+            ? showTip
+            : undefined
         }
-        onTouchEnd={
-          hideTipLater
-        }
-        className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+        className={`touch-manipulation select-none whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
           active
             ? "border-gray-900 bg-gray-900 text-white"
             : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
@@ -212,17 +364,25 @@ function FilterChip({
         {label}
       </button>
 
-      {showTip &&
-        tooltip && (
-          <div
-            className="pointer-events-none whitespace-normal break-words rounded-lg bg-gray-900 px-3 py-2.5 text-[11px] leading-relaxed text-white shadow-xl"
-            style={
-              tipStyle
-            }
-          >
-            {tooltip}
-          </div>
-        )}
+      {showTip && tooltip && (
+        <div
+          role="tooltip"
+          className="pointer-events-none whitespace-normal break-words rounded-lg bg-gray-900 px-3 py-2.5 text-[11px] leading-relaxed text-white shadow-xl"
+          style={tipStyle}
+        >
+          {tooltip}
+        </div>
+      )}
+
+      {showTip && tooltip && (
+        <button
+          type="button"
+          aria-label="Close description"
+          tabIndex={-1}
+          onClick={closeTooltip}
+          className="fixed inset-0 z-[9998] cursor-default bg-transparent"
+        />
+      )}
     </div>
   );
 }
@@ -337,35 +497,25 @@ const METRIC_GROUPS = [
       },
       {
         key: "operatingMargin",
-        label:
-          "Operating Margin",
+        label: "Operating Margin",
         desc:
           "Operating income ÷ revenue. Profit after operating costs but before interest and taxes.",
         unit: "%",
-        minKey:
-          "minOperatingMargin",
-        maxKey:
-          "maxOperatingMargin",
-        minPlaceholder:
-          "e.g. 10",
-        maxPlaceholder:
-          "e.g. 40",
+        minKey: "minOperatingMargin",
+        maxKey: "maxOperatingMargin",
+        minPlaceholder: "e.g. 10",
+        maxPlaceholder: "e.g. 40",
       },
       {
         key: "netMargin",
-        label:
-          "Net Profit Margin",
+        label: "Net Profit Margin",
         desc:
           "Net income ÷ revenue. Bottom-line profitability after all expenses.",
         unit: "%",
-        minKey:
-          "minNetMargin",
-        maxKey:
-          "maxNetMargin",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 30",
+        minKey: "minNetMargin",
+        maxKey: "maxNetMargin",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 30",
       },
       {
         key: "roe",
@@ -375,10 +525,8 @@ const METRIC_GROUPS = [
         unit: "%",
         minKey: "minRoe",
         maxKey: "maxRoe",
-        minPlaceholder:
-          "e.g. 10",
-        maxPlaceholder:
-          "e.g. 50",
+        minPlaceholder: "e.g. 10",
+        maxPlaceholder: "e.g. 50",
       },
       {
         key: "roa",
@@ -388,10 +536,8 @@ const METRIC_GROUPS = [
         unit: "%",
         minKey: "minRoa",
         maxKey: "maxRoa",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 25",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 25",
       },
       {
         key: "roic",
@@ -401,10 +547,8 @@ const METRIC_GROUPS = [
         unit: "%",
         minKey: "minRoic",
         maxKey: "maxRoic",
-        minPlaceholder:
-          "e.g. 8",
-        maxPlaceholder:
-          "e.g. 40",
+        minPlaceholder: "e.g. 8",
+        maxPlaceholder: "e.g. 40",
       },
     ],
   },
@@ -412,54 +556,37 @@ const METRIC_GROUPS = [
     group: "Growth",
     metrics: [
       {
-        key:
-          "revenueGrowth",
-        label:
-          "Revenue Growth (YoY)",
+        key: "revenueGrowth",
+        label: "Revenue Growth (YoY)",
         desc:
           "Year-over-year revenue increase. Shows top-line business expansion.",
         unit: "%",
-        minKey:
-          "minRevenueGrowth",
-        maxKey:
-          "maxRevenueGrowth",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 50",
+        minKey: "minRevenueGrowth",
+        maxKey: "maxRevenueGrowth",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 50",
       },
       {
         key: "epsGrowth",
-        label:
-          "EPS Growth (YoY)",
+        label: "EPS Growth (YoY)",
         desc:
           "Year-over-year earnings-per-share growth.",
         unit: "%",
-        minKey:
-          "minEpsGrowth",
-        maxKey:
-          "maxEpsGrowth",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 50",
+        minKey: "minEpsGrowth",
+        maxKey: "maxEpsGrowth",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 50",
       },
       {
-        key:
-          "ebitdaGrowth",
-        label:
-          "EBITDA Growth",
+        key: "ebitdaGrowth",
+        label: "EBITDA Growth",
         desc:
           "Growth in earnings before interest, taxes, depreciation and amortization.",
         unit: "%",
-        minKey:
-          "minEbitdaGrowth",
-        maxKey:
-          "maxEbitdaGrowth",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 50",
+        minKey: "minEbitdaGrowth",
+        maxKey: "maxEbitdaGrowth",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 50",
       },
       {
         key: "fcfGrowth",
@@ -467,37 +594,26 @@ const METRIC_GROUPS = [
         desc:
           "Growth in free cash flow after capital expenditures.",
         unit: "%",
-        minKey:
-          "minFcfGrowth",
-        maxKey:
-          "maxFcfGrowth",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 50",
+        minKey: "minFcfGrowth",
+        maxKey: "maxFcfGrowth",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 50",
       },
       {
-        key:
-          "week52Change",
-        label:
-          "52W Price Change",
+        key: "week52Change",
+        label: "52W Price Change",
         desc:
           "Stock-price change over the past 52 weeks.",
         unit: "%",
-        minKey:
-          "minWeek52Change",
-        maxKey:
-          "maxWeek52Change",
-        minPlaceholder:
-          "e.g. 10",
-        maxPlaceholder:
-          "e.g. 100",
+        minKey: "minWeek52Change",
+        maxKey: "maxWeek52Change",
+        minPlaceholder: "e.g. 10",
+        maxPlaceholder: "e.g. 100",
       },
     ],
   },
   {
-    group:
-      "Financial Health",
+    group: "Financial Health",
     metrics: [
       {
         key: "deRatio",
@@ -507,27 +623,19 @@ const METRIC_GROUPS = [
         unit: "x",
         minKey: "minDe",
         maxKey: "maxDe",
-        minPlaceholder:
-          "e.g. 0",
-        maxPlaceholder:
-          "e.g. 1.5",
+        minPlaceholder: "e.g. 0",
+        maxPlaceholder: "e.g. 1.5",
       },
       {
-        key:
-          "currentRatio",
-        label:
-          "Current Ratio",
+        key: "currentRatio",
+        label: "Current Ratio",
         desc:
           "Current assets ÷ current liabilities. Measures short-term liquidity.",
         unit: "x",
-        minKey:
-          "minCurrentRatio",
-        maxKey:
-          "maxCurrentRatio",
-        minPlaceholder:
-          "e.g. 1.5",
-        maxPlaceholder:
-          "e.g. 5",
+        minKey: "minCurrentRatio",
+        maxKey: "maxCurrentRatio",
+        minPlaceholder: "e.g. 1.5",
+        maxPlaceholder: "e.g. 5",
       },
       {
         key: "quickRatio",
@@ -535,48 +643,32 @@ const METRIC_GROUPS = [
         desc:
           "Current assets excluding inventory ÷ current liabilities.",
         unit: "x",
-        minKey:
-          "minQuickRatio",
-        maxKey:
-          "maxQuickRatio",
-        minPlaceholder:
-          "e.g. 1",
-        maxPlaceholder:
-          "e.g. 4",
+        minKey: "minQuickRatio",
+        maxKey: "maxQuickRatio",
+        minPlaceholder: "e.g. 1",
+        maxPlaceholder: "e.g. 4",
       },
       {
-        key:
-          "interestCoverage",
-        label:
-          "Interest Coverage",
+        key: "interestCoverage",
+        label: "Interest Coverage",
         desc:
           "EBIT ÷ interest expense. Measures the ability to pay interest.",
         unit: "x",
-        minKey:
-          "minInterestCoverage",
-        maxKey:
-          "maxInterestCoverage",
-        minPlaceholder:
-          "e.g. 3",
-        maxPlaceholder:
-          "e.g. 20",
+        minKey: "minInterestCoverage",
+        maxKey: "maxInterestCoverage",
+        minPlaceholder: "e.g. 3",
+        maxPlaceholder: "e.g. 20",
       },
       {
-        key:
-          "debtEbitda",
-        label:
-          "Debt/EBITDA",
+        key: "debtEbitda",
+        label: "Debt/EBITDA",
         desc:
           "Total debt ÷ EBITDA. Measures leverage relative to operating earnings.",
         unit: "x",
-        minKey:
-          "minDebtEbitda",
-        maxKey:
-          "maxDebtEbitda",
-        minPlaceholder:
-          "e.g. 0",
-        maxPlaceholder:
-          "e.g. 4",
+        minKey: "minDebtEbitda",
+        maxKey: "maxDebtEbitda",
+        minPlaceholder: "e.g. 0",
+        maxPlaceholder: "e.g. 4",
       },
     ],
   },
@@ -584,132 +676,91 @@ const METRIC_GROUPS = [
     group: "Efficiency",
     metrics: [
       {
-        key:
-          "assetTurnover",
-        label:
-          "Asset Turnover",
+        key: "assetTurnover",
+        label: "Asset Turnover",
         desc:
           "Revenue ÷ average total assets. Measures asset-use efficiency.",
         unit: "x",
-        minKey:
-          "minAssetTurnover",
-        maxKey:
-          "maxAssetTurnover",
-        minPlaceholder:
-          "e.g. 0.3",
-        maxPlaceholder:
-          "e.g. 2",
+        minKey: "minAssetTurnover",
+        maxKey: "maxAssetTurnover",
+        minPlaceholder: "e.g. 0.3",
+        maxPlaceholder: "e.g. 2",
       },
       {
-        key:
-          "inventoryTurnover",
-        label:
-          "Inventory Turnover",
+        key: "inventoryTurnover",
+        label: "Inventory Turnover",
         desc:
           "Cost of goods sold ÷ average inventory. Measures how quickly inventory sells.",
         unit: "x",
-        minKey:
-          "minInventoryTurnover",
-        maxKey:
-          "maxInventoryTurnover",
-        minPlaceholder:
-          "e.g. 3",
-        maxPlaceholder:
-          "e.g. 20",
+        minKey: "minInventoryTurnover",
+        maxKey: "maxInventoryTurnover",
+        minPlaceholder: "e.g. 3",
+        maxPlaceholder: "e.g. 20",
       },
       {
-        key:
-          "receivablesTurnover",
-        label:
-          "Receivables Turnover",
+        key: "receivablesTurnover",
+        label: "Receivables Turnover",
         desc:
           "Revenue ÷ average accounts receivable. Measures collection efficiency.",
         unit: "x",
-        minKey:
-          "minReceivablesTurnover",
-        maxKey:
-          "maxReceivablesTurnover",
-        minPlaceholder:
-          "e.g. 3",
-        maxPlaceholder:
-          "e.g. 20",
+        minKey: "minReceivablesTurnover",
+        maxKey: "maxReceivablesTurnover",
+        minPlaceholder: "e.g. 3",
+        maxPlaceholder: "e.g. 20",
       },
       {
         key: "dso",
-        label:
-          "Days Sales Outstanding",
+        label: "Days Sales Outstanding",
         desc:
           "Average number of days required to collect payment after a sale.",
         unit: "days",
         minKey: "minDso",
         maxKey: "maxDso",
-        minPlaceholder:
-          "e.g. 10",
-        maxPlaceholder:
-          "e.g. 60",
+        minPlaceholder: "e.g. 10",
+        maxPlaceholder: "e.g. 60",
       },
     ],
   },
   {
-    group:
-      "Dividends & Returns",
+    group: "Dividends & Returns",
     metrics: [
       {
-        key:
-          "dividendYield",
-        label:
-          "Dividend Yield",
+        key: "dividendYield",
+        label: "Dividend Yield",
         desc:
           "Annual dividend ÷ stock price.",
         unit: "%",
-        minKey:
-          "minDividendYield",
-        maxKey:
-          "maxDividendYield",
-        minPlaceholder:
-          "e.g. 1",
-        maxPlaceholder:
-          "e.g. 8",
+        minKey: "minDividendYield",
+        maxKey: "maxDividendYield",
+        minPlaceholder: "e.g. 1",
+        maxPlaceholder: "e.g. 8",
       },
       {
-        key:
-          "payoutRatio",
-        label:
-          "Payout Ratio",
+        key: "payoutRatio",
+        label: "Payout Ratio",
         desc:
           "Dividends ÷ net income. Measures how much profit is distributed to shareholders.",
         unit: "%",
-        minKey:
-          "minPayoutRatio",
-        maxKey:
-          "maxPayoutRatio",
-        minPlaceholder:
-          "e.g. 0",
-        maxPlaceholder:
-          "e.g. 60",
+        minKey: "minPayoutRatio",
+        maxKey: "maxPayoutRatio",
+        minPlaceholder: "e.g. 0",
+        maxPlaceholder: "e.g. 60",
       },
       {
-        key:
-          "dividendGrowth",
-        label:
-          "Dividend Growth (5Y)",
+        key: "dividendGrowth",
+        label: "Dividend Growth (5Y)",
         desc:
           "Compound annual dividend growth over five years.",
         unit: "%",
-        minKey:
-          "minDividendGrowth",
-        maxKey:
-          "maxDividendGrowth",
-        minPlaceholder:
-          "e.g. 3",
-        maxPlaceholder:
-          "e.g. 20",
+        minKey: "minDividendGrowth",
+        maxKey: "maxDividendGrowth",
+        minPlaceholder: "e.g. 3",
+        maxPlaceholder: "e.g. 20",
       },
     ],
   },
   {
-    group:
-      "Per-Share & Size",
+    group: "Per-Share & Size",
     metrics: [
       {
         key: "marketCapB",
@@ -717,14 +768,10 @@ const METRIC_GROUPS = [
         desc:
           "Total market value in billions. Large-cap is generally above $10 billion.",
         unit: "B",
-        minKey:
-          "minMarketCapB",
-        maxKey:
-          "maxMarketCapB",
-        minPlaceholder:
-          "e.g. 1",
-        maxPlaceholder:
-          "e.g. 500",
+        minKey: "minMarketCapB",
+        maxKey: "maxMarketCapB",
+        minPlaceholder: "e.g. 1",
+        maxPlaceholder: "e.g. 500",
       },
       {
         key: "eps",
@@ -734,27 +781,19 @@ const METRIC_GROUPS = [
         unit: "$",
         minKey: "minEps",
         maxKey: "maxEps",
-        minPlaceholder:
-          "e.g. 1",
-        maxPlaceholder:
-          "e.g. 20",
+        minPlaceholder: "e.g. 1",
+        maxPlaceholder: "e.g. 20",
       },
       {
-        key:
-          "bookValuePerShare",
-        label:
-          "Book Value/Share",
+        key: "bookValuePerShare",
+        label: "Book Value/Share",
         desc:
           "Net assets per share after subtracting liabilities.",
         unit: "$",
-        minKey:
-          "minBookValue",
-        maxKey:
-          "maxBookValue",
-        minPlaceholder:
-          "e.g. 5",
-        maxPlaceholder:
-          "e.g. 100",
+        minKey: "minBookValue",
+        maxKey: "maxBookValue",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 100",
       },
       {
         key: "fcfPerShare",
@@ -762,14 +801,10 @@ const METRIC_GROUPS = [
         desc:
           "Free cash flow generated per share after capital expenditures.",
         unit: "$",
-        minKey:
-          "minFcfPerShare",
-        maxKey:
-          "maxFcfPerShare",
-        minPlaceholder:
-          "e.g. 1",
-        maxPlaceholder:
-          "e.g. 50",
+        minKey: "minFcfPerShare",
+        maxKey: "maxFcfPerShare",
+        minPlaceholder: "e.g. 1",
+        maxPlaceholder: "e.g. 50",
       },
     ],
   },
@@ -777,8 +812,7 @@ const METRIC_GROUPS = [
 
 const ALL_METRIC_DEFS =
   METRIC_GROUPS.flatMap(
-    (group) =>
-      group.metrics
+    (group) => group.metrics,
   );
 
 export default function Screener() {
@@ -790,10 +824,12 @@ export default function Screener() {
 
   const [filters, setFilters] =
     useState(() =>
-      readSessionObject(
-        "screener_filters",
-        {}
-      )
+      normalizeFilters(
+        readSessionObject(
+          "screener_filters",
+          {},
+        ),
+      ),
     );
 
   const [
@@ -804,9 +840,9 @@ export default function Screener() {
       new Set(
         readSessionObject(
           "screener_metrics",
-          []
-        )
-      )
+          [],
+        ),
+      ),
   );
 
   const [
@@ -847,11 +883,20 @@ export default function Screener() {
   const toastTimerRef =
     useRef(null);
 
+  const selectedSectors =
+    useMemo(
+      () =>
+        getSelectedSectors(
+          filters,
+        ),
+      [filters],
+    );
+
   const showToast =
     useCallback(
       (message) => {
         window.clearTimeout(
-          toastTimerRef.current
+          toastTimerRef.current,
         );
 
         setToast(message);
@@ -861,16 +906,16 @@ export default function Screener() {
             () => {
               setToast(null);
             },
-            2500
+            2500,
           );
       },
-      []
+      [],
     );
 
   useEffect(() => {
     return () => {
       window.clearTimeout(
-        toastTimerRef.current
+        toastTimerRef.current,
       );
     };
   }, []);
@@ -879,9 +924,7 @@ export default function Screener() {
     useCallback(
       async () => {
         if (!user?.id) {
-          setSavedScreens(
-            []
-          );
+          setSavedScreens([]);
 
           return;
         }
@@ -891,35 +934,34 @@ export default function Screener() {
           error,
         } = await supabase
           .from(
-            "saved_screens"
+            "saved_screens",
           )
           .select("*")
           .eq(
             "user_id",
-            user.id
+            user.id,
           )
           .order(
             "created_at",
             {
-              ascending:
-                false,
-            }
+              ascending: false,
+            },
           );
 
         if (error) {
           console.error(
             "Failed to load saved screens:",
-            error
+            error,
           );
 
           return;
         }
 
         setSavedScreens(
-          data || []
+          data || [],
         );
       },
-      [user?.id]
+      [user?.id],
     );
 
   useEffect(() => {
@@ -931,8 +973,8 @@ export default function Screener() {
       window.sessionStorage.setItem(
         "screener_filters",
         JSON.stringify(
-          filters
-        )
+          filters,
+        ),
       );
     } catch {
       // Session storage is optional.
@@ -945,50 +987,40 @@ export default function Screener() {
         "screener_metrics",
         JSON.stringify([
           ...activeMetrics,
-        ])
+        ]),
       );
     } catch {
       // Session storage is optional.
     }
   }, [activeMetrics]);
 
-  const toggleMetric = (
-    key
-  ) => {
+  const toggleMetric = (key) => {
     const currentlyActive =
       activeMetrics.has(key);
 
     setActiveMetrics(
       (previous) => {
         const next =
-          new Set(
-            previous
-          );
+          new Set(previous);
 
-        if (
-          next.has(key)
-        ) {
+        if (next.has(key)) {
           next.delete(key);
         } else {
           next.add(key);
         }
 
         return next;
-      }
+      },
     );
 
-    if (
-      currentlyActive
-    ) {
+    if (currentlyActive) {
       const definition =
         ALL_METRIC_DEFS.find(
           (item) =>
-            item.key === key
+            item.key === key,
         );
 
-      if (
-        definition
-      ) {
+      if (definition) {
         setFilters(
           (previous) => {
             const next = {
@@ -996,55 +1028,167 @@ export default function Screener() {
             };
 
             delete next[
-              definition
-                .minKey
+              definition.minKey
             ];
 
             delete next[
-              definition
-                .maxKey
+              definition.maxKey
             ];
 
             return next;
-          }
+          },
         );
       }
     }
+
+    setActivePreset(null);
   };
 
-  const runScreen =
-    async (
-      overrideFilters
-    ) => {
-      if (
-        !user?.id ||
-        loading
-      ) {
-        if (
-          !user?.id
-        ) {
-          showToast(
-            "Please sign in to run a screen."
+  const clearSectors = () => {
+    setFilters(
+      (previous) => {
+        const next = {
+          ...previous,
+        };
+
+        delete next.sectors;
+        delete next.sector;
+
+        return next;
+      },
+    );
+
+    setActivePreset(null);
+  };
+
+  const toggleSector = (sector) => {
+    setFilters(
+      (previous) => {
+        const current =
+          getSelectedSectors(
+            previous,
           );
+
+        const nextSectors =
+          current.includes(
+            sector,
+          )
+            ? current.filter(
+                (item) =>
+                  item !== sector,
+              )
+            : [
+                ...current,
+                sector,
+              ];
+
+        const next = {
+          ...previous,
+        };
+
+        delete next.sector;
+
+        if (
+          nextSectors.length > 0
+        ) {
+          next.sectors =
+            nextSectors;
+        } else {
+          delete next.sectors;
         }
 
-        return;
+        return next;
+      },
+    );
+
+    setActivePreset(null);
+  };
+
+  const runScreen = async (
+    overrideFilters,
+  ) => {
+    if (
+      !user?.id ||
+      loading
+    ) {
+      if (!user?.id) {
+        showToast(
+          "Please sign in to run a screen.",
+        );
       }
 
-      const selectedFilters =
-        removeUndefinedValues(
-          overrideFilters ??
-            filters
+      return;
+    }
+
+    const selectedFilters =
+      normalizeFilters(
+        overrideFilters ??
+          filters,
+      );
+
+    setLoading(true);
+
+    try {
+      window.sessionStorage.setItem(
+        "screener_filters",
+        JSON.stringify(
+          selectedFilters,
+        ),
+      );
+    } catch {
+      // Session storage is optional.
+    }
+
+    navigate(
+      "/screener/results",
+      {
+        state: {
+          loading: true,
+          results: [],
+          filters:
+            selectedFilters,
+        },
+      },
+    );
+
+    try {
+      const {
+        data,
+        error,
+      } =
+        await supabase.functions.invoke(
+          "stock-screener",
+          {
+            body: {
+              filters:
+                selectedFilters,
+            },
+          },
         );
 
-      setLoading(true);
+      if (error) {
+        throw error;
+      }
+
+      if (data?.error) {
+        throw new Error(
+          data.error,
+        );
+      }
+
+      const results =
+        Array.isArray(
+          data?.stocks,
+        )
+          ? data.stocks
+          : [];
 
       try {
         window.sessionStorage.setItem(
-          "screener_filters",
+          "screener_last_results",
           JSON.stringify(
-            selectedFilters
-          )
+            results,
+          ),
         );
       } catch {
         // Session storage is optional.
@@ -1053,119 +1197,53 @@ export default function Screener() {
       navigate(
         "/screener/results",
         {
+          replace: true,
           state: {
-            loading: true,
+            loading: false,
+            results,
+            filters:
+              selectedFilters,
+            error: "",
+          },
+        },
+      );
+    } catch (error) {
+      console.error(
+        "Stock screener failed:",
+        error,
+      );
+
+      navigate(
+        "/screener/results",
+        {
+          replace: true,
+          state: {
+            loading: false,
             results: [],
             filters:
               selectedFilters,
+            error:
+              error?.message ||
+              "Unable to run the stock screen.",
           },
-        }
+        },
       );
-
-      try {
-        const {
-          data,
-          error,
-        } =
-          await supabase.functions.invoke(
-            "stock-screener",
-            {
-              body: {
-                filters:
-                  selectedFilters,
-              },
-            }
-          );
-
-        if (
-          error
-        ) {
-          throw error;
-        }
-
-        if (
-          data?.error
-        ) {
-          throw new Error(
-            data.error
-          );
-        }
-
-        const results =
-          Array.isArray(
-            data?.stocks
-          )
-            ? data.stocks
-            : [];
-
-        try {
-          window.sessionStorage.setItem(
-            "screener_last_results",
-            JSON.stringify(
-              results
-            )
-          );
-        } catch {
-          // Session storage is optional.
-        }
-
-        navigate(
-          "/screener/results",
-          {
-            replace: true,
-            state: {
-              loading:
-                false,
-              results,
-              filters:
-                selectedFilters,
-              error: "",
-            },
-          }
-        );
-      } catch (error) {
-        console.error(
-          "Stock screener failed:",
-          error
-        );
-
-        navigate(
-          "/screener/results",
-          {
-            replace: true,
-            state: {
-              loading:
-                false,
-              results: [],
-              filters:
-                selectedFilters,
-              error:
-                error?.message ||
-                "Unable to run the stock screen.",
-            },
-          }
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const applyPreset = (
     preset,
-    index
+    index,
   ) => {
     const presetFilters =
-      removeUndefinedValues(
-        preset.filters
+      normalizeFilters(
+        preset.filters,
       );
 
-    setActivePreset(
-      index
-    );
-
-    setFilters(
-      presetFilters
-    );
+    setActivePreset(index);
+    setFilters(presetFilters);
 
     const metricKeys =
       new Set();
@@ -1175,148 +1253,139 @@ export default function Screener() {
         if (
           presetFilters[
             definition.minKey
-          ] !==
-            undefined ||
+          ] !== undefined ||
           presetFilters[
             definition.maxKey
-          ] !==
-            undefined
+          ] !== undefined
         ) {
           metricKeys.add(
-            definition.key
+            definition.key,
           );
         }
-      }
+      },
     );
 
     setActiveMetrics(
-      metricKeys
+      metricKeys,
     );
 
     void runScreen(
-      presetFilters
+      presetFilters,
     );
   };
 
-  const saveScreen =
-    async () => {
-      const trimmedName =
-        saveName.trim();
+  const saveScreen = async () => {
+    const trimmedName =
+      saveName.trim();
 
-      if (
-        !trimmedName ||
-        !user?.id ||
-        saving
-      ) {
-        return;
+    if (
+      !trimmedName ||
+      !user?.id ||
+      saving
+    ) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from(
+          "saved_screens",
+        )
+        .insert({
+          user_id:
+            user.id,
+          name:
+            trimmedName,
+          filters:
+            normalizeFilters(
+              filters,
+            ),
+          active_metrics: [
+            ...activeMetrics,
+          ],
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
       }
 
-      setSaving(true);
-
-      try {
-        const {
+      setSavedScreens(
+        (previous) => [
           data,
-          error,
-        } = await supabase
-          .from(
-            "saved_screens"
-          )
-          .insert({
-            user_id:
-              user.id,
-            name:
-              trimmedName,
-            filters:
-              removeUndefinedValues(
-                filters
-              ),
-            active_metrics: [
-              ...activeMetrics,
-            ],
-          })
-          .select()
-          .single();
+          ...previous,
+        ],
+      );
 
-        if (
-          error
-        ) {
-          throw error;
-        }
+      setSaveDialogOpen(
+        false,
+      );
 
-        setSavedScreens(
-          (previous) => [
-            data,
-            ...previous,
-          ]
-        );
+      setSaveName("");
 
-        setSaveDialogOpen(
-          false
-        );
+      showToast(
+        "Screen saved!",
+      );
+    } catch (error) {
+      console.error(
+        "Failed to save screen:",
+        error,
+      );
 
-        setSaveName("");
-
-        showToast(
-          "Screen saved!"
-        );
-      } catch (error) {
-        console.error(
-          "Failed to save screen:",
-          error
-        );
-
-        showToast(
-          error?.message ||
-            "Failed to save screen."
-        );
-      } finally {
-        setSaving(false);
-      }
-    };
+      showToast(
+        error?.message ||
+          "Failed to save screen.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const loadSavedScreen = (
-    screen
+    screen,
   ) => {
     const savedFilters =
-      removeUndefinedValues(
+      normalizeFilters(
         screen?.filters ||
-          {}
+          {},
       );
 
     const savedMetrics =
       new Set(
         screen?.active_metrics ||
           screen?.activeMetrics ||
-          []
+          [],
       );
 
     setFilters(
-      savedFilters
+      savedFilters,
     );
 
     setActiveMetrics(
-      savedMetrics
+      savedMetrics,
     );
 
-    setActivePreset(
-      null
-    );
+    setActivePreset(null);
 
     void runScreen(
-      savedFilters
+      savedFilters,
     );
   };
 
   const deleteSavedScreen =
     async (
       id,
-      event
+      event,
     ) => {
       event.stopPropagation();
 
-      if (
-        !user?.id
-      ) {
+      if (!user?.id) {
         return;
       }
 
@@ -1327,48 +1396,45 @@ export default function Screener() {
         (current) =>
           current.filter(
             (screen) =>
-              screen.id !==
-              id
-          )
+              screen.id !== id,
+          ),
       );
 
       const {
         error,
       } = await supabase
         .from(
-          "saved_screens"
+          "saved_screens",
         )
         .delete()
         .eq(
           "id",
-          id
+          id,
         )
         .eq(
           "user_id",
-          user.id
+          user.id,
         );
 
-      if (
-        error
-      ) {
+      if (error) {
         console.error(
           "Failed to delete saved screen:",
-          error
+          error,
         );
 
         setSavedScreens(
-          previous
+          previous,
         );
 
         showToast(
-          "Failed to delete screen."
+          "Failed to delete screen.",
         );
       }
     };
 
   const updateNumberFilter = (
     key,
-    rawValue
+    rawValue,
   ) => {
     setFilters(
       (previous) => {
@@ -1376,19 +1442,15 @@ export default function Screener() {
           ...previous,
         };
 
-        if (
-          rawValue === ""
-        ) {
+        if (rawValue === "") {
           delete next[key];
         } else {
           const value =
-            Number(
-              rawValue
-            );
+            Number(rawValue);
 
           if (
             Number.isFinite(
-              value
+              value,
             )
           ) {
             next[key] =
@@ -1397,12 +1459,10 @@ export default function Screener() {
         }
 
         return next;
-      }
+      },
     );
 
-    setActivePreset(
-      null
-    );
+    setActivePreset(null);
   };
 
   return (
@@ -1459,7 +1519,7 @@ export default function Screener() {
             {POPULAR_SCREENS.map(
               (
                 preset,
-                index
+                index,
               ) => (
                 <FilterChip
                   key={
@@ -1475,11 +1535,11 @@ export default function Screener() {
                   onClick={() =>
                     applyPreset(
                       preset,
-                      index
+                      index,
                     )
                   }
                 />
-              )
+              ),
             )}
           </div>
 
@@ -1503,7 +1563,7 @@ export default function Screener() {
                         type="button"
                         onClick={() =>
                           loadSavedScreen(
-                            screen
+                            screen,
                           )
                         }
                         className="whitespace-nowrap text-xs font-medium"
@@ -1517,11 +1577,11 @@ export default function Screener() {
                         type="button"
                         aria-label={`Delete ${screen.name}`}
                         onClick={(
-                          event
+                          event,
                         ) =>
                           deleteSavedScreen(
                             screen.id,
-                            event
+                            event,
                           )
                         }
                         className="p-0.5 text-muted-foreground transition-colors hover:text-red-500"
@@ -1529,7 +1589,7 @@ export default function Screener() {
                         <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
-                  )
+                  ),
                 )}
               </div>
             </div>
@@ -1549,34 +1609,19 @@ export default function Screener() {
 
           <div>
             <Label className="mb-2 block text-xs text-gray-500">
-              Sector
+              Sector — choose one or more
             </Label>
 
             <div className="flex flex-wrap gap-2">
               <FilterChip
                 label="All"
                 active={
-                  !filters.sector
+                  selectedSectors.length ===
+                  0
                 }
-                onClick={() => {
-                  setFilters(
-                    (
-                      previous
-                    ) => {
-                      const next = {
-                        ...previous,
-                      };
-
-                      delete next.sector;
-
-                      return next;
-                    }
-                  );
-
-                  setActivePreset(
-                    null
-                  );
-                }}
+                onClick={
+                  clearSectors
+                }
               />
 
               {SECTORS.map(
@@ -1588,33 +1633,23 @@ export default function Screener() {
                     label={
                       sector
                     }
-                    active={
-                      filters.sector ===
-                      sector
+                    active={selectedSectors.includes(
+                      sector,
+                    )}
+                    onClick={() =>
+                      toggleSector(
+                        sector,
+                      )
                     }
-                    onClick={() => {
-                      setFilters(
-                        (
-                          previous
-                        ) => ({
-                          ...previous,
-                          sector,
-                        })
-                      );
-
-                      setActivePreset(
-                        null
-                      );
-                    }}
                   />
-                )
+                ),
               )}
             </div>
           </div>
 
           <div className="space-y-4">
             <Label className="block text-xs text-gray-500">
-              Metrics — tap to add a filter
+              Metrics — tap to add a filter · press and hold for a description
             </Label>
 
             {METRIC_GROUPS.map(
@@ -1633,7 +1668,7 @@ export default function Screener() {
                   <div className="flex flex-wrap gap-2">
                     {group.metrics.map(
                       (
-                        definition
+                        definition,
                       ) => (
                         <FilterChip
                           key={
@@ -1643,22 +1678,22 @@ export default function Screener() {
                             definition.label
                           }
                           active={activeMetrics.has(
-                            definition.key
+                            definition.key,
                           )}
                           onClick={() =>
                             toggleMetric(
-                              definition.key
+                              definition.key,
                             )
                           }
                           tooltip={
                             definition.desc
                           }
                         />
-                      )
+                      ),
                     )}
                   </div>
                 </div>
-              )
+              ),
             )}
           </div>
 
@@ -1672,8 +1707,8 @@ export default function Screener() {
               {ALL_METRIC_DEFS.filter(
                 (definition) =>
                   activeMetrics.has(
-                    definition.key
-                  )
+                    definition.key,
+                  ),
               ).map(
                 (definition) => (
                   <div
@@ -1710,17 +1745,15 @@ export default function Screener() {
                             filters[
                               definition
                                 .minKey
-                            ] ??
-                            ""
+                            ] ?? ""
                           }
                           onChange={(
-                            event
+                            event,
                           ) =>
                             updateNumberFilter(
                               definition.minKey,
-                              event
-                                .target
-                                .value
+                              event.target
+                                .value,
                             )
                           }
                           className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400"
@@ -1742,17 +1775,15 @@ export default function Screener() {
                             filters[
                               definition
                                 .maxKey
-                            ] ??
-                            ""
+                            ] ?? ""
                           }
                           onChange={(
-                            event
+                            event,
                           ) =>
                             updateNumberFilter(
                               definition.maxKey,
-                              event
-                                .target
-                                .value
+                              event.target
+                                .value,
                             )
                           }
                           className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400"
@@ -1760,7 +1791,7 @@ export default function Screener() {
                       </div>
                     </div>
                   </div>
-                )
+                ),
               )}
             </div>
           )}
@@ -1770,7 +1801,7 @@ export default function Screener() {
               className="flex-1"
               onClick={() => {
                 setActivePreset(
-                  null
+                  null,
                 );
 
                 void runScreen();
@@ -1795,12 +1826,10 @@ export default function Screener() {
                 loading
               }
               onClick={() => {
-                setSaveName(
-                  ""
-                );
+                setSaveName("");
 
                 setSaveDialogOpen(
-                  true
+                  true,
                 );
               }}
             >
@@ -1854,15 +1883,15 @@ export default function Screener() {
                   saveName
                 }
                 onChange={(
-                  event
+                  event,
                 ) =>
                   setSaveName(
                     event.target
-                      .value
+                      .value,
                   )
                 }
                 onKeyDown={(
-                  event
+                  event,
                 ) => {
                   if (
                     event.key ===
