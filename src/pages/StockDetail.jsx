@@ -1,124 +1,281 @@
-import React, { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Loader2,
+  Newspaper,
+  Plus,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, TrendingUp, TrendingDown, RefreshCw, Newspaper, Plus, X } from "lucide-react";
-import { LineChart, Line, ResponsiveContainer, Tooltip, YAxis, XAxis } from "recharts";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { motion } from "framer-motion";
 
-// ---------- Constants ----------
-const PERIODS = ["1D", "1W", "1M", "3M", "6M", "YTD", "1Y", "2Y", "5Y", "10Y", "All"];
+const PERIODS = [
+  "1D",
+  "1W",
+  "1M",
+  "3M",
+  "6M",
+  "YTD",
+  "1Y",
+  "2Y",
+  "5Y",
+  "10Y",
+  "All",
+];
+
 const PERIOD_CONFIG = {
-  "1D": { resolution: "5",  daysBack: 1 },
+  "1D": { resolution: "5", daysBack: 1 },
   "1W": { resolution: "60", daysBack: 7 },
-  "1M": { resolution: "D",  daysBack: 30 },
-  "3M": { resolution: "D",  daysBack: 90 },
-  "6M": { resolution: "W",  daysBack: 180 },
-  "YTD": { resolution: "W", daysBack: null },
-  "1Y": { resolution: "W",  daysBack: 365 },
-  "2Y": { resolution: "W",  daysBack: 730 },
-  "5Y": { resolution: "M",  daysBack: 1825 },
+  "1M": { resolution: "D", daysBack: 30 },
+  "3M": { resolution: "D", daysBack: 90 },
+  "6M": { resolution: "D", daysBack: 180 },
+  YTD: { resolution: "D", daysBack: null },
+  "1Y": { resolution: "D", daysBack: 365 },
+  "2Y": { resolution: "W", daysBack: 730 },
+  "5Y": { resolution: "W", daysBack: 1825 },
   "10Y": { resolution: "M", daysBack: 3650 },
-  "All": { resolution: "M", daysBack: 5475 },
+  All: { resolution: "M", daysBack: 7300 },
 };
 
-// ---------- Finnhub proxy helper ----------
-async function finnhubProxy(body) {
-  const res = await fetch("/api/finnhub", {
+async function finnhubProxy(body, signal) {
+  const response = await fetch("/api/finnhub", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || `API request failed with status ${response.status}`
+    );
+  }
+
+  return payload;
 }
 
-// ---------- Chart data helpers ----------
-async function fetchChartData(ticker, period, basePrice) {
-  try {
-    const cfg = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
-    const to = Math.floor(Date.now() / 1000);
-    let from;
-    if (period === "YTD") {
-      const jan1 = new Date(new Date().getFullYear(), 0, 1);
-      from = Math.floor(jan1.getTime() / 1000);
-    } else {
-      from = to - cfg.daysBack * 86400;
-    }
-    const data = await finnhubProxy({
+function getPeriodBounds(period) {
+  const config = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
+  const to = Math.floor(Date.now() / 1000);
+
+  if (period === "YTD") {
+    const now = new Date();
+    const from = Math.floor(
+      new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0).getTime() / 1000
+    );
+    return { from, to, resolution: config.resolution };
+  }
+
+  return {
+    from: to - config.daysBack * 86400,
+    to,
+    resolution: config.resolution,
+  };
+}
+
+function formatChartLabel(timestamp, period) {
+  const date = new Date(timestamp * 1000);
+
+  if (period === "1D") {
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+
+  if (["1W", "1M", "3M", "6M", "YTD"].includes(period)) {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+function getTimestampKey(timestamp, period) {
+  const date = new Date(timestamp * 1000);
+
+  if (period === "1D") {
+    const minutes = date.getUTCMinutes();
+    const bucketMinutes = Math.floor(minutes / 5) * 5;
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours(),
+      bucketMinutes
+    );
+  }
+
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  );
+}
+
+async function fetchChartData(ticker, period, signal) {
+  const { from, to, resolution } = getPeriodBounds(period);
+
+  const result = await finnhubProxy(
+    {
       action: "candles_range",
       ticker,
-      resolution: cfg.resolution,
+      resolution,
       from,
       to,
-    });
-    const candles = data?.candles;
-    if (candles?.length > 0) {
-      // Ensure chronological order (oldest first)
-      candles.sort((a, b) => a.t - b.t);
-      return candles.map(c => {
-        const d = new Date(c.t * 1000);
-        const label = (period === "1D")
-          ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-          : (period === "1W" || period === "1M" || period === "3M")
-            ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-            : d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        return { label, [ticker]: c.v };
-      });
-    }
-  } catch {}
-  return buildFallbackData(ticker, period, basePrice);
-}
+    },
+    signal
+  );
 
-function buildFallbackData(ticker, period, basePrice) {
-  const now = new Date();
-  const ytdDays = Math.floor((now - new Date(now.getFullYear(), 0, 1)) / 86400000);
-  const pointsMap = { "1D": 12, "1W": 7, "1M": 20, "3M": 12, "6M": 12, "YTD": Math.max(4, Math.floor(ytdDays / 7)), "1Y": 12, "2Y": 12, "5Y": 10, "10Y": 10, "All": 10 };
-  const msMap = { "1D": 1, "1W": 7, "1M": 30, "3M": 90, "6M": 180, "YTD": ytdDays, "1Y": 365, "2Y": 730, "5Y": 1825, "10Y": 3650, "All": 5475 };
-  const n = pointsMap[period] || 12;
-  const seed = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const totalDays = msMap[period] || 30;
-  const drift = ((seed % 200) - 100) / 10000;
-  const data = [];
-  let price = basePrice * (1 - drift * n * 0.5);
-  for (let i = 0; i <= n; i++) {
-    const noise = (Math.sin(seed * (i + 1) * 1.3) * 0.012 + Math.cos(seed * i * 0.7) * 0.008) * price;
-    price = Math.max(price * (1 + drift) + noise, basePrice * 0.2);
-    const d = new Date(now.getTime() - ((n - i) / n) * totalDays * 86400000);
-    const label = period === "1D"
-      ? d.toLocaleTimeString("en-US", { hour: "numeric", hour12: true })
-      : (period === "1W" || period === "1M" || period === "3M" || period === "6M" || period === "YTD")
-        ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-        : d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-    data.push({ label, [ticker]: Math.round(price * 100) / 100 });
+  const candles = Array.isArray(result?.candles) ? result.candles : [];
+
+  const points = candles
+    .map((candle) => ({
+      timestamp: Number(candle?.t),
+      value: Number(candle?.v),
+    }))
+    .filter(
+      (point) =>
+        Number.isFinite(point.timestamp) && Number.isFinite(point.value)
+    )
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  if (points.length < 2) {
+    throw new Error(`No chart data returned for ${ticker} (${period})`);
   }
-  return data;
-}
 
-function mergeChartData(primary, secondary, compareTicker) {
-  return primary.map((point, i) => ({
-    ...point,
-    ...(secondary[i] ? { [compareTicker]: secondary[i][compareTicker] } : {})
+  return points.map((point) => ({
+    timestamp: point.timestamp,
+    key: getTimestampKey(point.timestamp, period),
+    label: formatChartLabel(point.timestamp, period),
+    value: point.value,
   }));
 }
 
-function normalizeData(data, ticker, compareTicker) {
-  const base1 = data[0]?.[ticker];
-  const base2 = data[0]?.[compareTicker];
-  return data.map(d => ({
-    label: d.label,
-    [ticker]: base1 ? Math.round(((d[ticker] - base1) / base1) * 10000) / 100 : null,
-    ...(base2 && d[compareTicker] != null
-      ? { [compareTicker]: Math.round(((d[compareTicker] - base2) / base2) * 10000) / 100 }
-      : {}),
+function mergeComparisonData(primary, comparison) {
+  const comparisonMap = new Map(
+    comparison.map((point) => [point.key, point.value])
+  );
+
+  const merged = primary
+    .map((point) => ({
+      ...point,
+      comparisonValue: comparisonMap.get(point.key) ?? null,
+    }))
+    .filter(
+      (point) =>
+        Number.isFinite(point.value) &&
+        Number.isFinite(point.comparisonValue)
+    );
+
+  if (merged.length < 2) {
+    return [];
+  }
+
+  const primaryBase = merged[0].value;
+  const comparisonBase = merged[0].comparisonValue;
+
+  if (
+    !Number.isFinite(primaryBase) ||
+    primaryBase === 0 ||
+    !Number.isFinite(comparisonBase) ||
+    comparisonBase === 0
+  ) {
+    return [];
+  }
+
+  return merged.map((point) => ({
+    timestamp: point.timestamp,
+    label: point.label,
+    primaryReturn: ((point.value - primaryBase) / primaryBase) * 100,
+    comparisonReturn:
+      ((point.comparisonValue - comparisonBase) / comparisonBase) * 100,
   }));
 }
 
-// ---------- Chart Component ----------
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  compareTicker,
+  ticker,
+  periodStartPrice,
+}) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-lg">
+      <p className="mb-1 text-xs font-medium text-gray-500">{label}</p>
+
+      {payload.map((entry) => {
+        const value = Number(entry.value);
+        const isComparison = Boolean(compareTicker);
+        const growthPct = isComparison
+          ? value
+          : periodStartPrice > 0
+            ? ((value - periodStartPrice) / periodStartPrice) * 100
+            : 0;
+        const positive = growthPct >= 0;
+
+        return (
+          <div
+            key={entry.dataKey}
+            className="flex min-w-[150px] items-center justify-between gap-4 text-xs"
+          >
+            <span className="font-medium text-gray-600">
+              {entry.name || ticker}
+            </span>
+            <span className="font-semibold text-gray-900">
+              {isComparison
+                ? `${positive ? "+" : ""}${value.toFixed(2)}%`
+                : `$${value.toFixed(2)}`}
+              {!isComparison && (
+                <span
+                  className={`ml-2 ${
+                    positive ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  {positive ? "▲" : "▼"} {positive ? "+" : ""}
+                  {growthPct.toFixed(2)}%
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StockChart({ ticker, currentPrice, isPositive }) {
   const [activePeriod, setActivePeriod] = useState("1M");
   const [compareTicker, setCompareTicker] = useState("");
@@ -126,198 +283,342 @@ function StockChart({ ticker, currentPrice, isPositive }) {
   const [showInput, setShowInput] = useState(false);
   const [chartData, setChartData] = useState([]);
   const [chartLoading, setChartLoading] = useState(false);
-  const basePrice = currentPrice || 100;
+  const [chartError, setChartError] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-    setChartLoading(true);
-    const loadChart = async () => {
-      const primaryData = await fetchChartData(ticker, activePeriod, basePrice);
-      if (cancelled) return;
-      if (compareTicker) {
-        const compareBasePrice = 10 + (compareTicker.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 500);
-        const compareRaw = await fetchChartData(compareTicker, activePeriod, compareBasePrice);
-        if (cancelled) return;
-        const merged = mergeChartData(primaryData, compareRaw, compareTicker);
-        setChartData(normalizeData(merged, ticker, compareTicker));
-      } else {
-        setChartData(primaryData);
+    const controller = new AbortController();
+
+    async function loadChart() {
+      setChartLoading(true);
+      setChartError("");
+
+      try {
+        const primary = await fetchChartData(
+          ticker,
+          activePeriod,
+          controller.signal
+        );
+
+        if (compareTicker) {
+          const comparison = await fetchChartData(
+            compareTicker,
+            activePeriod,
+            controller.signal
+          );
+
+          const merged = mergeComparisonData(primary, comparison);
+
+          if (merged.length < 2) {
+            throw new Error(
+              `Could not align ${ticker} and ${compareTicker} chart dates`
+            );
+          }
+
+          setChartData(merged);
+        } else {
+          setChartData(
+            primary.map((point) => ({
+              timestamp: point.timestamp,
+              label: point.label,
+              primaryValue: point.value,
+            }))
+          );
+        }
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+
+        console.error("Chart load failed:", error);
+        setChartData([]);
+        setChartError(error?.message || "Unable to load chart data");
+      } finally {
+        if (!controller.signal.aborted) {
+          setChartLoading(false);
+        }
       }
-      setChartLoading(false);
-    };
+    }
+
     loadChart();
-    return () => { cancelled = true; };
-  }, [ticker, activePeriod, compareTicker, basePrice]);
+
+    return () => controller.abort();
+  }, [ticker, activePeriod, compareTicker]);
+
+  const periodStartPrice = useMemo(() => {
+    if (compareTicker) return 0;
+    return (
+      chartData.find((point) => Number.isFinite(point.primaryValue))
+        ?.primaryValue ||
+      currentPrice ||
+      0
+    );
+  }, [chartData, compareTicker, currentPrice]);
 
   const primaryColor = isPositive ? "#10b981" : "#ef4444";
   const compareColor = "#6366f1";
 
-  const handleAddCompare = (e) => {
-    e.preventDefault();
-    const t = compareInput.trim().toUpperCase();
-    if (t && t !== ticker.toUpperCase()) {
-      setCompareTicker(t);
-    }
-    setShowInput(false);
-    setCompareInput("");
-  };
+  function handleAddCompare(event) {
+    event.preventDefault();
+    const normalized = compareInput.trim().toUpperCase();
 
-  const removeCompare = () => setCompareTicker("");
+    if (normalized && normalized !== ticker.toUpperCase()) {
+      setCompareTicker(normalized);
+    }
+
+    setCompareInput("");
+    setShowInput(false);
+  }
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-6">
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500">Price Chart</h2>
-          {compareTicker && (
-            <span className="inline-flex items-center gap-1 text-xs font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
-              vs {compareTicker}
-              <button onClick={removeCompare} className="ml-0.5 hover:text-indigo-900">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1 flex-wrap justify-start">
-          {PERIODS.map(p => (
+    <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h2 className="mr-2 text-base font-semibold text-gray-900">
+          Price Chart
+        </h2>
+
+        {compareTicker && (
+          <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-600">
+            {ticker} vs {compareTicker}
+          </span>
+        )}
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-1">
+        {PERIODS.map((period) => (
+          <button
+            key={period}
+            type="button"
+            onClick={() => setActivePeriod(period)}
+            className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              activePeriod === period
+                ? "bg-gray-900 text-white"
+                : "text-gray-500 hover:bg-gray-100"
+            }`}
+          >
+            {period}
+          </button>
+        ))}
+
+        {!compareTicker && !showInput && (
+          <button
+            type="button"
+            onClick={() => setShowInput(true)}
+            className="ml-auto inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+          >
+            <Plus className="h-3 w-3" />
+            Compare
+          </button>
+        )}
+
+        {showInput && (
+          <form
+            onSubmit={handleAddCompare}
+            className="ml-auto flex items-center gap-1"
+          >
+            <Input
+              value={compareInput}
+              onChange={(event) =>
+                setCompareInput(event.target.value.toUpperCase())
+              }
+              placeholder="TICKER"
+              className="h-7 w-24 px-2 text-xs uppercase"
+              maxLength={8}
+              autoFocus
+            />
+            <Button type="submit" size="sm" className="h-7 px-2 text-xs">
+              Add
+            </Button>
             <button
-              key={p}
-              onClick={() => setActivePeriod(p)}
-              className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${activePeriod === p ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+              type="button"
+              onClick={() => {
+                setShowInput(false);
+                setCompareInput("");
+              }}
+              className="text-gray-400 hover:text-gray-900"
+              aria-label="Cancel comparison"
             >
-              {p}
+              <X className="h-4 w-4" />
             </button>
-          ))}
-          {!compareTicker && !showInput && (
-            <button
-              onClick={() => setShowInput(true)}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-900 transition-colors px-2.5 py-1 rounded-md hover:bg-gray-100 ml-auto"
-            >
-              <Plus className="w-3 h-3" />Compare
-            </button>
-          )}
-          {showInput && (
-            <form onSubmit={handleAddCompare} className="flex items-center gap-1 ml-1">
-              <Input
-                autoFocus
-                value={compareInput}
-                onChange={e => setCompareInput(e.target.value.toUpperCase())}
-                placeholder="TICKER"
-                className="h-7 w-24 text-xs uppercase px-2"
-                maxLength={8}
-              />
-              <Button type="submit" size="sm" className="h-7 px-2 text-xs">Add</Button>
-              <button type="button" onClick={() => { setShowInput(false); setCompareInput(""); }} className="text-gray-400 hover:text-gray-900">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          )}
-        </div>
+          </form>
+        )}
+
+        {compareTicker && (
+          <button
+            type="button"
+            onClick={() => setCompareTicker("")}
+            className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+          >
+            <X className="h-3.5 w-3.5" />
+            Remove comparison
+          </button>
+        )}
       </div>
 
       {compareTicker && (
-        <p className="text-[10px] text-gray-400 mb-3">Showing % return — both tickers indexed to 100 at period start</p>
+        <p className="mb-2 text-xs text-gray-400">
+          Showing percentage return from the first shared trading date.
+        </p>
       )}
 
-      <div className="h-48 w-full relative">
+      <div className="relative h-[300px] w-full">
         {chartLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70 z-10 rounded-xl">
-            <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
           </div>
         )}
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} key={activePeriod + compareTicker}>
-            <YAxis
-              domain={["auto", "auto"]}
-              tickFormatter={v => compareTicker ? `${v.toFixed(0)}%` : `$${v.toFixed(0)}`}
-              tick={{ fontSize: 10, fill: "#9ca3af" }}
-              tickLine={false}
-              axisLine={false}
-              width={42}
-            />
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 10, fill: "#9ca3af" }}
-              tickLine={false}
-              axisLine={false}
-              interval="preserveStartEnd"
-            />
-            <Tooltip
-              content={({ active, payload, label }) => {
-                if (!active || !payload?.length) return null;
-                return (
-                  <div className="bg-white border border-gray-200 shadow-lg rounded-xl px-4 py-3 font-body min-w-[110px]">
-                    <p className="text-[10px] font-medium text-gray-400 mb-2 uppercase tracking-wider">{label}</p>
-                    {payload.map(p => {
-                      const growthPct = compareTicker
-                        ? p.value
-                        : basePrice > 0 ? ((p.value - basePrice) / basePrice) * 100 : 0;
-                      const isPos = growthPct >= 0;
-                      return (
-                        <div key={p.dataKey} className="flex flex-col gap-1">
-                          <span className="text-base font-bold text-gray-900">
-                            {compareTicker ? `${p.value?.toFixed(2)}%` : `$${p.value?.toFixed(2)}`}
-                          </span>
-                          {!compareTicker && (
-                            <span className={`text-xs font-semibold ${isPos ? "text-emerald-600" : "text-red-500"}`}>
-                              {isPos ? "▲" : "▼"} {isPos ? "+" : ""}{growthPct.toFixed(2)}%
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              }}
-            />
-            <Line type="monotone" dataKey={ticker} stroke={primaryColor} strokeWidth={2} dot={false} animationDuration={800} />
-            {compareTicker && (
-              <Line type="monotone" dataKey={compareTicker} stroke={compareColor} strokeWidth={2} dot={false} strokeDasharray="4 2" animationDuration={800} />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
+
+        {chartError ? (
+          <div className="flex h-full items-center justify-center text-center">
+            <div>
+              <p className="text-sm font-semibold text-gray-700">
+                Chart unavailable
+              </p>
+              <p className="mt-1 max-w-md text-xs text-gray-400">
+                {chartError}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 8, bottom: 0, left: 0 }}
+            >
+              <XAxis
+                dataKey="label"
+                minTickGap={28}
+                tick={{ fontSize: 10, fill: "#9ca3af" }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                domain={["auto", "auto"]}
+                tickFormatter={(value) =>
+                  compareTicker ? `${value.toFixed(0)}%` : `$${value.toFixed(0)}`
+                }
+                tick={{ fontSize: 10, fill: "#9ca3af" }}
+                tickLine={false}
+                axisLine={false}
+                width={48}
+              />
+              <Tooltip
+                content={
+                  <ChartTooltip
+                    compareTicker={compareTicker}
+                    ticker={ticker}
+                    periodStartPrice={periodStartPrice}
+                  />
+                }
+              />
+
+              <Line
+                type="monotone"
+                dataKey={compareTicker ? "primaryReturn" : "primaryValue"}
+                name={ticker}
+                stroke={primaryColor}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+                isAnimationActive={false}
+                connectNulls={false}
+              />
+
+              {compareTicker && (
+                <Line
+                  type="monotone"
+                  dataKey="comparisonReturn"
+                  name={compareTicker}
+                  stroke={compareColor}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  isAnimationActive={false}
+                  connectNulls={false}
+                />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
-      {compareTicker && (
-        <div className="flex items-center gap-4 mt-3">
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-0.5 rounded" style={{ backgroundColor: primaryColor }} />
-            <span className="text-xs text-gray-500 font-medium">{ticker}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-0.5 rounded border-t-2 border-dashed" style={{ borderColor: compareColor }} />
-            <span className="text-xs text-gray-500 font-medium">{compareTicker}</span>
-          </div>
+      {compareTicker && !chartError && (
+        <div className="mt-3 flex items-center gap-5 text-xs text-gray-500">
+          <span className="font-medium">{ticker}</span>
+          <span className="font-medium">{compareTicker}</span>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-// ---------- Buy/Sell Dialogs (unchanged) ----------
 function BuyDetailDialog({ open, onOpenChange, stock, onDone }) {
   const [quantity, setQuantity] = useState("");
-  const [price, setPrice] = useState(stock?.current_price?.toFixed(2) || stock?.purchase_price?.toFixed(2) || "");
+  const [price, setPrice] = useState("");
   const [loading, setLoading] = useState(false);
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+
+  useEffect(() => {
+    if (open) {
+      setPrice(
+        stock?.current_price?.toFixed(2) ||
+          stock?.purchase_price?.toFixed(2) ||
+          ""
+      );
+    }
+  }, [open, stock]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const parsedQuantity = Number(quantity);
+    const parsedPrice = Number(price);
+
+    if (!(parsedQuantity > 0) || !(parsedPrice > 0)) return;
+
     setLoading(true);
-    await onDone(parseFloat(quantity), parseFloat(price));
-    setLoading(false);
-    setQuantity("");
-  };
+    try {
+      await onDone(parsedQuantity, parsedPrice);
+      setQuantity("");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle className="font-heading text-xl">Buy {stock?.ticker}</DialogTitle></DialogHeader>
-        <p className="text-sm text-gray-500 -mt-2">{stock?.company_name}</p>
-        <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Shares</Label><Input type="number" step="any" min="0.01" placeholder="10" value={quantity} onChange={e => setQuantity(e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Purchase Price</Label><Input type="number" step="any" min="0.01" placeholder="150.00" value={price} onChange={e => setPrice(e.target.value)} required /></div>
+        <DialogHeader>
+          <DialogTitle>Buy {stock?.ticker}</DialogTitle>
+        </DialogHeader>
+
+        <p className="text-sm text-gray-500">{stock?.company_name}</p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="buy-quantity">Shares</Label>
+            <Input
+              id="buy-quantity"
+              type="number"
+              min="0.000001"
+              step="any"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              required
+            />
           </div>
-          <Button type="submit" className="w-full" disabled={loading || !quantity || !price}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Buy
+
+          <div>
+            <Label htmlFor="buy-price">Purchase Price</Label>
+            <Input
+              id="buy-price"
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+              required
+            />
+          </div>
+
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Buy
           </Button>
         </form>
       </DialogContent>
@@ -328,29 +629,62 @@ function BuyDetailDialog({ open, onOpenChange, stock, onDone }) {
 function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
   const [quantity, setQuantity] = useState("");
   const [loading, setLoading] = useState(false);
-  const max = stock?.quantity || 0;
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const max = Number(stock?.quantity) || 0;
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const parsedQuantity = Number(quantity);
+
+    if (!(parsedQuantity > 0) || parsedQuantity > max) return;
+
     setLoading(true);
-    await onDone(parseFloat(quantity));
-    setLoading(false);
-    setQuantity("");
-  };
+    try {
+      await onDone(parsedQuantity);
+      setQuantity("");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader><DialogTitle className="font-heading text-xl">Sell {stock?.ticker}</DialogTitle></DialogHeader>
-        <p className="text-sm text-gray-500 -mt-2">{stock?.company_name} · {max} shares held</p>
-        <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-          <div className="space-y-2">
-            <Label>Shares to Sell</Label>
+        <DialogHeader>
+          <DialogTitle>Sell {stock?.ticker}</DialogTitle>
+        </DialogHeader>
+
+        <p className="text-sm text-gray-500">
+          {stock?.company_name} · {max} shares held
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="sell-quantity">Shares to Sell</Label>
             <div className="relative">
-              <Input type="number" step="any" min="0.01" max={max} placeholder="" value={quantity} onChange={e => setQuantity(e.target.value)} className="pr-12" required />
-              <button type="button" onClick={() => setQuantity(String(max))} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 hover:text-gray-900 transition-colors">all</button>
+              <Input
+                id="sell-quantity"
+                type="number"
+                min="0.000001"
+                max={max}
+                step="any"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                className="pr-12"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setQuantity(String(max))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 hover:text-gray-900"
+              >
+                all
+              </button>
             </div>
           </div>
-          <Button type="submit" className="w-full" disabled={loading || !quantity || parseFloat(quantity) <= 0}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Sell
+
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sell
           </Button>
         </form>
       </DialogContent>
@@ -358,335 +692,563 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
   );
 }
 
-// ---------- Key Metrics (unchanged) ----------
 function getStockMetrics(ticker, price) {
-  const s = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const p = price || 100;
-  const high52 = +(p * (1.05 + (s % 40) / 100)).toFixed(2);
-  const low52 = +(p * (0.6 + (s % 30) / 100)).toFixed(2);
-  const pe = +((12 + (s % 60) + (s * 3 % 10) / 10)).toFixed(1);
-  const eps = +(p / pe).toFixed(2);
-  const mktCapB = +((p * (5 + (s % 2000))) / 1000).toFixed(1);
-  const vol = ((s * 137) % 90 + 5) * 1000000;
-  const avgVol = ((s * 91) % 70 + 8) * 1000000;
-  const yield_ = s % 4 === 0 ? 0 : +((s % 400) / 100).toFixed(2);
-  const beta = +((0.5 + (s % 150) / 100)).toFixed(2);
-  const fmt = (n) => n >= 1e12 ? `$${(n / 1e12).toFixed(2)}T` : n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : `$${(n / 1e6).toFixed(0)}M`;
-  const fmtVol = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1e3).toFixed(0)}K`;
-  const ps = +((mktCapB * 1e9) / (p * (10 + (s % 500)) * 1e6)).toFixed(2);
-  const profitMargin = +((5 + (s % 60)) / 100).toFixed(3);
-  const de = +((0.1 + (s % 300) / 100)).toFixed(2);
+  const seed = ticker
+    .split("")
+    .reduce((total, character) => total + character.charCodeAt(0), 0);
+  const current = price || 100;
+  const high52 = +(current * (1.05 + (seed % 40) / 100)).toFixed(2);
+  const low52 = +(current * (0.6 + (seed % 30) / 100)).toFixed(2);
+  const pe = +((12 + (seed % 60) + ((seed * 3) % 10) / 10)).toFixed(1);
+  const eps = +(current / pe).toFixed(2);
+  const marketCapB = +((current * (5 + (seed % 2000))) / 1000).toFixed(1);
+  const volume = (((seed * 137) % 90) + 5) * 1_000_000;
+  const averageVolume = (((seed * 91) % 70) + 8) * 1_000_000;
+  const dividendYield = seed % 4 === 0 ? 0 : +((seed % 400) / 100).toFixed(2);
+  const beta = +(0.5 + (seed % 150) / 100).toFixed(2);
+  const priceToSales = +(
+    (marketCapB * 1e9) /
+    (current * (10 + (seed % 500)) * 1e6)
+  ).toFixed(2);
+  const profitMargin = +((5 + (seed % 60)) / 100).toFixed(3);
+  const debtToEquity = +(0.1 + (seed % 300) / 100).toFixed(2);
+
+  const formatMoney = (value) =>
+    value >= 1e12
+      ? `$${(value / 1e12).toFixed(2)}T`
+      : value >= 1e9
+        ? `$${(value / 1e9).toFixed(1)}B`
+        : `$${(value / 1e6).toFixed(0)}M`;
+
+  const formatVolume = (value) =>
+    value >= 1e6
+      ? `${(value / 1e6).toFixed(1)}M`
+      : `${(value / 1e3).toFixed(0)}K`;
+
   return [
-    { label: "Mkt Cap", value: fmt(mktCapB * 1e9) },
+    { label: "Mkt Cap", value: formatMoney(marketCapB * 1e9) },
     { label: "P/E", value: pe },
-    { label: "P/S", value: ps },
+    { label: "P/S", value: priceToSales },
     { label: "EPS", value: `$${eps}` },
     { label: "Beta", value: beta },
-    { label: "Volume", value: fmtVol(vol) },
-    { label: "Avg Vol", value: fmtVol(avgVol) },
+    { label: "Volume", value: formatVolume(volume) },
+    { label: "Avg Vol", value: formatVolume(averageVolume) },
     { label: "52W Low", value: `$${low52}` },
-    { label: "D/E", value: de },
-    { label: "Yield", value: yield_ > 0 ? `${yield_}%` : "—" },
-    { label: "Net Margin", value: `${(profitMargin * 100).toFixed(1)}%` },
+    { label: "D/E", value: debtToEquity },
+    {
+      label: "Yield",
+      value: dividendYield > 0 ? `${dividendYield}%` : "—",
+    },
+    {
+      label: "Net Margin",
+      value: `${(profitMargin * 100).toFixed(1)}%`,
+    },
     { label: "52W High", value: `$${high52}` },
   ];
 }
 
-// ---------- Main Component ----------
 export default function StockDetail() {
-  const { ticker } = useParams();
+  const { ticker: routeValue } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const [stock, setStock] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [news, setNews] = useState(null);
+  const [pageError, setPageError] = useState("");
+  const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
 
-  const isTickerRoute = ticker?.startsWith("ticker-");
-  const tickerFromRoute = isTickerRoute ? ticker.replace("ticker-", "").toUpperCase() : null;
-  const stockId = !isTickerRoute ? ticker : null;
+  const isTickerRoute = routeValue?.startsWith("ticker-");
+  const tickerFromRoute = isTickerRoute
+    ? routeValue.replace("ticker-", "").toUpperCase()
+    : null;
+  const stockId = isTickerRoute ? null : routeValue;
 
   useEffect(() => {
-    const load = async () => {
-      if (isTickerRoute) {
-        try {
-          const [quoteRes, profileRes] = await Promise.all([
-            finnhubProxy({ action: "quote", ticker: tickerFromRoute }),
-            finnhubProxy({ action: "profile", ticker: tickerFromRoute }),
+    const controller = new AbortController();
+
+    async function loadStock() {
+      setLoading(true);
+      setPageError("");
+
+      try {
+        if (isTickerRoute) {
+          const [quote, profile] = await Promise.all([
+            finnhubProxy(
+              { action: "quote", ticker: tickerFromRoute },
+              controller.signal
+            ),
+            finnhubProxy(
+              { action: "profile", ticker: tickerFromRoute },
+              controller.signal
+            ),
           ]);
+
           setStock({
             ticker: tickerFromRoute,
-            company_name: profileRes?.name || tickerFromRoute,
-            sector: profileRes?.finnhubIndustry || "",
-            logo_url: profileRes?.logo || "",
-            current_price: quoteRes?.c || 0,
-            purchase_price: quoteRes?.pc || quoteRes?.c || 0,
+            company_name: profile?.name || tickerFromRoute,
+            sector: profile?.finnhubIndustry || "",
+            logo_url: profile?.logo || "",
+            current_price: Number(quote?.c) || 0,
+            purchase_price: Number(quote?.pc || quote?.c) || 0,
             quantity: 0,
             _watchlistOnly: true,
           });
-        } catch {
-          setStock(null);
-        }
-      } else {
-        const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
-        if (data) {
-          setStock({ ...data, _watchlistOnly: false });
         } else {
-          setStock(null);
+          const { data, error } = await supabase
+            .from("stocks")
+            .select("*")
+            .eq("id", stockId)
+            .single();
+
+          if (error) throw error;
+          setStock(data ? { ...data, _watchlistOnly: false } : null);
         }
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        console.error("Stock detail load failed:", error);
+        setStock(null);
+        setPageError(error?.message || "Unable to load stock");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
       }
-      setLoading(false);
-    };
-    load();
-  }, [ticker, isTickerRoute, tickerFromRoute, stockId]);
+    }
+
+    loadStock();
+    return () => controller.abort();
+  }, [isTickerRoute, stockId, tickerFromRoute]);
 
   useEffect(() => {
-    if (!stock) return;
-    const fetchNews = async () => {
+    if (!stock?.ticker) return;
+
+    const controller = new AbortController();
+
+    async function loadNews() {
       setNewsLoading(true);
       try {
-        const result = await finnhubProxy({ action: "news", ticker: stock.ticker });
-        setNews(result?.articles || []);
-      } catch (e) {
-        console.warn("News fetch failed:", e);
-        setNews([]);
+        const result = await finnhubProxy(
+          { action: "news", ticker: stock.ticker },
+          controller.signal
+        );
+        setNews(Array.isArray(result?.articles) ? result.articles : []);
+      } catch (error) {
+        if (error?.name !== "AbortError") {
+          console.warn("News fetch failed:", error);
+          setNews([]);
+        }
+      } finally {
+        if (!controller.signal.aborted) setNewsLoading(false);
       }
-      setNewsLoading(false);
-    };
-    fetchNews();
-  }, [stock]);
+    }
 
-  const handleBuyDone = async (qty, price) => {
-    if (!user) return;
-    const newQty = stock.quantity + qty;
-    const newAvgCost = stock.quantity ? ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty : price;
-    setStock(prev => ({ ...prev, quantity: newQty, purchase_price: +newAvgCost.toFixed(4) }));
-    setBuyOpen(false);
-    let currentPrice = price;
+    loadNews();
+    return () => controller.abort();
+  }, [stock?.ticker]);
+
+  async function refreshNews() {
+    if (!stock?.ticker) return;
+
+    setNewsLoading(true);
     try {
-      const res = await finnhubProxy({ action: "quote", ticker: stock.ticker });
-      if (res?.c) currentPrice = res.c;
-    } catch {}
-    await supabase.from("stock_transactions").insert({
-      user_id: user.id,
-      ticker: stock.ticker.toUpperCase(),
-      company_name: stock.company_name,
-      type: "buy",
-      quantity: qty,
-      price,
-      total: qty * price,
-    }).catch(err => console.warn("Transaction log failed:", err));
-    if (stock._watchlistOnly) {
-      const { error } = await supabase.from("stocks").insert({
+      const result = await finnhubProxy({
+        action: "news",
+        ticker: stock.ticker,
+      });
+      setNews(Array.isArray(result?.articles) ? result.articles : []);
+    } catch (error) {
+      console.warn("News refresh failed:", error);
+      setNews([]);
+    } finally {
+      setNewsLoading(false);
+    }
+  }
+
+  async function handleBuyDone(quantity, price) {
+    if (!user || !stock) return;
+
+    const oldQuantity = Number(stock.quantity) || 0;
+    const oldAverageCost = Number(stock.purchase_price) || 0;
+    const newQuantity = oldQuantity + quantity;
+    const newAverageCost = oldQuantity
+      ? (oldAverageCost * oldQuantity + price * quantity) / newQuantity
+      : price;
+
+    let currentPrice = price;
+
+    try {
+      const quote = await finnhubProxy({
+        action: "quote",
+        ticker: stock.ticker,
+      });
+      if (Number(quote?.c) > 0) currentPrice = Number(quote.c);
+    } catch (error) {
+      console.warn("Quote refresh failed during buy:", error);
+    }
+
+    const { error: transactionError } = await supabase
+      .from("stock_transactions")
+      .insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
         company_name: stock.company_name,
-        quantity: qty,
-        purchase_price: price,
-        current_price: currentPrice,
-        sector: stock.sector || "",
+        type: "buy",
+        quantity,
+        price,
+        total: quantity * price,
       });
-      if (error) {
-        setStock(prev => ({ ...prev, quantity: 0, purchase_price: price }));
-        return;
-      }
-    } else {
-      await supabase.from("stocks").update({
-        quantity: newQty,
-        purchase_price: +newAvgCost.toFixed(4),
-        current_price: currentPrice,
-      }).eq("id", stockId);
-      const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
-      if (data) setStock({ ...data, _watchlistOnly: false });
-    }
-  };
 
-  const handleSellDone = async (qty) => {
-    if (!user) return;
-    const sellPrice = stock.current_price || stock.purchase_price;
-    const remainingQty = parseFloat((stock.quantity - qty).toFixed(6));
-    if (qty >= stock.quantity) {
+    if (transactionError) {
+      console.warn("Transaction log failed:", transactionError);
+    }
+
+    if (stock._watchlistOnly) {
+      const { data, error } = await supabase
+        .from("stocks")
+        .insert({
+          user_id: user.id,
+          ticker: stock.ticker.toUpperCase(),
+          company_name: stock.company_name,
+          quantity,
+          purchase_price: price,
+          current_price: currentPrice,
+          sector: stock.sector || "",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setStock({ ...data, _watchlistOnly: false });
+      setBuyOpen(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("stocks")
+      .update({
+        quantity: newQuantity,
+        purchase_price: +newAverageCost.toFixed(4),
+        current_price: currentPrice,
+      })
+      .eq("id", stockId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setStock({ ...data, _watchlistOnly: false });
+    setBuyOpen(false);
+  }
+
+  async function handleSellDone(quantity) {
+    if (!user || !stock || stock._watchlistOnly) return;
+
+    const heldQuantity = Number(stock.quantity) || 0;
+    const sellPrice =
+      Number(stock.current_price) || Number(stock.purchase_price) || 0;
+    const soldQuantity = Math.min(quantity, heldQuantity);
+    const remainingQuantity = +Math.max(0, heldQuantity - soldQuantity).toFixed(
+      6
+    );
+
+    const { error: transactionError } = await supabase
+      .from("stock_transactions")
+      .insert({
+        user_id: user.id,
+        ticker: stock.ticker.toUpperCase(),
+        company_name: stock.company_name,
+        type: "sell",
+        quantity: soldQuantity,
+        price: sellPrice,
+        total: soldQuantity * sellPrice,
+      });
+
+    if (transactionError) {
+      console.warn("Transaction log failed:", transactionError);
+    }
+
+    if (remainingQuantity <= 0) {
+      const { error } = await supabase
+        .from("stocks")
+        .delete()
+        .eq("id", stockId);
+
+      if (error) throw error;
+
       setSellOpen(false);
       navigate("/home");
-      await supabase.from("stocks").delete().eq("id", stockId);
-      await supabase.from("stock_transactions").insert({
-        user_id: user.id,
-        ticker: stock.ticker.toUpperCase(),
-        company_name: stock.company_name,
-        type: "sell",
-        quantity: stock.quantity,
-        price: sellPrice,
-        total: stock.quantity * sellPrice,
-      }).catch(() => {});
-    } else {
-      setStock(prev => ({ ...prev, quantity: remainingQty }));
-      setSellOpen(false);
-      await supabase.from("stocks").update({ quantity: remainingQty }).eq("id", stockId);
-      await supabase.from("stock_transactions").insert({
-        user_id: user.id,
-        ticker: stock.ticker.toUpperCase(),
-        company_name: stock.company_name,
-        type: "sell",
-        quantity: qty,
-        price: sellPrice,
-        total: qty * sellPrice,
-      }).catch(() => {});
-      const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
-      if (data) setStock({ ...data, _watchlistOnly: false });
+      return;
     }
-  };
+
+    const { data, error } = await supabase
+      .from("stocks")
+      .update({ quantity: remainingQuantity })
+      .eq("id", stockId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    setStock({ ...data, _watchlistOnly: false });
+    setSellOpen(false);
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
       </div>
     );
   }
 
   if (!stock) {
     return (
-      <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
         <div className="text-center">
-          <p className="text-gray-500 mb-4">Stock not found</p>
-          <Link to="/"><Button variant="outline">Back to Portfolio</Button></Link>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Stock not found
+          </h1>
+          {pageError && (
+            <p className="mt-2 max-w-md text-sm text-gray-500">{pageError}</p>
+          )}
+          <Link
+            to="/home"
+            className="mt-4 inline-block text-sm font-semibold text-gray-900 underline"
+          >
+            Back to Portfolio
+          </Link>
         </div>
       </div>
     );
   }
 
-  const totalValue = (stock.current_price || 0) * stock.quantity;
-  const totalCost = stock.purchase_price * stock.quantity;
+  const quantity = Number(stock.quantity) || 0;
+  const currentPrice = Number(stock.current_price) || 0;
+  const purchasePrice = Number(stock.purchase_price) || 0;
+  const totalValue = currentPrice * quantity;
+  const totalCost = purchasePrice * quantity;
   const gain = totalValue - totalCost;
   const gainPct = totalCost > 0 ? (gain / totalCost) * 100 : 0;
-  const isPositive = gain >= 0;
+  const isPositive = stock._watchlistOnly
+    ? currentPrice >= purchasePrice
+    : gain >= 0;
 
   return (
-    <motion.div
-      className="min-h-screen bg-gray-50/50"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-    >
-      <BuyDetailDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={handleBuyDone} />
-      <SellDetailDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={handleSellDone} />
-
-      <div
-        className="fixed top-0 left-0 z-50 flex items-center"
-        style={{ paddingTop: "env(safe-area-inset-top)", backgroundColor: "transparent" }}
+    <div className="min-h-screen bg-gray-50">
+      <button
+        type="button"
+        onClick={() => navigate(isTickerRoute ? "/" : "/home")}
+        className="m-3 flex min-h-[36px] items-center gap-0.5 rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm backdrop-blur-md transition-all active:scale-95"
       >
-        <button
-          onClick={() => navigate(isTickerRoute ? "/" : "/home")}
-          className="flex items-center gap-0.5 text-sm font-semibold text-gray-900 bg-white/80 backdrop-blur-md border border-gray-200 shadow-sm rounded-full px-3 py-1.5 m-3 min-h-[36px] active:scale-95 transition-all"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mr-0.5"><polyline points="15 18 9 12 15 6"/></svg>
-          Back
-        </button>
-      </div>
+        Back
+      </button>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8" style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}>
-        {/* Stock Overview – Buy/Sell inline, no overlap */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8">
-          <div className="flex items-start justify-between gap-4 mb-4">
+      <main className="mx-auto max-w-6xl space-y-5 px-4 pb-10 sm:px-6">
+        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
             <div>
-              <span className="text-xs font-mono tracking-widest text-gray-400 uppercase">{stock.sector}</span>
-              <h1 className="font-heading text-3xl font-bold mt-1">{stock.ticker}</h1>
-              <p className="text-gray-500">{stock.company_name}</p>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {stock.sector && <span>{stock.sector}</span>}
+                <span>#{stock.ticker}</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {stock.logo_url && (
+                  <img
+                    src={stock.logo_url}
+                    alt=""
+                    className="h-10 w-10 rounded-lg border border-gray-100 object-contain"
+                  />
+                )}
+                <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+                  {stock.company_name}
+                </h1>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button onClick={() => setBuyOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-black text-white hover:bg-gray-800 active:scale-95 transition-all">Buy</button>
-              {!stock._watchlistOnly && <button onClick={() => setSellOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-white text-black border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all">Sell</button>}
+
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                onClick={() => setBuyOpen(true)}
+                className="h-8 rounded-md bg-black px-3 text-xs font-semibold text-white hover:bg-gray-800"
+              >
+                Buy
+              </Button>
+
+              {!stock._watchlistOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setSellOpen(true)}
+                  className="h-8 rounded-md px-3 text-xs font-semibold"
+                >
+                  Sell
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-            <div>
-              <p className="text-3xl font-heading font-bold">${stock.current_price?.toFixed(2) || "—"}</p>
-              <div className={`inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-full text-sm font-semibold ${isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                {isPositive ? "+" : ""}{gainPct.toFixed(2)}%
-              </div>
-            </div>
+          <div className="mt-6 flex items-end gap-3">
+            <p className="text-4xl font-bold tracking-tight text-gray-900">
+              {currentPrice > 0 ? `$${currentPrice.toFixed(2)}` : "—"}
+            </p>
+            <p
+              className={`mb-1 flex items-center gap-1 text-sm font-semibold ${
+                isPositive ? "text-emerald-600" : "text-red-600"
+              }`}
+            >
+              {isPositive ? (
+                <TrendingUp className="h-4 w-4" />
+              ) : (
+                <TrendingDown className="h-4 w-4" />
+              )}
+              {isPositive ? "+" : ""}
+              {gainPct.toFixed(2)}%
+            </p>
           </div>
 
           {!stock._watchlistOnly && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-4">
               {[
-                { label: "Shares", value: stock.quantity },
-                { label: "Avg. Cost", value: `$${stock.purchase_price.toFixed(2)}` },
-                { label: "Total Value", value: `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-                { label: "Gain/Loss", value: `${isPositive ? "+" : ""}$${gain.toFixed(2)}`, color: isPositive ? "text-emerald-600" : "text-red-600" }
+                { label: "Shares", value: quantity },
+                { label: "Avg. Cost", value: `$${purchasePrice.toFixed(2)}` },
+                {
+                  label: "Total Value",
+                  value: `$${totalValue.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`,
+                },
+                {
+                  label: "Gain/Loss",
+                  value: `${gain >= 0 ? "+" : "-"}$${Math.abs(gain).toFixed(2)}`,
+                  color: gain >= 0 ? "text-emerald-600" : "text-red-600",
+                },
               ].map((item) => (
                 <div key={item.label}>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">{item.label}</p>
-                  <p className={`font-semibold ${item.color || ""}`}>{item.value}</p>
+                  <p className="text-xs font-medium text-gray-400">
+                    {item.label}
+                  </p>
+                  <p
+                    className={`mt-1 text-sm font-semibold ${
+                      item.color || "text-gray-900"
+                    }`}
+                  >
+                    {item.value}
+                  </p>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Chart – now responsive to period changes */}
-        <StockChart ticker={stock.ticker} currentPrice={stock.current_price || stock.purchase_price} isPositive={isPositive} />
+        <StockChart
+          ticker={stock.ticker}
+          currentPrice={currentPrice}
+          isPositive={isPositive}
+        />
 
-        <div className="bg-white border border-gray-100 rounded-2xl p-6">
-          <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500 mb-4">Key Metrics</h2>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-4 gap-y-5">
-            {getStockMetrics(stock.ticker, stock.current_price || stock.purchase_price).map(m => (
-              <div key={m.label}>
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">{m.label}</p>
-                <p className="font-semibold text-sm">{m.value}</p>
+        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="mb-4 text-base font-semibold text-gray-900">
+            Key Metrics
+          </h2>
+
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+            {getStockMetrics(
+              stock.ticker,
+              currentPrice || purchasePrice
+            ).map((metric) => (
+              <div key={metric.label}>
+                <p className="text-xs font-medium text-gray-400">
+                  {metric.label}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-gray-900">
+                  {metric.value}
+                </p>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {newsLoading ? (
-          <div className="bg-white border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
-              <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
-            </div>
-            <p className="font-heading font-semibold mb-1">Loading news…</p>
+        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+              <Newspaper className="h-4 w-4" />
+              Recent News
+            </h2>
+
+            <button
+              type="button"
+              onClick={refreshNews}
+              disabled={newsLoading}
+              className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${
+                  newsLoading ? "animate-spin" : ""
+                }`}
+              />
+              Refresh
+            </button>
           </div>
-        ) : news && news.length > 0 ? (
-          <div className="bg-white border border-gray-100 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <Newspaper className="w-4 h-4 text-gray-400" />
-                <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500">Recent News</h2>
-              </div>
-              <button onClick={() => {
-                setNewsLoading(true);
-                finnhubProxy({ action: "news", ticker: stock.ticker })
-                  .then(res => setNews(res?.articles || []))
-                  .finally(() => setNewsLoading(false));
-              }} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-900 transition-colors">
-                <RefreshCw className="w-3.5 h-3.5" />
-                Refresh
-              </button>
+
+          {newsLoading ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-gray-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading news…
             </div>
-            <div className="space-y-4">
-              {news.map((item, i) => (
-                <div key={i}>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 shrink-0" />
-                    <div>
-                      <p className="font-medium text-sm">{item.title}</p>
-                      <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{item.summary}</p>
-                      {item.date && <p className="text-xs text-gray-400 mt-1">{item.date}</p>}
+          ) : news.length > 0 ? (
+            <div>
+              {news.map((item, index) => (
+                <React.Fragment key={`${item.url || item.title}-${index}`}>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block py-4"
+                  >
+                    <h3 className="text-sm font-semibold text-gray-900 hover:underline">
+                      {item.title}
+                    </h3>
+                    {item.summary && (
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">
+                        {item.summary}
+                      </p>
+                    )}
+                    <div className="mt-2 flex gap-2 text-[11px] text-gray-400">
+                      {item.source && <span>{item.source}</span>}
+                      {item.date && <span>{item.date}</span>}
                     </div>
-                  </div>
-                  {i < news.length - 1 && <div className="border-b border-gray-100 mt-4" />}
-                </div>
+                  </a>
+                  {index < news.length - 1 && (
+                    <div className="h-px bg-gray-100" />
+                  )}
+                </React.Fragment>
               ))}
             </div>
-          </div>
-        ) : null}
+          ) : (
+            <p className="py-6 text-sm text-gray-400">
+              No recent news available.
+            </p>
+          )}
+        </section>
       </main>
-    </motion.div>
+
+      <BuyDetailDialog
+        open={buyOpen}
+        onOpenChange={setBuyOpen}
+        stock={stock}
+        onDone={handleBuyDone}
+      />
+
+      <SellDetailDialog
+        open={sellOpen}
+        onOpenChange={setSellOpen}
+        stock={stock}
+        onDone={handleSellDone}
+      />
+    </div>
   );
 }
