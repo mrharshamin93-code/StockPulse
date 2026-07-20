@@ -1,6 +1,5 @@
-import {
+import React, {
   useEffect,
-  useRef,
   useState,
 } from "react";
 import {
@@ -11,49 +10,171 @@ import {
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 
-function getSafeNextPath(searchParams) {
-  const next =
-    searchParams.get("next") || "/";
+/*
+ * Prevent multiple component mounts or re-renders from
+ * exchanging the same one-use OAuth code more than once.
+ */
+let callbackPromise = null;
+
+function getSafeNextPath(
+  searchParams
+) {
+  const requestedPath =
+    searchParams.get("next") ||
+    "/";
 
   /*
-   * Only allow internal application paths.
+   * Only allow internal routes.
    */
   if (
-    !next.startsWith("/") ||
-    next.startsWith("//")
+    !requestedPath.startsWith("/") ||
+    requestedPath.startsWith("//")
   ) {
     return "/";
   }
 
-  return next;
+  return requestedPath;
 }
 
-function getProviderError(searchParams) {
-  const description =
+function getProviderError(
+  searchParams
+) {
+  return (
     searchParams.get(
       "error_description"
+    ) ||
+    searchParams.get("error") ||
+    ""
+  );
+}
+
+async function completeOAuthCallback() {
+  const searchParams =
+    new URLSearchParams(
+      window.location.search
     );
 
-  const error =
-    searchParams.get("error");
+  const providerError =
+    getProviderError(
+      searchParams
+    );
 
-  if (description) {
-    try {
-      return decodeURIComponent(
-        description.replace(/\+/g, " ")
-      );
-    } catch {
-      return description;
-    }
+  if (providerError) {
+    throw new Error(
+      providerError
+    );
   }
 
-  return error || "";
+  const nextPath =
+    getSafeNextPath(
+      searchParams
+    );
+
+  /*
+   * A session may already exist when:
+   *
+   * 1. The callback page was refreshed.
+   * 2. A previous callback render completed the exchange.
+   * 3. The auth event finished before this component mounted.
+   */
+  const {
+    data: existingData,
+    error: existingError,
+  } =
+    await supabase.auth.getSession();
+
+  if (existingError) {
+    console.warn(
+      "Existing session check failed:",
+      existingError
+    );
+  }
+
+  if (
+    existingData?.session?.user
+  ) {
+    return nextPath;
+  }
+
+  const code =
+    searchParams.get("code");
+
+  if (!code) {
+    throw new Error(
+      "Google did not return an authorization code. " +
+        "Please begin the sign-in process again."
+    );
+  }
+
+  const {
+    data,
+    error,
+  } =
+    await supabase.auth.exchangeCodeForSession(
+      code
+    );
+
+  if (error) {
+    /*
+     * A second render may attempt to use a code that
+     * the first render has already exchanged. Check
+     * for the resulting session before showing an error.
+     */
+    const {
+      data: recoveredData,
+    } =
+      await supabase.auth.getSession();
+
+    if (
+      recoveredData?.session?.user
+    ) {
+      return nextPath;
+    }
+
+    throw error;
+  }
+
+  if (!data?.session?.user) {
+    throw new Error(
+      "Google sign-in completed, but no session was created."
+    );
+  }
+
+  /*
+   * Confirm that the browser persisted the session
+   * before loading a protected route.
+   */
+  const {
+    data: verifiedData,
+    error: verificationError,
+  } =
+    await supabase.auth.getSession();
+
+  if (verificationError) {
+    throw verificationError;
+  }
+
+  if (
+    !verifiedData?.session?.user
+  ) {
+    throw new Error(
+      "The login session could not be saved in this browser."
+    );
+  }
+
+  return nextPath;
+}
+
+function runCallbackOnce() {
+  if (!callbackPromise) {
+    callbackPromise =
+      completeOAuthCallback();
+  }
+
+  return callbackPromise;
 }
 
 export default function AuthCallback() {
-  const callbackStartedRef =
-    useRef(false);
-
   const [status, setStatus] =
     useState("processing");
 
@@ -63,152 +184,53 @@ export default function AuthCallback() {
     );
 
   useEffect(() => {
+    let active = true;
+
     /*
-     * Prevent the one-time OAuth code from
-     * being exchanged more than once.
+     * This updates the message on a slower connection,
+     * but deliberately does not redirect back to login.
      */
-    if (callbackStartedRef.current) {
-      return undefined;
-    }
-
-    callbackStartedRef.current = true;
-
-    let cancelled = false;
-    let timeoutId;
-
-    async function completeSignIn() {
-      try {
-        const searchParams =
-          new URLSearchParams(
-            window.location.search
-          );
-
-        const providerError =
-          getProviderError(
-            searchParams
-          );
-
-        if (providerError) {
-          throw new Error(
-            providerError
+    const slowTimer =
+      window.setTimeout(() => {
+        if (active) {
+          setMessage(
+            "Still completing your sign-in…"
           );
         }
+      }, 8000);
 
-        const nextPath =
-          getSafeNextPath(
-            searchParams
-          );
-
-        /*
-         * Handle a refreshed callback page after
-         * the session was already saved.
-         */
-        const {
-          data: existingSessionData,
-          error: existingSessionError,
-        } =
-          await supabase.auth.getSession();
-
-        if (existingSessionError) {
-          console.warn(
-            "Existing session check failed:",
-            existingSessionError
-          );
-        }
-
-        if (
-          existingSessionData?.session?.user
-        ) {
-          window.clearTimeout(
-            timeoutId
-          );
-
-          window.location.replace(
-            nextPath
-          );
-
-          return;
-        }
-
-        const code =
-          searchParams.get("code");
-
-        if (!code) {
-          throw new Error(
-            "Google did not return an authorization code. " +
-              "Please start the sign-in process again."
-          );
-        }
-
-        const {
-          data,
-          error,
-        } =
-          await supabase.auth.exchangeCodeForSession(
-            code
-          );
-
-        if (error) {
-          throw error;
-        }
-
-        if (!data?.session?.user) {
-          throw new Error(
-            "Google sign-in completed, but no session was created."
-          );
-        }
-
-        /*
-         * Confirm that Supabase persisted the session
-         * before entering protected routes.
-         */
-        const {
-          data: verifiedSessionData,
-          error: verificationError,
-        } =
-          await supabase.auth.getSession();
-
-        if (verificationError) {
-          throw verificationError;
-        }
-
-        if (
-          !verifiedSessionData?.session?.user
-        ) {
-          throw new Error(
-            "The session could not be saved in this browser."
-          );
-        }
-
-        if (cancelled) {
+    runCallbackOnce()
+      .then((nextPath) => {
+        if (!active) {
           return;
         }
 
         window.clearTimeout(
-          timeoutId
+          slowTimer
         );
 
         setStatus("success");
+
         setMessage(
           "Signed in successfully."
         );
 
         /*
-         * Perform a full reload after the session is
-         * stored. This avoids a race between AuthContext,
-         * React Router, and ProtectedRoute on slower
-         * mobile devices.
+         * Do not wait for AuthContext to re-render.
+         * A full navigation initializes the application
+         * directly from the persisted session.
          */
         window.location.replace(
           nextPath
         );
-      } catch (error) {
-        if (cancelled) {
+      })
+      .catch((error) => {
+        if (!active) {
           return;
         }
 
         window.clearTimeout(
-          timeoutId
+          slowTimer
         );
 
         console.error(
@@ -222,42 +244,29 @@ export default function AuthCallback() {
           error?.message ||
             "Google sign-in failed."
         );
-      }
-    }
-
-    timeoutId =
-      window.setTimeout(() => {
-        if (cancelled) {
-          return;
-        }
-
-        setStatus("error");
-
-        setMessage(
-          "The sign-in request took too long. " +
-            "Please try again in Safari or Chrome."
-        );
-      }, 30000);
-
-    completeSignIn();
+      });
 
     return () => {
-      cancelled = true;
+      active = false;
 
       window.clearTimeout(
-        timeoutId
+        slowTimer
       );
     };
   }, []);
 
   function returnToLogin() {
+    /*
+     * Use a full navigation so this module's
+     * one-use callback promise is reset.
+     */
     window.location.replace(
       "/login"
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
         {status === "error" ? (
           <>
@@ -275,10 +284,10 @@ export default function AuthCallback() {
 
             <Button
               type="button"
+              className="mt-5 w-full"
               onClick={
                 returnToLogin
               }
-              className="mt-5 w-full"
             >
               Back to login
             </Button>
