@@ -1,87 +1,300 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/lib/AuthContext';
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
+
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+
+function getSafeNextPath(searchParams) {
+  const next =
+    searchParams.get("next") || "/";
+
+  /*
+   * Only allow internal application paths.
+   */
+  if (
+    !next.startsWith("/") ||
+    next.startsWith("//")
+  ) {
+    return "/";
+  }
+
+  return next;
+}
+
+function getProviderError(searchParams) {
+  const description =
+    searchParams.get(
+      "error_description"
+    );
+
+  const error =
+    searchParams.get("error");
+
+  if (description) {
+    try {
+      return decodeURIComponent(
+        description.replace(/\+/g, " ")
+      );
+    } catch {
+      return description;
+    }
+  }
+
+  return error || "";
+}
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
-  const { isAuthenticated, isLoadingAuth } = useAuth();
-  const [status, setStatus] = useState('processing'); // processing | success | error
-  const [message, setMessage] = useState('Signing you in…');
+  const callbackStartedRef =
+    useRef(false);
+
+  const [status, setStatus] =
+    useState("processing");
+
+  const [message, setMessage] =
+    useState(
+      "Completing your Google sign-in…"
+    );
 
   useEffect(() => {
+    /*
+     * Prevent the one-time OAuth code from
+     * being exchanged more than once.
+     */
+    if (callbackStartedRef.current) {
+      return undefined;
+    }
+
+    callbackStartedRef.current = true;
+
+    let cancelled = false;
     let timeoutId;
 
-    const handleCallback = async () => {
+    async function completeSignIn() {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
-        const nextParam = params.get('next');
+        const searchParams =
+          new URLSearchParams(
+            window.location.search
+          );
+
+        const providerError =
+          getProviderError(
+            searchParams
+          );
+
+        if (providerError) {
+          throw new Error(
+            providerError
+          );
+        }
+
+        const nextPath =
+          getSafeNextPath(
+            searchParams
+          );
+
+        /*
+         * Handle a refreshed callback page after
+         * the session was already saved.
+         */
+        const {
+          data: existingSessionData,
+          error: existingSessionError,
+        } =
+          await supabase.auth.getSession();
+
+        if (existingSessionError) {
+          console.warn(
+            "Existing session check failed:",
+            existingSessionError
+          );
+        }
+
+        if (
+          existingSessionData?.session?.user
+        ) {
+          window.clearTimeout(
+            timeoutId
+          );
+
+          window.location.replace(
+            nextPath
+          );
+
+          return;
+        }
+
+        const code =
+          searchParams.get("code");
 
         if (!code) {
-          navigate('/login', { replace: true });
-          return;
+          throw new Error(
+            "Google did not return an authorization code. " +
+              "Please start the sign-in process again."
+          );
         }
 
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth.exchangeCodeForSession(
+            code
+          );
 
         if (error) {
-          console.error('OAuth Error:', error);
-          setStatus('error');
-          setMessage('Sign-in failed. Redirecting...');
-          setTimeout(() => navigate('/login', { replace: true }), 1200);
+          throw error;
+        }
+
+        if (!data?.session?.user) {
+          throw new Error(
+            "Google sign-in completed, but no session was created."
+          );
+        }
+
+        /*
+         * Confirm that Supabase persisted the session
+         * before entering protected routes.
+         */
+        const {
+          data: verifiedSessionData,
+          error: verificationError,
+        } =
+          await supabase.auth.getSession();
+
+        if (verificationError) {
+          throw verificationError;
+        }
+
+        if (
+          !verifiedSessionData?.session?.user
+        ) {
+          throw new Error(
+            "The session could not be saved in this browser."
+          );
+        }
+
+        if (cancelled) {
           return;
         }
 
-        await supabase.auth.getSession();
-        setStatus('success');
-        setMessage('Almost there...');
+        window.clearTimeout(
+          timeoutId
+        );
 
-      } catch (err) {
-        console.error('Unexpected callback error:', err);
-        setStatus('error');
-        setMessage('Something went wrong. Redirecting...');
-        setTimeout(() => navigate('/login', { replace: true }), 1200);
+        setStatus("success");
+        setMessage(
+          "Signed in successfully."
+        );
+
+        /*
+         * Perform a full reload after the session is
+         * stored. This avoids a race between AuthContext,
+         * React Router, and ProtectedRoute on slower
+         * mobile devices.
+         */
+        window.location.replace(
+          nextPath
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        window.clearTimeout(
+          timeoutId
+        );
+
+        console.error(
+          "OAuth callback failed:",
+          error
+        );
+
+        setStatus("error");
+
+        setMessage(
+          error?.message ||
+            "Google sign-in failed."
+        );
       }
-    };
-
-    handleCallback();
-
-    // 15-second timeout fallback (prevents infinite loading)
-    timeoutId = setTimeout(() => {
-      if (status !== 'success') {
-        console.warn('Auth callback timed out');
-        setStatus('error');
-        setMessage('Taking too long. Redirecting to login...');
-        navigate('/login', { replace: true });
-      }
-    }, 15000);
-
-    return () => clearTimeout(timeoutId);
-  }, [navigate]);
-
-  // Navigate only when AuthContext confirms authentication + support ?next=
-  useEffect(() => {
-    if (!isLoadingAuth && isAuthenticated) {
-      const params = new URLSearchParams(window.location.search);
-      let next = params.get('next') || '/';
-
-      // Safety: only allow relative internal paths
-      if (!next.startsWith('/')) {
-        next = '/';
-      }
-
-      navigate(next, { replace: true });
     }
-  }, [isAuthenticated, isLoadingAuth, navigate]);
+
+    timeoutId =
+      window.setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setStatus("error");
+
+        setMessage(
+          "The sign-in request took too long. " +
+            "Please try again in Safari or Chrome."
+        );
+      }, 30000);
+
+    completeSignIn();
+
+    return () => {
+      cancelled = true;
+
+      window.clearTimeout(
+        timeoutId
+      );
+    };
+  }, []);
+
+  function returnToLogin() {
+    window.location.replace(
+      "/login"
+    );
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4" />
-        <p className="text-gray-600">{message}</p>
-        {status === 'error' && (
-          <p className="text-sm text-red-500 mt-2">Please try signing in again.</p>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+        {status === "error" ? (
+          <>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+              <AlertCircle className="h-6 w-6 text-red-500" />
+            </div>
+
+            <h1 className="mt-4 text-lg font-semibold text-gray-900">
+              Couldn&apos;t sign you in
+            </h1>
+
+            <p className="mt-2 break-words text-sm leading-6 text-gray-500">
+              {message}
+            </p>
+
+            <Button
+              type="button"
+              onClick={
+                returnToLogin
+              }
+              className="mt-5 w-full"
+            >
+              Back to login
+            </Button>
+          </>
+        ) : (
+          <>
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-900" />
+
+            <h1 className="mt-4 text-lg font-semibold text-gray-900">
+              Signing you in
+            </h1>
+
+            <p className="mt-2 text-sm text-gray-500">
+              {message}
+            </p>
+          </>
         )}
       </div>
     </div>
