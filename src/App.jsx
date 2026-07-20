@@ -157,6 +157,11 @@ function AuthenticatedApp() {
           />
 
           <Route
+            path="/analysis"
+            element={<Analysis />}
+          />
+
+          <Route
             path="/analysis/:ticker"
             element={<Analysis />}
           />
