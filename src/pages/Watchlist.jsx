@@ -6,7 +6,10 @@ import React, {
   useState,
 } from "react";
 import { Link } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+} from "framer-motion";
 import {
   Loader2,
   Plus,
@@ -29,52 +32,27 @@ import {
 } from "@/components/ui/dialog";
 
 const sparklineCache = new Map();
-const SPARKLINE_CACHE_DURATION = 5 * 60 * 1000;
 
-const EXCHANGE_RULES = [
-  [["NASDAQ"], "NASDAQ"],
-  [["NYSE AMERICAN", "AMEX"], "AMEX"],
-  [["NEW YORK STOCK EXCHANGE", "NYSE"], "NYSE"],
-  [["OTC", "PINK"], "OTC"],
-  [["CBOE", "BATS"], "CBOE"],
-  [["TSX VENTURE", "TSXV"], "TSXV"],
-  [["TSX", "TORONTO"], "TSX"],
-  [["CSE", "CANADIAN SECURITIES"], "CSE"],
-  [["NEO"], "NEO"],
-  [["LONDON", "LSE"], "LSE"],
-  [["EURONEXT PARIS", "XPAR"], "EPA"],
-  [["EURONEXT AMSTERDAM", "XAMS"], "AMS"],
-  [["EURONEXT BRUSSELS", "XBRU"], "EBR"],
-  [["EURONEXT"], "ENX"],
-  [["XETRA", "FRANKFURT", "FSE", "FWB"], "FRA"],
-  [["SIX", "SWISS", "ZURICH"], "SIX"],
-  [["MILAN", "BORSA ITALIANA"], "BIT"],
-  [["MADRID", "BME"], "BME"],
-  [["OSLO", "OSE"], "OSE"],
-  [["STOCKHOLM", "OMX"], "STO"],
-  [["COPENHAGEN", "CPH"], "CPH"],
-  [["HELSINKI", "HEL"], "HEL"],
-  [["ASX", "AUSTRALIAN"], "ASX"],
-  [["NZX", "NEW ZEALAND"], "NZX"],
-  [["TOKYO", "TSE", "JPX"], "TSE"],
-  [["SHANGHAI", "SHSE"], "SSE"],
-  [["SHENZHEN", "SZSE"], "SZSE"],
-  [["HONG KONG", "HKEX", "HKG"], "HKEX"],
-  [["NATIONAL STOCK EXCHANGE"], "NSE"],
-  [["BOMBAY"], "BSE"],
-  [["KRX", "KOREA EXCHANGE"], "KRX"],
-  [["SGX", "SINGAPORE"], "SGX"],
-  [["TADAWUL", "SAUDI"], "TADAWUL"],
-  [["JSE", "JOHANNESBURG"], "JSE"],
-  [["B3", "BOVESPA", "BRAZIL"], "B3"],
-];
+const SPARKLINE_TTL =
+  5 * 60 * 1000;
 
-function clamp(value, minimum = 0, maximum = 1) {
-  return Math.min(Math.max(value, minimum), maximum);
+function clamp(
+  value,
+  minimum = 0,
+  maximum = 1
+) {
+  return Math.min(
+    Math.max(
+      value,
+      minimum
+    ),
+    maximum
+  );
 }
 
 function smoothstep(value) {
-  const normalized = clamp(value);
+  const normalized =
+    clamp(value);
 
   return (
     normalized *
@@ -83,31 +61,121 @@ function smoothstep(value) {
   );
 }
 
-function abbreviateExchange(exchange) {
+function abbreviateExchange(
+  exchange
+) {
   if (!exchange) {
     return "";
   }
 
-  const normalized = exchange.toUpperCase();
+  const value =
+    String(
+      exchange
+    ).toUpperCase();
 
-  const match = EXCHANGE_RULES.find(([terms]) =>
-    terms.some((term) => normalized.includes(term))
+  const rules = [
+    [
+      ["NASDAQ"],
+      "NASDAQ",
+    ],
+    [
+      [
+        "NYSE AMERICAN",
+        "AMEX",
+      ],
+      "AMEX",
+    ],
+    [
+      [
+        "NEW YORK STOCK EXCHANGE",
+        "NYSE",
+      ],
+      "NYSE",
+    ],
+    [
+      ["OTC", "PINK"],
+      "OTC",
+    ],
+    [
+      [
+        "TSX VENTURE",
+        "TSXV",
+      ],
+      "TSXV",
+    ],
+    [
+      [
+        "TSX",
+        "TORONTO",
+      ],
+      "TSX",
+    ],
+    [
+      ["LONDON", "LSE"],
+      "LSE",
+    ],
+    [
+      ["EURONEXT"],
+      "ENX",
+    ],
+    [
+      [
+        "XETRA",
+        "FRANKFURT",
+      ],
+      "FRA",
+    ],
+    [
+      [
+        "ASX",
+        "AUSTRALIAN",
+      ],
+      "ASX",
+    ],
+    [
+      ["TOKYO", "TSE"],
+      "TSE",
+    ],
+    [
+      [
+        "HONG KONG",
+        "HKEX",
+      ],
+      "HKEX",
+    ],
+  ];
+
+  return (
+    rules.find(
+      ([terms]) =>
+        terms.some(
+          (term) =>
+            value.includes(
+              term
+            )
+        )
+    )?.[1] ||
+    exchange
   );
-
-  return match?.[1] || exchange;
 }
 
-function getCompanyName(ticker, stock, item) {
+function getCompanyName(
+  ticker,
+  stock,
+  item
+) {
   if (
     stock?.company_name &&
-    stock.company_name !== ticker
+    stock.company_name !==
+      ticker
   ) {
     return stock.company_name;
   }
 
   if (
     item?.company_name &&
-    item.company_name !== ticker
+    item.company_name !==
+      ticker
   ) {
     return item.company_name;
   }
@@ -119,50 +187,109 @@ function getCompanyName(ticker, stock, item) {
   );
 }
 
-async function callFinnhub(params, signal) {
-  const searchParams = new URLSearchParams();
+async function finnhub(
+  body,
+  signal
+) {
+  const response =
+    await fetch(
+      "/api/finnhub",
+      {
+        method: "POST",
 
-  Object.entries(params).forEach(([key, value]) => {
-    if (
-      value !== undefined &&
-      value !== null &&
-      value !== ""
-    ) {
-      searchParams.set(key, String(value));
-    }
-  });
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
 
-  const response = await fetch(
-    `/api/finnhub?${searchParams.toString()}`,
-    {
-      signal,
-    }
-  );
+        body:
+          JSON.stringify(
+            body
+          ),
 
-  const payload = await response
-    .json()
-    .catch(() => null);
+        signal,
+      }
+    );
+
+  const payload =
+    await response
+      .json()
+      .catch(
+        () => null
+      );
 
   if (!response.ok) {
     throw new Error(
       payload?.error ||
-        "Failed to fetch market data"
+        `Market-data request failed with status ${response.status}`
     );
   }
 
   return payload;
 }
 
-function Toast({ message, onDone }) {
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      onDone,
-      2500
-    );
+function normalizeSearchResults(
+  payload
+) {
+  const raw =
+    Array.isArray(
+      payload?.results
+    )
+      ? payload.results
+      : Array.isArray(
+            payload?.result
+          )
+        ? payload.result
+        : [];
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
+  return raw
+    .map(
+      (item) => ({
+        ticker: String(
+          item?.ticker ||
+            item?.symbol ||
+            item?.displaySymbol ||
+            ""
+        )
+          .trim()
+          .toUpperCase(),
+
+        name: String(
+          item?.name ||
+            item?.description ||
+            item?.displaySymbol ||
+            ""
+        ).trim(),
+
+        exchange: String(
+          item?.exchange ||
+            item?.primaryExchange ||
+            item?.mic ||
+            ""
+        ).trim(),
+      })
+    )
+    .filter(
+      (item) =>
+        item.ticker
+    );
+}
+
+function Toast({
+  message,
+  onDone,
+}) {
+  useEffect(() => {
+    const timer =
+      window.setTimeout(
+        onDone,
+        2500
+      );
+
+    return () =>
+      window.clearTimeout(
+        timer
+      );
   }, [onDone]);
 
   return (
@@ -194,37 +321,54 @@ function AddToPortfolioDialog({
   onOpenChange,
   ticker,
   companyName,
-  onAdded,
   userId,
+  onAdded,
 }) {
-  const [quantity, setQuantity] = useState("");
-  const [purchasePrice, setPurchasePrice] =
-    useState("");
-  const [loading, setLoading] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [
+    quantity,
+    setQuantity,
+  ] = useState("");
+
+  const [
+    purchasePrice,
+    setPurchasePrice,
+  ] = useState("");
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    formError,
+    setFormError,
+  ] = useState("");
 
   useEffect(() => {
     if (!open) {
       setQuantity("");
       setPurchasePrice("");
       setFormError("");
-      setLoading(false);
     }
   }, [open]);
 
-  async function handleSubmit(event) {
+  async function handleSubmit(
+    event
+  ) {
     event.preventDefault();
 
-    const parsedQuantity = Number(quantity);
-    const parsedPurchasePrice =
-      Number(purchasePrice);
+    const shares =
+      Number(quantity);
+
+    const cost =
+      Number(
+        purchasePrice
+      );
 
     if (
       !userId ||
-      !Number.isFinite(parsedQuantity) ||
-      parsedQuantity <= 0 ||
-      !Number.isFinite(parsedPurchasePrice) ||
-      parsedPurchasePrice <= 0
+      shares <= 0 ||
+      cost <= 0
     ) {
       setFormError(
         "Enter a valid quantity and purchase price."
@@ -237,38 +381,57 @@ function AddToPortfolioDialog({
     setFormError("");
 
     try {
-      let currentPrice = parsedPurchasePrice;
+      let currentPrice =
+        cost;
 
       try {
-        const quote = await callFinnhub({
-          action: "quote",
-          ticker,
-        });
+        const quote =
+          await finnhub({
+            action: "quote",
+            ticker,
+          });
 
         if (
-          Number.isFinite(Number(quote?.c)) &&
-          Number(quote.c) > 0
+          Number(
+            quote?.c
+          ) > 0
         ) {
-          currentPrice = Number(quote.c);
+          currentPrice =
+            Number(
+              quote.c
+            );
         }
       } catch (error) {
         console.warn(
-          "Could not refresh quote before adding:",
+          "Quote refresh failed:",
           error
         );
       }
 
-      const { error } = await supabase
-        .from("stocks")
-        .insert({
-          user_id: userId,
-          ticker: ticker.toUpperCase(),
-          company_name: companyName,
-          quantity: parsedQuantity,
-          purchase_price: parsedPurchasePrice,
-          current_price: currentPrice,
-          sector: "",
-        });
+      const { error } =
+        await supabase
+          .from("stocks")
+          .insert({
+            user_id:
+              userId,
+
+            ticker:
+              ticker.toUpperCase(),
+
+            company_name:
+              companyName,
+
+            quantity:
+              shares,
+
+            purchase_price:
+              cost,
+
+            current_price:
+              currentPrice,
+
+            sector: "",
+          });
 
       if (error) {
         throw error;
@@ -276,13 +439,9 @@ function AddToPortfolioDialog({
 
       setQuantity("");
       setPurchasePrice("");
-      onAdded();
-    } catch (error) {
-      console.error(
-        "Add to portfolio failed:",
-        error
-      );
 
+      await onAdded();
+    } catch (error) {
       setFormError(
         error?.message ||
           "Unable to add this stock."
@@ -295,59 +454,79 @@ function AddToPortfolioDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={
+        onOpenChange
+      }
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            Add {ticker} to Portfolio
+          <DialogTitle className="font-heading text-xl">
+            Add {ticker} to
+            Portfolio
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-sm text-gray-500">
+        <p className="-mt-2 text-sm text-muted-foreground">
           {companyName}
         </p>
 
         <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
+          onSubmit={
+            handleSubmit
+          }
+          className="space-y-5 pt-2"
         >
-          <div className="space-y-2">
-            <Label htmlFor="portfolio-quantity">
-              Shares
-            </Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="watchlist-shares">
+                Shares
+              </Label>
 
-            <Input
-              id="portfolio-quantity"
-              type="number"
-              min="0.000001"
-              step="any"
-              value={quantity}
-              onChange={(event) =>
-                setQuantity(event.target.value)
-              }
-              required
-            />
-          </div>
+              <Input
+                id="watchlist-shares"
+                type="number"
+                step="any"
+                min="0.000001"
+                value={
+                  quantity
+                }
+                onChange={(
+                  event
+                ) =>
+                  setQuantity(
+                    event.target
+                      .value
+                  )
+                }
+                required
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="portfolio-price">
-              Average Purchase Price
-            </Label>
+            <div className="space-y-2">
+              <Label htmlFor="watchlist-price">
+                Avg. Purchase
+                Price
+              </Label>
 
-            <Input
-              id="portfolio-price"
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={purchasePrice}
-              onChange={(event) =>
-                setPurchasePrice(
-                  event.target.value
-                )
-              }
-              required
-            />
+              <Input
+                id="watchlist-price"
+                type="number"
+                step="any"
+                min="0.01"
+                value={
+                  purchasePrice
+                }
+                onChange={(
+                  event
+                ) =>
+                  setPurchasePrice(
+                    event.target
+                      .value
+                  )
+                }
+                required
+              />
+            </div>
           </div>
 
           {formError && (
@@ -358,8 +537,12 @@ function AddToPortfolioDialog({
 
           <Button
             type="submit"
-            disabled={loading}
             className="w-full"
+            disabled={
+              loading ||
+              !quantity ||
+              !purchasePrice
+            }
           >
             {loading && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -373,124 +556,162 @@ function AddToPortfolioDialog({
   );
 }
 
-async function fetchSparklineData(
+async function fetchSparkline(
   ticker,
   signal
 ) {
-  const cacheKey = ticker.toUpperCase();
-  const cached = sparklineCache.get(cacheKey);
+  const key =
+    ticker.toUpperCase();
+
+  const cached =
+    sparklineCache.get(
+      key
+    );
 
   if (
     cached &&
-    Date.now() - cached.timestamp <
-      SPARKLINE_CACHE_DURATION
+    Date.now() -
+      cached.timestamp <
+      SPARKLINE_TTL
   ) {
     return cached.data;
   }
 
-  const now = Math.floor(Date.now() / 1000);
-  const thirtyDaysAgo =
-    now - 30 * 24 * 60 * 60;
+  const to =
+    Math.floor(
+      Date.now() / 1000
+    );
 
-  const result = await callFinnhub(
-    {
-      action: "candles_range",
-      ticker,
-      resolution: "D",
-      from: thirtyDaysAgo,
-      to: now,
-    },
-    signal
-  );
+  const from =
+    to - 30 * 86400;
 
-  const closePrices = Array.isArray(
-    result?.candles
-  )
-    ? result.candles
-        .map((candle) => Number(candle?.v))
-        .filter(Number.isFinite)
-    : [];
+  const payload =
+    await finnhub(
+      {
+        action:
+          "candles_range",
 
-  if (closePrices.length < 2) {
+        ticker,
+
+        resolution: "D",
+
+        from,
+
+        to,
+      },
+      signal
+    );
+
+  const data =
+    Array.isArray(
+      payload?.candles
+    )
+      ? payload.candles
+          .map(
+            (candle) =>
+              Number(
+                candle?.v
+              )
+          )
+          .filter(
+            Number.isFinite
+          )
+      : [];
+
+  if (data.length < 2) {
     return null;
   }
 
-  sparklineCache.set(cacheKey, {
-    data: closePrices,
-    timestamp: Date.now(),
-  });
+  sparklineCache.set(
+    key,
+    {
+      data,
 
-  return closePrices;
+      timestamp:
+        Date.now(),
+    }
+  );
+
+  return data;
 }
 
 function MiniSparkline({
   data,
   isPositive,
 }) {
-  const width = 42;
-  const height = 32;
+  const width = 44;
+  const height = 34;
   const padding = 2;
 
-  const color = isPositive
-    ? "#10b981"
-    : "#ef4444";
+  const color =
+    isPositive
+      ? "#10b981"
+      : "#ef4444";
 
-  if (!data || data.length < 2) {
-    const fallbackPoints = isPositive
-      ? "2,25 8,20 14,22 20,16 26,18 32,10 40,7"
-      : "2,7 8,11 14,9 20,16 26,14 32,21 40,25";
+  let points;
 
-    return (
-      <svg
-        width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        aria-hidden="true"
-      >
-        <polyline
-          points={fallbackPoints}
-          fill="none"
-          stroke={color}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
+  if (
+    data?.length >= 2
+  ) {
+    const minimum =
+      Math.min(...data);
+
+    const maximum =
+      Math.max(...data);
+
+    const range =
+      maximum -
+        minimum ||
+      1;
+
+    points = data
+      .map(
+        (
+          price,
+          index
+        ) => {
+          const x =
+            padding +
+            (index /
+              (data.length -
+                1)) *
+              (width -
+                padding *
+                  2);
+
+          const y =
+            padding +
+            ((maximum -
+              price) /
+              range) *
+              (height -
+                padding *
+                  2);
+
+          return `${x},${y}`;
+        }
+      )
+      .join(" ");
+  } else {
+    points =
+      isPositive
+        ? "2,27 8,22 14,24 20,17 26,19 32,11 42,7"
+        : "2,7 8,11 14,9 20,17 26,15 32,22 42,27";
   }
-
-  const minimum = Math.min(...data);
-  const maximum = Math.max(...data);
-  const range = maximum - minimum || 1;
-
-  const points = data
-    .map((price, index) => {
-      const x =
-        padding +
-        (index / (data.length - 1)) *
-          (width - padding * 2);
-
-      const y =
-        padding +
-        ((maximum - price) / range) *
-          (height - padding * 2);
-
-      return `${x},${y}`;
-    })
-    .join(" ");
 
   return (
     <svg
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      fill="none"
       aria-hidden="true"
     >
       <polyline
         points={points}
-        fill="none"
         stroke={color}
-        strokeWidth="2"
+        strokeWidth="1.8"
+        fill="none"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -498,82 +719,111 @@ function MiniSparkline({
   );
 }
 
-function SparklineWrapper({
+function Sparkline({
   ticker,
   isPositive,
 }) {
-  const [sparklineData, setSparklineData] =
-    useState(null);
+  const [
+    data,
+    setData,
+  ] = useState(null);
 
   useEffect(() => {
-    const controller = new AbortController();
+    const controller =
+      new AbortController();
 
-    fetchSparklineData(
+    fetchSparkline(
       ticker,
       controller.signal
     )
-      .then(setSparklineData)
+      .then(setData)
       .catch((error) => {
-        if (error?.name !== "AbortError") {
+        if (
+          error?.name !==
+          "AbortError"
+        ) {
           console.warn(
-            `Sparkline fetch failed for ${ticker}:`,
+            `Sparkline failed for ${ticker}:`,
             error
           );
         }
       });
 
-    return () => {
+    return () =>
       controller.abort();
-    };
   }, [ticker]);
 
   return (
     <MiniSparkline
-      data={sparklineData}
-      isPositive={isPositive}
+      data={data}
+      isPositive={
+        isPositive
+      }
     />
   );
 }
 
-function AnimatedPrice({ value }) {
-  const [flash, setFlash] = useState(null);
-  const previousValueRef = useRef(value);
+function AnimatedPrice({
+  value,
+}) {
+  const [
+    flash,
+    setFlash,
+  ] = useState(null);
+
+  const previous =
+    useRef(value);
 
   useEffect(() => {
     if (
-      previousValueRef.current !== value &&
+      previous.current !==
+        value &&
       value !== "—"
     ) {
-      const previous = Number(
-        previousValueRef.current
-      );
+      const oldValue =
+        Number(
+          previous.current
+        );
 
-      const next = Number(value);
+      const newValue =
+        Number(value);
 
       if (
-        Number.isFinite(previous) &&
-        Number.isFinite(next)
+        Number.isFinite(
+          oldValue
+        ) &&
+        Number.isFinite(
+          newValue
+        )
       ) {
         setFlash(
-          next > previous ? "up" : "down"
+          newValue >
+            oldValue
+            ? "up"
+            : "down"
         );
 
-        const timeout = window.setTimeout(
-          () => {
-            setFlash(null);
-          },
-          700
-        );
+        const timer =
+          window.setTimeout(
+            () =>
+              setFlash(
+                null
+              ),
+            700
+          );
 
-        previousValueRef.current = value;
+        previous.current =
+          value;
 
-        return () => {
-          window.clearTimeout(timeout);
-        };
+        return () =>
+          window.clearTimeout(
+            timer
+          );
       }
     }
 
-    previousValueRef.current = value;
+    previous.current =
+      value;
 
     return undefined;
   }, [value]);
@@ -585,75 +835,75 @@ function AnimatedPrice({ value }) {
         color:
           flash === "up"
             ? "#10b981"
-            : flash === "down"
+            : flash ===
+                "down"
               ? "#ef4444"
               : undefined,
       }}
     >
-      {value !== "—" ? `$${value}` : "—"}
+      {value === "—"
+        ? "—"
+        : `$${value}`}
     </span>
   );
 }
 
-function SwipeActionButton({
+function SwipeAction({
+  type,
+  label,
+  icon: Icon,
   progress,
   disabled,
   onClick,
-  type,
-  icon: Icon,
-  label,
 }) {
-  const isDelete = type === "delete";
-  const easedProgress = smoothstep(progress);
+  const deleteAction =
+    type === "delete";
 
-  const scale =
-    0.55 + easedProgress * 0.45;
-
-  const translateX =
-    (1 - easedProgress) * 22;
-
-  const translateY =
-    (1 - easedProgress) * 3;
+  const visible =
+    smoothstep(
+      progress
+    );
 
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={disabled}
       aria-label={label}
-      className={`group relative flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full border text-white outline-none transition-[background-color,border-color,box-shadow,filter] duration-200 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
-        isDelete
-          ? "border-red-400 bg-red-500 hover:border-red-500 hover:bg-red-600 focus-visible:ring-red-300"
-          : "border-sky-400 bg-sky-500 hover:border-sky-500 hover:bg-sky-600 focus-visible:ring-sky-300"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full border text-white outline-none transition-colors ${
+        deleteAction
+          ? "border-red-400 bg-red-500 hover:bg-red-600"
+          : "border-sky-400 bg-sky-500 hover:bg-sky-600"
       }`}
       style={{
-        opacity: easedProgress,
-        transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
-        transformOrigin: "right center",
-        boxShadow: isDelete
-          ? `
-              0 7px 18px rgba(239, 68, 68, ${
-                0.16 + easedProgress * 0.18
-              }),
-              0 2px 5px rgba(15, 23, 42, 0.10),
-              inset 0 1px 0 rgba(255,255,255,0.30)
-            `
-          : `
-              0 7px 18px rgba(14, 165, 233, ${
-                0.16 + easedProgress * 0.18
-              }),
-              0 2px 5px rgba(15, 23, 42, 0.10),
-              inset 0 1px 0 rgba(255,255,255,0.30)
-            `,
+        opacity:
+          visible,
+
+        transform: `translateX(${
+          (1 -
+            visible) *
+          22
+        }px) scale(${
+          0.55 +
+          visible *
+            0.45
+        })`,
+
+        boxShadow:
+          deleteAction
+            ? "0 7px 18px rgba(239,68,68,.28)"
+            : "0 7px 18px rgba(14,165,233,.28)",
+
         pointerEvents:
-          disabled || easedProgress < 0.76
+          disabled ||
+          visible < 0.76
             ? "none"
             : "auto",
       }}
     >
-      <Icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110 group-active:scale-90" />
+      <Icon className="h-4 w-4" />
 
-      <span className="text-[8px] font-bold leading-none text-white">
+      <span className="text-[8px] font-bold leading-none">
         {label}
       </span>
     </button>
@@ -664,176 +914,240 @@ function WatchlistCard({
   item,
   stock,
   quote,
+  index,
   onRemove,
   onStarToggle,
-  index,
 }) {
-  const hasStock = Boolean(stock);
+  const hasStock =
+    Boolean(stock);
 
-  const companyName = getCompanyName(
-    item.ticker,
-    stock,
-    item
-  );
+  const companyName =
+    getCompanyName(
+      item.ticker,
+      stock,
+      item
+    );
 
-  const [dragX, setDragX] = useState(0);
-  const [swiped, setSwiped] = useState(false);
-  const [deleting, setDeleting] =
-    useState(false);
+  const [
+    dragX,
+    setDragX,
+  ] = useState(0);
 
-  const touchStartXRef = useRef(null);
-  const touchStartYRef = useRef(null);
-  const startDragXRef = useRef(0);
-  const draggingRef = useRef(false);
-  const suppressClickRef = useRef(false);
+  const [
+    swiped,
+    setSwiped,
+  ] = useState(false);
 
-  const ACTION_SIZE = 44;
-  const ACTION_GAP = 8;
-  const ACTION_PADDING = 8;
+  const [
+    deleting,
+    setDeleting,
+  ] = useState(false);
 
-  const REVEAL_WIDTH =
-    ACTION_SIZE * 2 +
-    ACTION_GAP +
-    ACTION_PADDING * 2;
+  const touchX =
+    useRef(null);
+
+  const touchY =
+    useRef(null);
+
+  const startDragX =
+    useRef(0);
+
+  const dragging =
+    useRef(false);
+
+  const suppressClick =
+    useRef(false);
+
+  const revealWidth =
+    112;
+
+  const revealProgress =
+    clamp(
+      Math.abs(dragX) /
+        revealWidth
+    );
+
+  const deleteProgress =
+    clamp(
+      revealProgress /
+        0.55
+    );
+
+  const shareProgress =
+    clamp(
+      (revealProgress -
+        0.34) /
+        0.66
+    );
 
   const livePrice =
-    typeof quote?.c === "number"
+    typeof quote?.c ===
+    "number"
       ? quote.c
       : null;
 
   const storedPrice =
-    typeof stock?.current_price === "number"
+    typeof stock?.current_price ===
+    "number"
       ? stock.current_price
       : null;
 
   const displayPrice =
     livePrice !== null
-      ? livePrice.toFixed(2)
-      : storedPrice !== null
-        ? storedPrice.toFixed(2)
+      ? livePrice.toFixed(
+          2
+        )
+      : storedPrice !==
+          null
+        ? storedPrice.toFixed(
+            2
+          )
         : "—";
 
-  const dailyGainPct =
-    typeof quote?.dp === "number"
+  const dailyGain =
+    typeof quote?.dp ===
+    "number"
       ? quote.dp
       : null;
 
-  const dailyIsPositive =
-    (dailyGainPct ?? 0) >= 0;
-
-  const revealProgress = clamp(
-    Math.abs(dragX) / REVEAL_WIDTH
-  );
-
-  const deleteProgress = clamp(
-    revealProgress / 0.55
-  );
-
-  const shareProgress = clamp(
-    (revealProgress - 0.34) / 0.66
-  );
+  const positive =
+    (dailyGain ?? 0) >=
+    0;
 
   const linkTo =
     hasStock &&
     stock?.id &&
-    stock.id !== "undefined"
+    stock.id !==
+      "undefined"
       ? `/stock/${stock.id}`
       : `/stock/ticker-${item.ticker}`;
 
-  function handleTouchStart(event) {
+  function onTouchStart(
+    event
+  ) {
     if (deleting) {
       return;
     }
 
-    touchStartXRef.current =
-      event.touches[0].clientX;
+    touchX.current =
+      event.touches[0]
+        .clientX;
 
-    touchStartYRef.current =
-      event.touches[0].clientY;
+    touchY.current =
+      event.touches[0]
+        .clientY;
 
-    startDragXRef.current = dragX;
-    draggingRef.current = false;
-    suppressClickRef.current = false;
+    startDragX.current =
+      dragX;
+
+    dragging.current =
+      false;
+
+    suppressClick.current =
+      false;
   }
 
-  function handleTouchMove(event) {
+  function onTouchMove(
+    event
+  ) {
     if (
-      deleting ||
-      touchStartXRef.current === null ||
-      touchStartYRef.current === null
+      touchX.current ===
+        null ||
+      touchY.current ===
+        null ||
+      deleting
     ) {
       return;
     }
 
-    const currentX =
-      event.touches[0].clientX;
+    const dx =
+      event.touches[0]
+        .clientX -
+      touchX.current;
 
-    const currentY =
-      event.touches[0].clientY;
-
-    const deltaX =
-      currentX - touchStartXRef.current;
-
-    const deltaY =
-      currentY - touchStartYRef.current;
+    const dy =
+      event.touches[0]
+        .clientY -
+      touchY.current;
 
     if (
-      !draggingRef.current &&
-      Math.abs(deltaY) > Math.abs(deltaX)
+      !dragging.current &&
+      Math.abs(dy) >
+        Math.abs(dx)
     ) {
       return;
     }
 
-    if (Math.abs(deltaX) > 5) {
-      draggingRef.current = true;
-      suppressClickRef.current = true;
+    if (
+      Math.abs(dx) > 5
+    ) {
+      dragging.current =
+        true;
+
+      suppressClick.current =
+        true;
     }
 
-    if (!draggingRef.current) {
+    if (
+      !dragging.current
+    ) {
       return;
     }
 
     event.stopPropagation();
 
-    const nextX =
-      startDragXRef.current + deltaX;
-
     setDragX(
       clamp(
-        nextX,
-        -REVEAL_WIDTH - 14,
+        startDragX.current +
+          dx,
+        -126,
         0
       )
     );
   }
 
-  function handleTouchEnd() {
+  function onTouchEnd() {
     if (deleting) {
       return;
     }
 
-    const openThreshold =
+    const threshold =
       swiped
-        ? REVEAL_WIDTH * 0.28
-        : REVEAL_WIDTH * 0.42;
+        ? revealWidth *
+          0.28
+        : revealWidth *
+          0.42;
 
     if (
-      Math.abs(dragX) >= openThreshold
+      Math.abs(dragX) >=
+      threshold
     ) {
-      setDragX(-REVEAL_WIDTH);
+      setDragX(
+        -revealWidth
+      );
+
       setSwiped(true);
     } else {
       setDragX(0);
       setSwiped(false);
     }
 
-    touchStartXRef.current = null;
-    touchStartYRef.current = null;
-    draggingRef.current = false;
+    touchX.current =
+      null;
 
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 100);
+    touchY.current =
+      null;
+
+    dragging.current =
+      false;
+
+    window.setTimeout(
+      () => {
+        suppressClick.current =
+          false;
+      },
+      100
+    );
   }
 
   function closeSwipe() {
@@ -841,35 +1155,44 @@ function WatchlistCard({
     setSwiped(false);
   }
 
-  async function handleShare(event) {
+  async function share(
+    event
+  ) {
     event.preventDefault();
     event.stopPropagation();
 
-    const shareUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${linkTo}`
-        : "";
+    const url =
+      `${window.location.origin}${linkTo}`;
 
-    const shareText =
+    const text =
       `${companyName} (${item.ticker})` +
-      (displayPrice !== "—"
-        ? ` — $${displayPrice}`
-        : "");
+      (
+        displayPrice ===
+        "—"
+          ? ""
+          : ` — $${displayPrice}`
+      );
 
     try {
       if (navigator.share) {
         await navigator.share({
-          title: item.ticker,
-          text: shareText,
-          url: shareUrl,
+          title:
+            item.ticker,
+
+          text,
+
+          url,
         });
       } else {
         await navigator.clipboard?.writeText(
-          `${shareText} ${shareUrl}`.trim()
+          `${text} ${url}`
         );
       }
     } catch (error) {
-      if (error?.name !== "AbortError") {
+      if (
+        error?.name !==
+        "AbortError"
+      ) {
         console.warn(
           "Share failed:",
           error
@@ -880,34 +1203,40 @@ function WatchlistCard({
     }
   }
 
-  async function handleDelete(event) {
+  async function remove(
+    event
+  ) {
     event.preventDefault();
     event.stopPropagation();
-
-    if (deleting) {
-      return;
-    }
 
     setDeleting(true);
     setDragX(-420);
 
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, 240);
-    });
+    await new Promise(
+      (resolve) =>
+        window.setTimeout(
+          resolve,
+          240
+        )
+    );
 
-    const removed = await onRemove(item.id);
+    const removed =
+      await onRemove(
+        item.id
+      );
 
     if (!removed) {
       setDeleting(false);
-      setDragX(0);
-      setSwiped(false);
+      closeSwipe();
     }
   }
 
-  function handleLinkClick(event) {
+  function handleLinkClick(
+    event
+  ) {
     if (
       swiped ||
-      suppressClickRef.current ||
+      suppressClick.current ||
       deleting
     ) {
       event.preventDefault();
@@ -915,22 +1244,23 @@ function WatchlistCard({
     }
   }
 
-  const cardTransition =
-    draggingRef.current
-      ? "none"
-      : "transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)";
-
   return (
     <motion.div
-      className="relative overflow-hidden rounded-2xl"
+      layout
       initial={{
         opacity: 0,
         y: 20,
       }}
       animate={{
-        opacity: deleting ? 0 : 1,
+        opacity:
+          deleting ? 0 : 1,
+
         y: 0,
-        scale: deleting ? 0.96 : 1,
+
+        scale:
+          deleting
+            ? 0.96
+            : 1,
       }}
       exit={{
         opacity: 0,
@@ -939,131 +1269,170 @@ function WatchlistCard({
       }}
       transition={{
         duration: 0.24,
-        delay: index * 0.035,
+
+        delay:
+          index *
+          0.035,
       }}
-      layout
+      className="relative overflow-hidden rounded-2xl"
     >
-      <div
-        className="absolute inset-y-0 right-0 flex items-center"
-        style={{
-          gap: `${ACTION_GAP}px`,
-          paddingRight: `${ACTION_PADDING}px`,
-        }}
-      >
-        <SwipeActionButton
+      <div className="absolute inset-y-0 right-0 flex items-center gap-2 pr-2">
+        <SwipeAction
           type="share"
           label="Share"
           icon={Share2}
-          progress={shareProgress}
+          progress={
+            shareProgress
+          }
           disabled={deleting}
-          onClick={handleShare}
+          onClick={share}
         />
 
-        <SwipeActionButton
+        <SwipeAction
           type="delete"
           label="Delete"
           icon={Trash2}
-          progress={deleteProgress}
+          progress={
+            deleteProgress
+          }
           disabled={deleting}
-          onClick={handleDelete}
+          onClick={remove}
         />
       </div>
 
       <Link
         to={linkTo}
         state={{
-          from: "/watchlist",
+          from:
+            "/watchlist",
         }}
-        onClick={handleLinkClick}
+        onClick={
+          handleLinkClick
+        }
         className="block"
       >
         <div
-          className="flex h-[76px] items-center gap-3 rounded-2xl border border-gray-100 bg-white px-3.5 py-3 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] duration-200 hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
+          className="flex h-[92px] items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
           style={{
             backgroundColor:
               "hsl(var(--card))",
-            transform: `translateX(${dragX}px)`,
-            transition: cardTransition,
-            touchAction: "pan-y",
-            willChange: "transform",
+
+            transform:
+              `translateX(${dragX}px)`,
+
+            transition:
+              dragging.current
+                ? "none"
+                : "transform .3s cubic-bezier(.22,1,.36,1)",
+
+            touchAction:
+              "pan-y",
+
+            willChange:
+              "transform",
           }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
+          onTouchStart={
+            onTouchStart
+          }
+          onTouchMove={
+            onTouchMove
+          }
+          onTouchEnd={
+            onTouchEnd
+          }
+          onTouchCancel={
+            onTouchEnd
+          }
         >
           <button
             type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-
-              onStarToggle(item, stock);
-            }}
-            className="flex min-h-[44px] min-w-[36px] shrink-0 items-center justify-center p-1"
             aria-label={
               hasStock
                 ? `Remove ${item.ticker} from portfolio`
                 : `Add ${item.ticker} to portfolio`
             }
+            onClick={(
+              event
+            ) => {
+              event.preventDefault();
+              event.stopPropagation();
+
+              onStarToggle(
+                item,
+                stock
+              );
+            }}
+            className="flex min-h-[44px] min-w-[34px] shrink-0 items-center justify-center p-1"
           >
             <Star
-              className={`h-5 w-5 transition-colors ${
+              className={`h-5 w-5 ${
                 hasStock
                   ? "fill-amber-400 text-amber-400"
-                  : "text-gray-300 hover:text-amber-300"
+                  : "text-gray-300"
               }`}
             />
           </button>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate font-heading text-base font-bold leading-tight">
-                {item.ticker}
+          <div className="flex min-w-0 flex-1 flex-col justify-center">
+            <p className="truncate font-heading text-base font-bold leading-[1.05] text-gray-900">
+              {item.ticker}
+            </p>
+
+            {item.exchange ? (
+              <p className="mt-1 truncate text-[9px] font-semibold uppercase leading-none tracking-[0.08em] text-gray-400">
+                {abbreviateExchange(
+                  item.exchange
+                )}
               </p>
+            ) : (
+              <span className="mt-1 h-[9px]" />
+            )}
 
-              {item.exchange && (
-                <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
-                  {abbreviateExchange(
-                    item.exchange
-                  )}
-                </span>
-              )}
-            </div>
-
-            <p className="truncate text-xs text-gray-500">
+            <p className="mt-1 truncate text-[11px] leading-tight text-gray-500">
               {companyName}
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <div className="hidden sm:block">
-              <SparklineWrapper
-                ticker={item.ticker}
-                isPositive={dailyIsPositive}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex w-[44px] shrink-0 items-center justify-center">
+              <Sparkline
+                ticker={
+                  item.ticker
+                }
+                isPositive={
+                  positive
+                }
               />
             </div>
 
-            <div className="min-w-[68px] text-right">
-              <p>
+            <div className="min-w-[62px] shrink-0 text-right">
+              <p className="leading-none">
                 <AnimatedPrice
-                  value={displayPrice}
+                  value={
+                    displayPrice
+                  }
                 />
               </p>
 
-              {dailyGainPct !== null ? (
+              {dailyGain !==
+              null ? (
                 <div
-                  className={`mt-0.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold text-white ${
-                    dailyIsPositive
+                  className={`mt-1 inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white ${
+                    positive
                       ? "bg-emerald-500"
                       : "bg-red-500"
                   }`}
                 >
-                  {dailyIsPositive ? "+" : ""}
-                  {dailyGainPct.toFixed(2)}%
+                  {positive
+                    ? "+"
+                    : ""}
+                  {dailyGain.toFixed(
+                    2
+                  )}
+                  %
                 </div>
               ) : (
-                <p className="text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-400">
                   —
                 </p>
               )}
@@ -1076,271 +1445,307 @@ function WatchlistCard({
 }
 
 export default function Watchlist() {
-  const { user } = useAuth();
+  const { user } =
+    useAuth();
 
   const {
-    quotes: globalQuotes,
+    quotes = {},
     refreshQuotes,
   } = useMarketData();
 
-  const [items, setItems] = useState([]);
-  const [stocks, setStocks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [ticker, setTicker] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [
+    items,
+    setItems,
+  ] = useState([]);
+
+  const [
+    stocks,
+    setStocks,
+  ] = useState([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const [
+    ticker,
+    setTicker,
+  ] = useState("");
+
+  const [
+    adding,
+    setAdding,
+  ] = useState(false);
+
+  const [
+    suggestions,
+    setSuggestions,
+  ] = useState([]);
 
   const [
     showSuggestions,
     setShowSuggestions,
   ] = useState(false);
 
-  const [suggestions, setSuggestions] =
-    useState([]);
-
   const [
-    searchLoading,
-    setSearchLoading,
+    searching,
+    setSearching,
   ] = useState(false);
 
-  const [toast, setToast] = useState(null);
+  const [
+    toast,
+    setToast,
+  ] = useState(null);
 
-  const [dialogItem, setDialogItem] =
-    useState(null);
+  const [
+    dialogItem,
+    setDialogItem,
+  ] = useState(null);
 
-  const inputContainerRef = useRef(null);
-  const suggestionsRef = useRef(null);
-  const searchTimeoutRef = useRef(null);
+  const inputWrap =
+    useRef(null);
 
-  const quotes =
-    globalQuotes &&
-    typeof globalQuotes === "object"
-      ? globalQuotes
-      : {};
+  const suggestionWrap =
+    useRef(null);
 
-  const normalizeSearchResults =
-    useCallback((data) => {
-      const rawResults = Array.isArray(
-        data?.result
-      )
-        ? data.result
-        : Array.isArray(data?.results)
-          ? data.results
-          : [];
+  const searchTimer =
+    useRef(null);
 
-      return rawResults
-        .map((item) => ({
-          ticker: String(
-            item?.ticker ||
-              item?.symbol ||
-              item?.displaySymbol ||
-              ""
-          )
-            .trim()
-            .toUpperCase(),
-
-          name: String(
-            item?.name ||
-              item?.description ||
-              ""
-          ).trim(),
-
-          exchange: String(
-            item?.exchange ||
-              item?.primaryExchange ||
-              item?.mic ||
-              ""
-          ).trim(),
-        }))
-        .filter(
-          (item) =>
-            item.ticker &&
-            item.name
-        );
-    }, []);
-
-  const syncQuotesForItems = useCallback(
-    (watchItems) => {
-      const tickersToRefresh = [
-        ...new Set(
-          (watchItems || [])
-            .map((item) =>
-              String(item?.ticker || "")
-                .trim()
-                .toUpperCase()
+  const refreshWatchlistQuotes =
+    useCallback(
+      (watchItems) => {
+        const tickers = [
+          ...new Set(
+            (
+              watchItems ||
+              []
             )
-            .filter(Boolean)
-        ),
-      ];
+              .map(
+                (item) =>
+                  item?.ticker?.toUpperCase()
+              )
+              .filter(
+                Boolean
+              )
+          ),
+        ];
 
-      if (tickersToRefresh.length) {
-        refreshQuotes(tickersToRefresh);
-      }
-    },
-    [refreshQuotes]
-  );
-
-  const load = useCallback(async () => {
-    if (!user?.id) {
-      return [];
-    }
-
-    const [
-      watchlistResponse,
-      stocksResponse,
-    ] = await Promise.all([
-      supabase
-        .from("watchlist_items")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", {
-          ascending: false,
-        }),
-
-      supabase
-        .from("stocks")
-        .select("*")
-        .eq("user_id", user.id),
-    ]);
-
-    if (watchlistResponse.error) {
-      throw watchlistResponse.error;
-    }
-
-    if (stocksResponse.error) {
-      throw stocksResponse.error;
-    }
-
-    const watchlistData =
-      watchlistResponse.data || [];
-
-    const stockData = (
-      stocksResponse.data || []
-    ).filter(
-      (stock) =>
-        stock?.id &&
-        stock.id !== "undefined"
+        if (
+          tickers.length
+        ) {
+          refreshQuotes(
+            tickers
+          );
+        }
+      },
+      [refreshQuotes]
     );
 
-    setItems(watchlistData);
-    setStocks(stockData);
+  const load =
+    useCallback(
+      async () => {
+        if (!user?.id) {
+          return [];
+        }
 
-    return watchlistData;
-  }, [user?.id]);
+        const [
+          watchlistResult,
+          stocksResult,
+        ] =
+          await Promise.all(
+            [
+              supabase
+                .from(
+                  "watchlist_items"
+                )
+                .select("*")
+                .eq(
+                  "user_id",
+                  user.id
+                )
+                .order(
+                  "created_at",
+                  {
+                    ascending:
+                      false,
+                  }
+                ),
+
+              supabase
+                .from(
+                  "stocks"
+                )
+                .select("*")
+                .eq(
+                  "user_id",
+                  user.id
+                ),
+            ]
+          );
+
+        if (
+          watchlistResult.error
+        ) {
+          throw watchlistResult.error;
+        }
+
+        if (
+          stocksResult.error
+        ) {
+          throw stocksResult.error;
+        }
+
+        const watchItems =
+          watchlistResult.data ||
+          [];
+
+        const portfolioStocks =
+          (
+            stocksResult.data ||
+            []
+          ).filter(
+            (stock) =>
+              stock?.id &&
+              stock.id !==
+                "undefined"
+          );
+
+        setItems(
+          watchItems
+        );
+
+        setStocks(
+          portfolioStocks
+        );
+
+        return watchItems;
+      },
+      [user?.id]
+    );
 
   useEffect(() => {
-    function handleDocumentMouseDown(event) {
-      const clickedInput =
-        inputContainerRef.current?.contains(
-          event.target
-        );
-
-      const clickedSuggestions =
-        suggestionsRef.current?.contains(
-          event.target
-        );
-
+    function closeSearch(
+      event
+    ) {
       if (
-        !clickedInput &&
-        !clickedSuggestions
+        !inputWrap.current?.contains(
+          event.target
+        ) &&
+        !suggestionWrap.current?.contains(
+          event.target
+        )
       ) {
-        setShowSuggestions(false);
+        setShowSuggestions(
+          false
+        );
       }
     }
 
     document.addEventListener(
       "mousedown",
-      handleDocumentMouseDown
+      closeSearch
     );
 
-    return () => {
+    return () =>
       document.removeEventListener(
         "mousedown",
-        handleDocumentMouseDown
+        closeSearch
       );
-    };
   }, []);
 
   useEffect(() => {
-    const query = ticker.trim();
+    const query =
+      ticker.trim();
 
     if (!query) {
       setSuggestions([]);
-      setSearchLoading(false);
+      setSearching(false);
 
       return undefined;
     }
 
     window.clearTimeout(
-      searchTimeoutRef.current
+      searchTimer.current
     );
 
     const controller =
       new AbortController();
 
-    searchTimeoutRef.current =
-      window.setTimeout(async () => {
-        setSearchLoading(true);
-
-        try {
-          const result = await callFinnhub(
-            {
-              action: "search",
-              query,
-            },
-            controller.signal
+    searchTimer.current =
+      window.setTimeout(
+        async () => {
+          setSearching(
+            true
           );
 
-          const normalizedResults =
-            normalizeSearchResults(result);
+          try {
+            const payload =
+              await finnhub(
+                {
+                  action:
+                    "search",
 
-          const uppercaseQuery =
-            query.toUpperCase();
+                  query,
+                },
+                controller.signal
+              );
 
-          const filtered =
-            normalizedResults.filter(
-              (suggestion) =>
-                suggestion.ticker.includes(
-                  uppercaseQuery
-                ) ||
-                suggestion.name
-                  .toUpperCase()
-                  .includes(uppercaseQuery)
+            const upper =
+              query.toUpperCase();
+
+            setSuggestions(
+              normalizeSearchResults(
+                payload
+              )
+                .filter(
+                  (item) =>
+                    item.ticker.includes(
+                      upper
+                    ) ||
+                    item.name
+                      .toUpperCase()
+                      .includes(
+                        upper
+                      )
+                )
+                .slice(
+                  0,
+                  8
+                )
             );
-
-          setSuggestions(
-            filtered.slice(0, 8)
-          );
-        } catch (error) {
-          if (
-            error?.name !== "AbortError"
-          ) {
-            console.warn(
-              "Ticker search failed:",
-              error
-            );
-
-            setSuggestions([]);
+          } catch (error) {
+            if (
+              error?.name !==
+              "AbortError"
+            ) {
+              setSuggestions(
+                []
+              );
+            }
+          } finally {
+            if (
+              !controller
+                .signal
+                .aborted
+            ) {
+              setSearching(
+                false
+              );
+            }
           }
-        } finally {
-          if (
-            !controller.signal.aborted
-          ) {
-            setSearchLoading(false);
-          }
-        }
-      }, 250);
+        },
+        250
+      );
 
     return () => {
       window.clearTimeout(
-        searchTimeoutRef.current
+        searchTimer.current
       );
 
       controller.abort();
     };
-  }, [
-    ticker,
-    normalizeSearchResults,
-  ]);
+  }, [ticker]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -1349,236 +1754,264 @@ export default function Watchlist() {
       return undefined;
     }
 
-    let mounted = true;
-
-    setLoading(true);
+    let active = true;
 
     load()
-      .then((watchlistData) => {
-        if (mounted) {
-          syncQuotesForItems(
-            watchlistData
-          );
-        }
-      })
-      .catch((error) => {
-        if (!mounted) {
-          return;
-        }
-
-        console.error(
-          "Watchlist load failed:",
-          error
-        );
-
-        setToast(
-          "Unable to load watchlist."
-        );
-      })
-      .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [
-    user?.id,
-    load,
-    syncQuotesForItems,
-  ]);
-
-  useEffect(() => {
-    if (
-      !user?.id ||
-      items.length === 0
-    ) {
-      return undefined;
-    }
-
-    const interval =
-      window.setInterval(() => {
-        syncQuotesForItems(items);
-      }, 30000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [
-    items,
-    user?.id,
-    syncQuotesForItems,
-  ]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      return undefined;
-    }
-
-    const stocksChannel = supabase
-      .channel(
-        `watchlist-stocks-${user.id}`
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "stocks",
-          filter: `user_id=eq.${user.id}`,
-        },
-        async () => {
-          const {
-            data = [],
-            error,
-          } = await supabase
-            .from("stocks")
-            .select("*")
-            .eq("user_id", user.id);
-
-          if (!error) {
-            setStocks(
-              data.filter(
-                (stock) =>
-                  stock?.id &&
-                  stock.id !==
-                    "undefined"
-              )
+      .then(
+        (watchItems) => {
+          if (active) {
+            refreshWatchlistQuotes(
+              watchItems
             );
           }
         }
       )
-      .subscribe();
+      .catch((error) => {
+        if (active) {
+          console.error(
+            error
+          );
+
+          setToast(
+            "Unable to load watchlist."
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(
+            false
+          );
+        }
+      });
 
     return () => {
-      supabase.removeChannel(
-        stocksChannel
-      );
+      active = false;
     };
-  }, [user?.id]);
+  }, [
+    user?.id,
+    load,
+    refreshWatchlistQuotes,
+  ]);
+
+  useEffect(() => {
+    if (!items.length) {
+      return undefined;
+    }
+
+    const timer =
+      window.setInterval(
+        () =>
+          refreshWatchlistQuotes(
+            items
+          ),
+        30000
+      );
+
+    return () =>
+      window.clearInterval(
+        timer
+      );
+  }, [
+    items,
+    refreshWatchlistQuotes,
+  ]);
 
   useEffect(() => {
     if (!user?.id) {
       return undefined;
     }
 
-    const watchlistChannel = supabase
-      .channel(
-        `watchlist-items-${user.id}`
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "watchlist_items",
-          filter: `user_id=eq.${user.id}`,
-        },
-        async () => {
-          const {
-            data = [],
-            error,
-          } = await supabase
-            .from("watchlist_items")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", {
-              ascending: false,
-            });
-
-          if (!error) {
-            setItems(data);
-            syncQuotesForItems(data);
+    async function reloadWatchlist() {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from(
+          "watchlist_items"
+        )
+        .select("*")
+        .eq(
+          "user_id",
+          user.id
+        )
+        .order(
+          "created_at",
+          {
+            ascending:
+              false,
           }
-        }
-      )
-      .subscribe();
+        );
 
-    return () => {
+      if (!error) {
+        setItems(
+          data || []
+        );
+
+        refreshWatchlistQuotes(
+          data || []
+        );
+      }
+    }
+
+    async function reloadStocks() {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("stocks")
+        .select("*")
+        .eq(
+          "user_id",
+          user.id
+        );
+
+      if (!error) {
+        setStocks(
+          (
+            data ||
+            []
+          ).filter(
+            (stock) =>
+              stock?.id &&
+              stock.id !==
+                "undefined"
+          )
+        );
+      }
+    }
+
+    const channel =
+      supabase
+        .channel(
+          `watchlist-${user.id}`
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema:
+              "public",
+            table:
+              "watchlist_items",
+            filter:
+              `user_id=eq.${user.id}`,
+          },
+          reloadWatchlist
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema:
+              "public",
+            table:
+              "stocks",
+            filter:
+              `user_id=eq.${user.id}`,
+          },
+          reloadStocks
+        )
+        .subscribe();
+
+    return () =>
       supabase.removeChannel(
-        watchlistChannel
+        channel
       );
-    };
   }, [
     user?.id,
-    syncQuotesForItems,
+    refreshWatchlistQuotes,
   ]);
 
   async function addTicker(
     symbol,
     exchange = ""
   ) {
-    const normalizedSymbol = String(
-      symbol || ""
-    )
-      .trim()
-      .toUpperCase();
+    const normalized =
+      String(
+        symbol || ""
+      )
+        .trim()
+        .toUpperCase();
 
     if (
-      !normalizedSymbol ||
+      !normalized ||
       !user?.id ||
       adding
     ) {
       return;
     }
 
-    const alreadyAdded = items.some(
-      (item) =>
-        item.ticker.toUpperCase() ===
-        normalizedSymbol
-    );
-
-    if (alreadyAdded) {
+    if (
+      items.some(
+        (item) =>
+          item.ticker.toUpperCase() ===
+          normalized
+      )
+    ) {
       setToast(
-        `"${normalizedSymbol}" is already in your watchlist.`
+        `"${normalized}" is already in your watchlist.`
       );
 
       return;
     }
 
     setAdding(true);
-    setShowSuggestions(false);
+    setShowSuggestions(
+      false
+    );
 
     try {
-      let companyName = "";
-      let resolvedExchange = exchange;
+      let companyName =
+        "";
+
+      let resolvedExchange =
+        exchange;
 
       try {
-        const profile = await callFinnhub({
-          action: "profile",
-          ticker: normalizedSymbol,
-        });
+        const profile =
+          await finnhub({
+            action:
+              "profile",
+
+            ticker:
+              normalized,
+          });
 
         companyName =
-          profile?.name || "";
+          profile?.name ||
+          "";
 
-        if (
-          !resolvedExchange &&
-          profile?.exchange
-        ) {
-          resolvedExchange =
-            profile.exchange;
-        }
+        resolvedExchange =
+          resolvedExchange ||
+          profile?.exchange ||
+          "";
       } catch (error) {
         console.warn(
-          "Company profile lookup failed:",
+          "Profile lookup failed:",
           error
         );
       }
 
-      const { error } = await supabase
-        .from("watchlist_items")
-        .insert({
-          user_id: user.id,
-          ticker: normalizedSymbol,
-          exchange:
-            resolvedExchange || "",
-          company_name:
-            companyName ||
-            normalizedSymbol,
-        });
+      const { error } =
+        await supabase
+          .from(
+            "watchlist_items"
+          )
+          .insert({
+            user_id:
+              user.id,
+
+            ticker:
+              normalized,
+
+            exchange:
+              resolvedExchange,
+
+            company_name:
+              companyName ||
+              normalized,
+          });
 
       if (error) {
         throw error;
@@ -1587,22 +2020,17 @@ export default function Watchlist() {
       setTicker("");
       setSuggestions([]);
 
-      const updatedWatchlist =
+      const watchItems =
         await load();
 
-      syncQuotesForItems(
-        updatedWatchlist
+      refreshWatchlistQuotes(
+        watchItems
       );
 
       setToast(
-        `${normalizedSymbol} added to watchlist`
+        `${normalized} added to watchlist`
       );
     } catch (error) {
-      console.error(
-        "Add ticker failed:",
-        error
-      );
-
       setToast(
         error?.message ||
           "Failed to add ticker."
@@ -1612,47 +2040,36 @@ export default function Watchlist() {
     }
   }
 
-  function handleAdd(event) {
-    event.preventDefault();
+  async function removeTicker(
+    id
+  ) {
+    const previous =
+      items;
 
-    addTicker(ticker);
-  }
-
-  async function handleRemove(id) {
-    const previousItems = items;
-
-    const nextItems =
-      previousItems.filter(
-        (item) => item.id !== id
+    const next =
+      items.filter(
+        (item) =>
+          item.id !== id
       );
 
-    setItems(nextItems);
+    setItems(next);
 
-    try {
-      const { error } = await supabase
-        .from("watchlist_items")
+    const { error } =
+      await supabase
+        .from(
+          "watchlist_items"
+        )
         .delete()
         .eq("id", id)
-        .eq("user_id", user.id);
+        .eq(
+          "user_id",
+          user.id
+        );
 
-      if (error) {
-        throw error;
-      }
-
-      syncQuotesForItems(nextItems);
-
-      setToast(
-        "Removed from watchlist"
+    if (error) {
+      setItems(
+        previous
       );
-
-      return true;
-    } catch (error) {
-      console.error(
-        "Remove ticker failed:",
-        error
-      );
-
-      setItems(previousItems);
 
       setToast(
         "Failed to remove ticker."
@@ -1660,46 +2077,55 @@ export default function Watchlist() {
 
       return false;
     }
+
+    setToast(
+      "Removed from watchlist"
+    );
+
+    return true;
   }
 
-  async function handleStarToggle(
+  async function togglePortfolio(
     item,
     stock
   ) {
     if (stock) {
-      const previousStocks = stocks;
+      const previous =
+        stocks;
 
-      setStocks((currentStocks) =>
-        currentStocks.filter(
-          (currentStock) =>
-            currentStock.id !== stock.id
-        )
+      setStocks(
+        (value) =>
+          value.filter(
+            (entry) =>
+              entry.id !==
+              stock.id
+          )
       );
 
-      try {
-        const { error } = await supabase
+      const { error } =
+        await supabase
           .from("stocks")
           .delete()
-          .eq("id", stock.id)
-          .eq("user_id", user.id);
+          .eq(
+            "id",
+            stock.id
+          )
+          .eq(
+            "user_id",
+            user.id
+          );
 
-        if (error) {
-          throw error;
-        }
-
-        setToast(
-          `${item.ticker} removed from portfolio`
+      if (error) {
+        setStocks(
+          previous
         );
-      } catch (error) {
-        console.error(
-          "Portfolio removal failed:",
-          error
-        );
-
-        setStocks(previousStocks);
 
         setToast(
           "Failed to update portfolio."
+        );
+      } else {
+        setToast(
+          `${item.ticker} removed from portfolio`
         );
       }
 
@@ -1707,64 +2133,63 @@ export default function Watchlist() {
     }
 
     setDialogItem({
-      ticker: item.ticker,
-      companyName: getCompanyName(
+      ticker:
         item.ticker,
-        null,
-        item
-      ),
+
+      companyName:
+        getCompanyName(
+          item.ticker,
+          null,
+          item
+        ),
     });
   }
 
-  async function handlePortfolioAdded() {
-    const addedTicker =
-      dialogItem?.ticker;
+  const stockForTicker =
+    useCallback(
+      (value) =>
+        stocks.find(
+          (stock) =>
+            stock.ticker.toUpperCase() ===
+            value.toUpperCase()
+        ),
+      [stocks]
+    );
 
-    setDialogItem(null);
-
-    await load();
-
-    if (addedTicker) {
-      setToast(
-        `${addedTicker} added to portfolio`
-      );
-    }
-  }
-
-  const findStock = useCallback(
-    (tickerValue) =>
-      stocks.find(
-        (stock) =>
-          stock.ticker.toUpperCase() ===
-          tickerValue.toUpperCase()
-      ),
-    [stocks]
-  );
-
-  const sortedItems = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const firstGain =
-        quotes[
-          a.ticker.toUpperCase()
-        ]?.dp ?? 0;
-
-      const secondGain =
-        quotes[
-          b.ticker.toUpperCase()
-        ]?.dp ?? 0;
-
-      return secondGain - firstGain;
-    });
-  }, [items, quotes]);
+  const sortedItems =
+    useMemo(
+      () =>
+        [...items].sort(
+          (a, b) =>
+            (
+              quotes[
+                b.ticker.toUpperCase()
+              ]?.dp ??
+              -Infinity
+            ) -
+            (
+              quotes[
+                a.ticker.toUpperCase()
+              ]?.dp ??
+              -Infinity
+            )
+        ),
+      [
+        items,
+        quotes,
+      ]
+    );
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-6 sm:px-6">
+    <div className="flex min-h-full flex-col bg-gray-50">
       <AnimatePresence>
         {toast && (
           <Toast
             message={toast}
             onDone={() =>
-              setToast(null)
+              setToast(
+                null
+              )
             }
           />
         )}
@@ -1772,93 +2197,156 @@ export default function Watchlist() {
 
       {dialogItem && (
         <AddToPortfolioDialog
-          open={Boolean(dialogItem)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setDialogItem(null);
-            }
-          }}
-          ticker={dialogItem.ticker}
+          open
+          ticker={
+            dialogItem.ticker
+          }
           companyName={
             dialogItem.companyName
           }
-          onAdded={
-            handlePortfolioAdded
+          userId={
+            user?.id
           }
-          userId={user?.id}
+          onOpenChange={(
+            open
+          ) => {
+            if (!open) {
+              setDialogItem(
+                null
+              );
+            }
+          }}
+          onAdded={async () => {
+            const addedTicker =
+              dialogItem.ticker;
+
+            setDialogItem(
+              null
+            );
+
+            await load();
+
+            setToast(
+              `${addedTicker} added to portfolio`
+            );
+          }}
         />
       )}
 
-      <main className="mx-auto max-w-3xl">
-        <div className="mb-6 text-center">
-          <div className="flex items-center justify-center gap-1">
-            <Star className="h-7 w-7 shrink-0 fill-amber-400 text-amber-400 drop-shadow-[0_2px_5px_rgba(251,191,36,0.28)]" />
+      <header className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-1">
+            <Star className="h-7 w-7 fill-amber-400 text-amber-400" />
 
-            <h1 className="font-heading text-3xl font-bold text-gray-900">
-              Watchlist
-            </h1>
+            <div>
+              <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
+                Watchlist
+              </h1>
+
+              <p className="mt-0.5 text-xs text-gray-500">
+                Stocks
+                you&apos;re
+                watching
+              </p>
+            </div>
           </div>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Stocks you&apos;re watching
-          </p>
         </div>
+      </header>
 
+      <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-6 sm:px-6">
         <form
-          onSubmit={handleAdd}
-          className="relative mb-6"
+          onSubmit={(
+            event
+          ) => {
+            event.preventDefault();
+
+            addTicker(
+              ticker
+            );
+          }}
+          className="relative flex justify-center gap-2"
         >
-          <div className="flex gap-2">
-            <div
-              ref={inputContainerRef}
-              className="relative flex-1"
-            >
-              <Input
-                value={ticker}
-                onChange={(event) => {
-                  setTicker(
-                    event.target.value
-                  );
+          <div
+            ref={inputWrap}
+            className="relative flex-[0_1_76%]"
+          >
+            <Input
+              value={ticker}
+              placeholder="Enter Ticker or Company Name"
+              className="uppercase placeholder:normal-case"
+              autoComplete="off"
+              onFocus={() =>
+                setShowSuggestions(
+                  true
+                )
+              }
+              onChange={(
+                event
+              ) => {
+                setTicker(
+                  event.target
+                    .value
+                );
 
-                  setShowSuggestions(true);
-                }}
-                onFocus={() =>
-                  setShowSuggestions(true)
-                }
-                placeholder="Search ticker or company"
-                className="w-full uppercase placeholder:normal-case"
-                autoComplete="off"
-              />
+                setShowSuggestions(
+                  true
+                );
+              }}
+            />
 
+            <AnimatePresence>
               {showSuggestions &&
                 ticker.trim() &&
-                (searchLoading ||
+                (
+                  searching ||
                   suggestions.length >
-                    0) && (
-                  <div
-                    ref={suggestionsRef}
+                    0
+                ) && (
+                  <motion.div
+                    ref={
+                      suggestionWrap
+                    }
+                    initial={{
+                      opacity: 0,
+                      y: -4,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    exit={{
+                      opacity: 0,
+                      y: -4,
+                    }}
                     className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"
                   >
-                    {searchLoading ? (
+                    {searching ? (
                       <div className="flex items-center gap-2 px-4 py-4 text-sm text-gray-500">
                         <Loader2 className="h-4 w-4 animate-spin" />
+
                         Searching…
                       </div>
                     ) : (
                       suggestions.map(
-                        (suggestion) => {
+                        (
+                          suggestion
+                        ) => {
                           const alreadyAdded =
                             items.some(
-                              (item) =>
+                              (
+                                item
+                              ) =>
                                 item.ticker.toUpperCase() ===
-                                suggestion.ticker.toUpperCase()
+                                suggestion.ticker
                             );
 
                           const inPortfolio =
                             stocks.some(
-                              (stock) =>
+                              (
+                                stock
+                              ) =>
                                 stock.ticker.toUpperCase() ===
-                                suggestion.ticker.toUpperCase()
+                                suggestion.ticker
                             );
 
                           return (
@@ -1870,109 +2358,98 @@ export default function Watchlist() {
                               }
                               onMouseDown={(
                                 event
-                              ) => {
-                                event.preventDefault();
-                              }}
-                              onClick={() => {
-                                if (
-                                  alreadyAdded
-                                ) {
-                                  return;
-                                }
-
+                              ) =>
+                                event.preventDefault()
+                              }
+                              onClick={() =>
                                 addTicker(
                                   suggestion.ticker,
                                   suggestion.exchange
-                                );
-                              }}
-                              className={`flex w-full items-center justify-between gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-0 ${
+                                )
+                              }
+                              className={`flex w-full items-center justify-between gap-3 border-b border-gray-50 px-4 py-3 text-left last:border-0 ${
                                 alreadyAdded
                                   ? "cursor-not-allowed opacity-40"
                                   : "hover:bg-gray-50"
                               }`}
                             >
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-gray-900">
-                                    {
-                                      suggestion.ticker
-                                    }
-                                  </span>
-
-                                  {suggestion.exchange && (
-                                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-400">
-                                      {abbreviateExchange(
-                                        suggestion.exchange
-                                      )}
-                                    </span>
-                                  )}
-                                </div>
-
-                                <p className="truncate text-xs text-gray-500">
+                                <p className="font-semibold text-gray-900">
                                   {
-                                    suggestion.name
+                                    suggestion.ticker
                                   }
+                                </p>
+
+                                {suggestion.exchange && (
+                                  <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                                    {abbreviateExchange(
+                                      suggestion.exchange
+                                    )}
+                                  </p>
+                                )}
+
+                                <p className="mt-0.5 truncate text-xs text-gray-500">
+                                  {suggestion.name ||
+                                    suggestion.ticker}
                                 </p>
                               </div>
 
-                              <div className="shrink-0">
-                                {alreadyAdded && (
-                                  <span className="text-xs font-medium text-gray-400">
-                                    Added
-                                  </span>
-                                )}
-
-                                {!alreadyAdded &&
-                                  inPortfolio && (
-                                    <span className="text-xs font-medium text-amber-500">
-                                      In portfolio
-                                    </span>
-                                  )}
-                              </div>
+                              {alreadyAdded ? (
+                                <span className="text-xs text-gray-400">
+                                  Added
+                                </span>
+                              ) : inPortfolio ? (
+                                <span className="text-xs text-amber-500">
+                                  In
+                                  portfolio
+                                </span>
+                              ) : null}
                             </button>
                           );
                         }
                       )
                     )}
-                  </div>
+                  </motion.div>
                 )}
-            </div>
-
-            <Button
-              type="submit"
-              disabled={
-                adding ||
-                !ticker.trim()
-              }
-              className="shrink-0"
-            >
-              {adding ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-
-              <span className="hidden sm:inline">
-                Add
-              </span>
-            </Button>
+            </AnimatePresence>
           </div>
+
+          <Button
+            type="submit"
+            disabled={
+              adding ||
+              !ticker.trim()
+            }
+            className="shrink-0"
+          >
+            {adding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+
+            <span className="hidden sm:inline">
+              Add
+            </span>
+          </Button>
         </form>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
+          <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
           </div>
-        ) : items.length === 0 ? (
+        ) : items.length ===
+          0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center">
             <Star className="mx-auto h-8 w-8 fill-amber-400 text-amber-400" />
 
-            <h2 className="mt-3 text-base font-semibold text-gray-900">
+            <h2 className="mt-3 font-semibold text-gray-900">
               Nothing here yet
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Add a ticker above to start
+              Add a ticker
+              above to start
               watching it.
             </p>
           </div>
@@ -1982,15 +2459,24 @@ export default function Watchlist() {
             className="space-y-3"
           >
             <AnimatePresence
-              initial={false}
+              initial={
+                false
+              }
               mode="popLayout"
             >
               {sortedItems.map(
-                (item, index) => (
+                (
+                  item,
+                  index
+                ) => (
                   <WatchlistCard
-                    key={item.id}
-                    item={item}
-                    stock={findStock(
+                    key={
+                      item.id
+                    }
+                    item={
+                      item
+                    }
+                    stock={stockForTicker(
                       item.ticker
                     )}
                     quote={
@@ -1998,13 +2484,15 @@ export default function Watchlist() {
                         item.ticker.toUpperCase()
                       ]
                     }
+                    index={
+                      index
+                    }
                     onRemove={
-                      handleRemove
+                      removeTicker
                     }
                     onStarToggle={
-                      handleStarToggle
+                      togglePortfolio
                     }
-                    index={index}
                   />
                 )
               )}
