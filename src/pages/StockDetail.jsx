@@ -58,7 +58,7 @@ async function fetchChartData(ticker, period, basePrice) {
     });
     const candles = data?.candles;
     if (candles?.length > 0) {
-      candles.sort((a, b) => a.t - b.t); // ensure left-to-right
+      candles.sort((a, b) => a.t - b.t); // left-to-right order
       return candles.map(c => {
         const d = new Date(c.t * 1000);
         const label = (period === "1D")
@@ -293,7 +293,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
   );
 }
 
-// ---------- Buy/Sell Dialogs ----------
+// ---------- Buy/Sell Dialogs (unchanged) ----------
 function BuyDetailDialog({ open, onOpenChange, stock, onDone }) {
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState(stock?.current_price?.toFixed(2) || stock?.purchase_price?.toFixed(2) || "");
@@ -357,7 +357,7 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
   );
 }
 
-// ---------- Key Metrics ----------
+// ---------- Key Metrics (unchanged) ----------
 function getStockMetrics(ticker, price) {
   const s = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const p = price || 100;
@@ -391,7 +391,7 @@ function getStockMetrics(ticker, price) {
   ];
 }
 
-// ---------- MAIN COMPONENT (fixed layout) ----------
+// ---------- Main Component ----------
 export default function StockDetail() {
   const { ticker } = useParams();
   const navigate = useNavigate();
@@ -589,20 +589,24 @@ export default function StockDetail() {
       </div>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8" style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}>
-        {/* Stock Overview – fixed layout with relative + absolute positioning */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8 relative">
-          <div className="absolute top-8 right-4 flex items-center gap-2">
-            <button onClick={() => setBuyOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-black text-white hover:bg-gray-800 active:scale-95 transition-all">Buy</button>
-            {!stock._watchlistOnly && <button onClick={() => setSellOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-white text-black border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all">Sell</button>}
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        {/* Stock Overview – Buy/Sell inline, never overlaps */}
+        <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8">
+          {/* Top row: ticker info + buttons */}
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <span className="text-xs font-mono tracking-widest text-gray-400 uppercase">{stock.sector}</span>
               <h1 className="font-heading text-3xl font-bold mt-1">{stock.ticker}</h1>
               <p className="text-gray-500">{stock.company_name}</p>
             </div>
-            <div className="text-left sm:text-right">
+            <div className="flex items-center gap-2 shrink-0">
+              <button onClick={() => setBuyOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-black text-white hover:bg-gray-800 active:scale-95 transition-all">Buy</button>
+              {!stock._watchlistOnly && <button onClick={() => setSellOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-white text-black border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all">Sell</button>}
+            </div>
+          </div>
+
+          {/* Bottom row: price and gain */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
               <p className="text-3xl font-heading font-bold">${stock.current_price?.toFixed(2) || "—"}</p>
               <div className={`inline-flex items-center gap-1.5 mt-1 px-3 py-1 rounded-full text-sm font-semibold ${isPositive ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
                 {isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
@@ -611,6 +615,7 @@ export default function StockDetail() {
             </div>
           </div>
 
+          {/* Portfolio-specific details (shares, cost, etc.) */}
           {!stock._watchlistOnly && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
               {[
@@ -628,7 +633,7 @@ export default function StockDetail() {
           )}
         </div>
 
-        {/* Chart – now properly placed below */}
+        {/* Chart */}
         <StockChart ticker={stock.ticker} currentPrice={stock.current_price || stock.purchase_price} isPositive={isPositive} />
 
         {/* Key Metrics */}
