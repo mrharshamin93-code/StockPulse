@@ -65,26 +65,15 @@ async function finnhubGet(path, params = {}, retries = 2) {
 function getBody(req) {
   if (req.method === "GET") {
     const {
-      action,
-      ticker,
-      query,
-      q,
-      resolution,
-      from,
-      to,
-      tickers,
+      action, ticker, query, q, resolution, from, to, tickers,
     } = req.query;
 
     let parsedTickers = tickers;
-
     if (typeof tickers === "string") {
       try {
         parsedTickers = JSON.parse(tickers);
       } catch {
-        parsedTickers = tickers
-          .split(",")
-          .map((t) => t.trim().toUpperCase())
-          .filter(Boolean);
+        parsedTickers = tickers.split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
       }
     }
 
@@ -102,7 +91,6 @@ function getBody(req) {
   }
 
   const body = req.body || {};
-
   return {
     ...body,
     ticker: body.ticker ? String(body.ticker).trim().toUpperCase() : undefined,
@@ -130,52 +118,42 @@ function mapQuoteData(ticker, data) {
 function emptyQuote(ticker, error = null) {
   return {
     ticker,
-    c: null,
-    dp: null,
-    d: null,
-    pc: null,
-    h: null,
-    l: null,
-    o: null,
-    t: null,
+    c: null, dp: null, d: null, pc: null, h: null, l: null, o: null, t: null,
     ...(error ? { error } : {}),
   };
 }
 
-// Helper function to fetch candles from Yahoo Finance
-async function fetchYahooCandles(ticker, fromTs, toTs, resolution) {
-  // Yahoo only supports daily (1d) data for this free endpoint
-  const url = `https://query1.finance.yahoo.com/v7/finance/download/${ticker.toUpperCase()}?period1=${fromTs}&period2=${toTs}&interval=1d&events=history&includeAdjustedClose=true`;
+// ==================== YAHOO FINANCE CANDLE FETCH ====================
+async function fetchYahooCandles(ticker, fromTs, toTs) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker.toUpperCase()}?period1=${fromTs}&period2=${toTs}&interval=1d&range=30d`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "application/json",
+    },
+  });
+
   if (!res.ok) {
-    console.error(`Yahoo fetch failed for ${ticker}: ${res.status}`);
+    console.error(`Yahoo chart fetch failed for ${ticker}: ${res.status}`);
     return { candles: [] };
   }
 
-  const csv = await res.text();
-  const lines = csv.trim().split('\n');
-  if (lines.length < 2) {
-    console.warn(`No data from Yahoo for ${ticker}`);
+  const json = await res.json();
+  const result = json?.chart?.result?.[0];
+  if (!result) {
+    console.error(`No chart data for ${ticker}`);
     return { candles: [] };
   }
 
-  const header = lines[0].split(',');
-  const closeIndex = header.indexOf('Close');
-  if (closeIndex === -1) {
-    console.error('Close column not found in Yahoo CSV');
-    return { candles: [] };
-  }
+  const timestamps = result.timestamp || [];
+  const quotes = result.indicators?.quote?.[0];
+  const closes = quotes?.close || [];
 
   const candles = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',');
-    const dateStr = cols[0];
-    const close = parseFloat(cols[closeIndex]);
-    if (!isNaN(close) && dateStr) {
-      const date = new Date(dateStr + 'T00:00:00');
-      const timestamp = Math.floor(date.getTime() / 1000);
-      candles.push({ t: timestamp, v: close });
+  for (let i = 0; i < timestamps.length; i++) {
+    if (closes[i] != null) {
+      candles.push({ t: timestamps[i], v: closes[i] });
     }
   }
 
@@ -195,7 +173,7 @@ export default async function handler(req, res) {
     const body = getBody(req);
     const { action, ticker, tickers } = body;
 
-    // Quotes (unchanged)
+    // ---------- QUOTE (single) ----------
     if (action === "quote") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const result = await withCache(`quote:${ticker}`, 15_000, async () => {
@@ -205,9 +183,11 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
 
+    // ---------- QUOTES (batch) ----------
     if (action === "quotes") {
       if (!Array.isArray(tickers) || tickers.length === 0)
         return res.status(400).json({ error: "Missing tickers" });
+
       const results = await Promise.all(
         tickers.map(async (t) => {
           const nt = String(t).trim().toUpperCase();
@@ -217,38 +197,38 @@ export default async function handler(req, res) {
               return mapQuoteData(nt, data);
             });
           } catch (error) {
-            return emptyQuote(nt, error?.message || "Failed");
+            return emptyQuote(nt, error?.message || "Failed to fetch quote");
           }
         })
       );
       return res.status(200).json({ quotes: results });
     }
 
-    // CANDLES (yearly) - now using Yahoo Finance
+    // ---------- CANDLES (yearly, weekly) ----------
     if (action === "candles") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const toTs = Math.floor(Date.now() / 1000);
       const fromTs = toTs - 365 * 24 * 60 * 60;
       const result = await withCache(`candles:${ticker}`, 5 * 60_000, async () =>
-        fetchYahooCandles(ticker, fromTs, toTs, "W")
+        fetchYahooCandles(ticker, fromTs, toTs)
       );
       return res.status(200).json(result);
     }
 
-    // CANDLES_RANGE (30-day sparkline) - using Yahoo Finance
+    // ---------- CANDLES_RANGE (30 day) ----------
     if (action === "candles_range") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const { from, to } = body;
       const toTs = to || Math.floor(Date.now() / 1000);
       const fromTs = from || toTs - 30 * 86400;
-      const cacheKey = `candles_range:${ticker}:D:${fromTs}:${toTs}`;
+      const cacheKey = `candles_range:${ticker}:${fromTs}:${toTs}`;
       const result = await withCache(cacheKey, 5 * 60_000, async () =>
-        fetchYahooCandles(ticker, fromTs, toTs, "D")
+        fetchYahooCandles(ticker, fromTs, toTs)
       );
       return res.status(200).json(result);
     }
 
-    // NEWS, PROFILE, SEARCH (unchanged)
+    // ---------- NEWS ----------
     if (action === "news") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const result = await withCache(`news:${ticker}`, 10 * 60_000, async () => {
@@ -267,7 +247,10 @@ export default async function handler(req, res) {
         );
         const relevant = all.filter((a) => {
           const text = `${a.headline || ""} ${a.summary || ""}`.toLowerCase();
-          return text.includes(tickerLower) || (companyName && text.includes(companyName));
+          return (
+            text.includes(tickerLower) ||
+            (companyName && text.includes(companyName))
+          );
         });
         const seenSources = {};
         const articles = [];
@@ -291,6 +274,7 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
 
+    // ---------- PROFILE ----------
     if (action === "profile") {
       if (!ticker) return res.status(400).json({ error: "Missing ticker" });
       const result = await withCache(`profile:${ticker}`, 24 * 60 * 60_000, async () => {
@@ -304,6 +288,7 @@ export default async function handler(req, res) {
       return res.status(200).json(result);
     }
 
+    // ---------- SEARCH ----------
     if (action === "search") {
       const query = body.query || ticker;
       if (!query) return res.status(400).json({ error: "Missing query" });
