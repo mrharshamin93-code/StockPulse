@@ -36,8 +36,6 @@ async function finnhubProxy(body) {
   return res.json();
 }
 
-// ---------- Chart & other functions (unchanged from last full file) ----------
-// I'm including all of them to keep the file complete
 async function fetchChartData(ticker, period, basePrice) {
   try {
     const cfg = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
@@ -58,6 +56,8 @@ async function fetchChartData(ticker, period, basePrice) {
     });
     const candles = data?.candles;
     if (candles?.length > 0) {
+      // Sort ascending by timestamp just in case
+      candles.sort((a, b) => a.t - b.t);
       return candles.map(c => {
         const d = new Date(c.t * 1000);
         const label = (period === "1D")
@@ -165,6 +165,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
 
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-6">
+      {/* ... (chart JSX unchanged, same as before) ... */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500">Price Chart</h2>
@@ -269,9 +270,9 @@ function StockChart({ ticker, currentPrice, isPositive }) {
                 );
               }}
             />
-            <Line type="monotone" dataKey={ticker} stroke={primaryColor} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey={ticker} stroke={primaryColor} strokeWidth={2} dot={false} animationDuration={800} />
             {compareTicker && (
-              <Line type="monotone" dataKey={compareTicker} stroke={compareColor} strokeWidth={2} dot={false} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey={compareTicker} stroke={compareColor} strokeWidth={2} dot={false} strokeDasharray="4 2" animationDuration={800} />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -357,7 +358,7 @@ function SellDetailDialog({ open, onOpenChange, stock, onDone }) {
   );
 }
 
-// ---------- Key Metrics (simulated) ----------
+// ---------- Key Metrics ----------
 function getStockMetrics(ticker, price) {
   const s = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   const p = price || 100;
@@ -391,9 +392,8 @@ function getStockMetrics(ticker, price) {
   ];
 }
 
-// ---------- MAIN COMPONENT (FIXED) ----------
+// ---------- MAIN COMPONENT (with slide-in animation) ----------
 export default function StockDetail() {
-  // ✅ FIX: the route param is named "ticker", not "id"
   const { ticker: routeParam } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -406,7 +406,6 @@ export default function StockDetail() {
   const [sellOpen, setSellOpen] = useState(false);
   const [error, setError] = useState(null);
 
-  // Determine if it's a ticker‑based route (watchlist) or a portfolio stock ID
   const isTickerRoute = routeParam?.startsWith("ticker-");
   const tickerFromRoute = isTickerRoute ? routeParam.replace("ticker-", "").toUpperCase() : null;
   const stockId = !isTickerRoute ? routeParam : null;
@@ -415,18 +414,14 @@ export default function StockDetail() {
     const load = async () => {
       setError(null);
       setLoading(true);
-
-      // --- early rejection ---
       if (!routeParam || routeParam === "undefined") {
         setStock(null);
         setError("Invalid stock link");
         setLoading(false);
         return;
       }
-
       try {
         if (isTickerRoute) {
-          // Fetch via Finnhub proxy
           const [quoteData, profileData] = await Promise.all([
             finnhubProxy({ action: "quote", ticker: tickerFromRoute }).catch(e => {
               console.error("Quote fetch failed:", e);
@@ -448,7 +443,6 @@ export default function StockDetail() {
             _watchlistOnly: true,
           });
         } else {
-          // Portfolio stock by ID
           const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
           if (data) {
             setStock({ ...data, _watchlistOnly: false });
@@ -465,11 +459,9 @@ export default function StockDetail() {
         setLoading(false);
       }
     };
-
     load();
   }, [routeParam, isTickerRoute, tickerFromRoute, stockId]);
 
-  // Load news
   useEffect(() => {
     if (!stock) return;
     const fetchNews = async () => {
@@ -490,16 +482,13 @@ export default function StockDetail() {
     if (!user) return;
     const newQty = stock.quantity + qty;
     const newAvgCost = stock.quantity ? ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty : price;
-
     setStock(prev => ({ ...prev, quantity: newQty, purchase_price: +newAvgCost.toFixed(4) }));
     setBuyOpen(false);
-
     let currentPrice = price;
     try {
       const res = await finnhubProxy({ action: "quote", ticker: stock.ticker });
       if (res?.c) currentPrice = res.c;
     } catch {}
-
     await supabase.from("stock_transactions").insert({
       user_id: user.id,
       ticker: stock.ticker.toUpperCase(),
@@ -509,7 +498,6 @@ export default function StockDetail() {
       price,
       total: qty * price,
     }).catch(err => console.warn("Transaction log failed:", err));
-
     if (stock._watchlistOnly) {
       const { error } = await supabase.from("stocks").insert({
         user_id: user.id,
@@ -531,7 +519,6 @@ export default function StockDetail() {
         current_price: currentPrice,
       }).eq("id", stockId);
     }
-
     if (!stock._watchlistOnly) {
       const { data } = await supabase.from("stocks").select("*").eq("id", stockId).single();
       if (data) setStock({ ...data, _watchlistOnly: false });
@@ -542,7 +529,6 @@ export default function StockDetail() {
     if (!user) return;
     const remainingQty = parseFloat((stock.quantity - qty).toFixed(6));
     const sellPrice = stock.current_price || stock.purchase_price;
-
     if (qty >= stock.quantity) {
       setSellOpen(false);
       navigate("/home");
@@ -624,7 +610,15 @@ export default function StockDetail() {
         </button>
       </div>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8" style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}>
+      {/* Content with left-to-right slide animation */}
+      <motion.div
+        initial={{ x: -40, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8"
+        style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}
+      >
+        {/* Stock Overview */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8 relative">
           <div className="absolute top-8 right-4 flex items-center gap-2">
             <button onClick={() => setBuyOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-black text-white hover:bg-gray-800 active:scale-95 transition-all">Buy</button>
@@ -644,7 +638,6 @@ export default function StockDetail() {
               </div>
             </div>
           </div>
-
           {!stock._watchlistOnly && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
               {[
@@ -717,7 +710,7 @@ export default function StockDetail() {
             </div>
           </div>
         ) : null}
-      </main>
+      </motion.div>
     </motion.div>
   );
 }
