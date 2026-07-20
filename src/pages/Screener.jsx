@@ -1,11 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Loader2,
+  Save,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { Loader2, SlidersHorizontal, Search, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
 const SECTORS = [
@@ -22,304 +39,1859 @@ const SECTORS = [
 ];
 
 const POPULAR_SCREENS = [
-  { label: "Large Cap Tech", filters: { sector: "Technology", minMarketCap: 10 } },
-  { label: "High Dividend", filters: { minDividendYield: 3 } },
-  { label: "Oversold (RSI < 30)", filters: { maxRsi: 30 } },
-  { label: "Strong Momentum", filters: { minChangePercent: 5 } },
-  { label: "Penny Stocks", filters: { maxPrice: 5 } },
+  {
+    label: "Large Cap Tech",
+    filters: {
+      sector: "Technology",
+      minMarketCapB: 10,
+    },
+  },
+  {
+    label: "High Dividend",
+    filters: {
+      minDividendYield: 3,
+    },
+  },
+  {
+    label: "Oversold (RSI < 30)",
+    filters: {
+      maxRsi: 30,
+    },
+  },
+  {
+    label: "Strong Momentum",
+    filters: {
+      minChangePercent: 5,
+    },
+  },
+  {
+    label: "Penny Stocks",
+    filters: {
+      maxPrice: 5,
+    },
+  },
 ];
 
-export default function Screener() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [filters, setFilters] = useState({});
-  const [activeMetrics, setActiveMetrics] = useState(new Set());
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [activePreset, setActivePreset] = useState(null);
-  const [savedScreens, setSavedScreens] = useState([]);
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [saveName, setSaveName] = useState("");
-  const [saving, setSaving] = useState(false);
+function readSessionObject(key, fallback) {
+  try {
+    const storedValue =
+      window.sessionStorage.getItem(key);
+
+    if (!storedValue) {
+      return fallback;
+    }
+
+    return JSON.parse(storedValue);
+  } catch {
+    return fallback;
+  }
+}
+
+function removeUndefinedValues(object) {
+  return Object.fromEntries(
+    Object.entries(object || {}).filter(
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== ""
+    )
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+  tooltip,
+}) {
+  const [showTip, setShowTip] =
+    useState(false);
+
+  const [tipStyle, setTipStyle] =
+    useState({});
+
+  const buttonRef =
+    useRef(null);
+
+  const hideTimeoutRef =
+    useRef(null);
 
   useEffect(() => {
-    if (user?.id) {
-      supabase
-        .from("saved_screens")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .then(({ data }) => setSavedScreens(data || []))
-        .catch(() => {});
-    }
-  }, [user?.id]);
+    return () => {
+      window.clearTimeout(
+        hideTimeoutRef.current
+      );
+    };
+  }, []);
 
-  const toggleMetric = (key) => {
-    setActiveMetrics((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const openTip = () => {
+    if (!tooltip) {
+      return;
+    }
+
+    window.clearTimeout(
+      hideTimeoutRef.current
+    );
+
+    if (buttonRef.current) {
+      const rect =
+        buttonRef.current.getBoundingClientRect();
+
+      const tipWidth = 240;
+
+      let left =
+        rect.left;
+
+      left = Math.min(
+        left,
+        window.innerWidth -
+          tipWidth -
+          12
+      );
+
+      left = Math.max(
+        12,
+        left
+      );
+
+      setTipStyle({
+        position: "fixed",
+        top: rect.top - 8,
+        transform:
+          "translateY(-100%)",
+        left,
+        width: tipWidth,
+        zIndex: 9999,
+      });
+    }
+
+    setShowTip(true);
   };
 
-  const runScreen = async (overrideFilters) => {
-    const f = overrideFilters ?? filters;
-    setLoading(true);
-    navigate("/screener/results", { state: { loading: true, results: [] } });
+  const hideTipLater = () => {
+    window.clearTimeout(
+      hideTimeoutRef.current
+    );
 
-    try {
-      const prompt = `You are a fundamental stock screener. Return a JSON list of 12 real, publicly traded US stocks that match these criteria:
-${JSON.stringify(f, null, 2)}
+    hideTimeoutRef.current =
+      window.setTimeout(() => {
+        setShowTip(false);
+      }, 1800);
+  };
 
-For each stock return realistic, approximate fundamental data for ALL of these fields (use null for unknown):
-ticker, name, exchange (NASDAQ/NYSE/AMEX), sector, price, changePercent, week52Change,
-pe, forwardPe, peg, pb, ps, evEbitda, pcf, pfcf,
-grossMargin, operatingMargin, netMargin, roe, roa, roic,
-revenueGrowth, epsGrowth, ebitdaGrowth, fcfGrowth,
-deRatio, currentRatio, quickRatio, interestCoverage, debtEbitda,
-assetTurnover, inventoryTurnover, receivablesTurnover, dso,
-dividendYield, payoutRatio, dividendGrowth,
-marketCapB, eps, bookValuePerShare, fcfPerShare
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onClick}
+        onMouseEnter={
+          openTip
+        }
+        onMouseLeave={() =>
+          setShowTip(false)
+        }
+        onFocus={
+          openTip
+        }
+        onBlur={() =>
+          setShowTip(false)
+        }
+        onTouchStart={
+          openTip
+        }
+        onTouchEnd={
+          hideTipLater
+        }
+        className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+          active
+            ? "border-gray-900 bg-gray-900 text-white"
+            : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
+        }`}
+      >
+        {label}
+      </button>
 
-Return only real companies. Vary sectors unless filters require otherwise.
-Return as JSON: { "stocks": [...] }`;
+      {showTip &&
+        tooltip && (
+          <div
+            className="pointer-events-none whitespace-normal break-words rounded-lg bg-gray-900 px-3 py-2.5 text-[11px] leading-relaxed text-white shadow-xl"
+            style={
+              tipStyle
+            }
+          >
+            {tooltip}
+          </div>
+        )}
+    </div>
+  );
+}
 
-      const response = await fetch("/api/screener", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt,
-          response_json_schema: {
-            type: "object",
-            properties: {
-              stocks: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    ticker: { type: "string" },
-                    name: { type: "string" },
-                    exchange: { type: "string" },
-                    sector: { type: "string" },
-                    price: { type: "number" },
-                    changePercent: { type: "number" },
-                    week52Change: { type: "number" },
-                    pe: { type: "number" },
-                    forwardPe: { type: "number" },
-                    peg: { type: "number" },
-                    pb: { type: "number" },
-                    ps: { type: "number" },
-                    evEbitda: { type: "number" },
-                    pcf: { type: "number" },
-                    pfcf: { type: "number" },
-                    grossMargin: { type: "number" },
-                    operatingMargin: { type: "number" },
-                    netMargin: { type: "number" },
-                    roe: { type: "number" },
-                    roa: { type: "number" },
-                    roic: { type: "number" },
-                    revenueGrowth: { type: "number" },
-                    epsGrowth: { type: "number" },
-                    ebitdaGrowth: { type: "number" },
-                    fcfGrowth: { type: "number" },
-                    deRatio: { type: "number" },
-                    currentRatio: { type: "number" },
-                    quickRatio: { type: "number" },
-                    interestCoverage: { type: "number" },
-                    debtEbitda: { type: "number" },
-                    assetTurnover: { type: "number" },
-                    inventoryTurnover: { type: "number" },
-                    receivablesTurnover: { type: "number" },
-                    dso: { type: "number" },
-                    dividendYield: { type: "number" },
-                    payoutRatio: { type: "number" },
-                    dividendGrowth: { type: "number" },
-                    marketCapB: { type: "number" },
-                    eps: { type: "number" },
-                    bookValuePerShare: { type: "number" },
-                    fcfPerShare: { type: "number" },
-                  },
-                },
-              },
+const METRIC_GROUPS = [
+  {
+    group: "Valuation",
+    metrics: [
+      {
+        key: "pe",
+        label: "P/E Ratio",
+        desc:
+          "Price ÷ EPS. Lower is generally cheaper; compare to peers. Negative earnings means there is no meaningful P/E.",
+        unit: "x",
+        minKey: "minPe",
+        maxKey: "maxPe",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 25",
+      },
+      {
+        key: "forwardPe",
+        label: "Forward P/E",
+        desc:
+          "Price ÷ estimated future EPS. Reflects expected earnings growth.",
+        unit: "x",
+        minKey: "minForwardPe",
+        maxKey: "maxForwardPe",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 30",
+      },
+      {
+        key: "peg",
+        label: "PEG Ratio",
+        desc:
+          "P/E ÷ earnings growth rate. Accounts for growth; below 1 is often considered attractive.",
+        unit: "x",
+        minKey: "minPeg",
+        maxKey: "maxPeg",
+        minPlaceholder: "e.g. 0",
+        maxPlaceholder: "e.g. 1",
+      },
+      {
+        key: "pb",
+        label: "P/B Ratio",
+        desc:
+          "Price ÷ book value per share. Useful for asset-heavy companies; below 1 may indicate undervaluation.",
+        unit: "x",
+        minKey: "minPb",
+        maxKey: "maxPb",
+        minPlaceholder: "e.g. 0.5",
+        maxPlaceholder: "e.g. 5",
+      },
+      {
+        key: "ps",
+        label: "P/S Ratio",
+        desc:
+          "Price ÷ revenue per share. Useful for unprofitable or high-growth companies.",
+        unit: "x",
+        minKey: "minPs",
+        maxKey: "maxPs",
+        minPlaceholder: "e.g. 0.5",
+        maxPlaceholder: "e.g. 10",
+      },
+      {
+        key: "evEbitda",
+        label: "EV/EBITDA",
+        desc:
+          "Enterprise value ÷ EBITDA. Useful for comparing companies with different debt levels.",
+        unit: "x",
+        minKey: "minEvEbitda",
+        maxKey: "maxEvEbitda",
+        minPlaceholder: "e.g. 3",
+        maxPlaceholder: "e.g. 20",
+      },
+      {
+        key: "pcf",
+        label: "P/Cash Flow",
+        desc:
+          "Price ÷ operating cash flow per share. Cash flow can be harder to manipulate than earnings.",
+        unit: "x",
+        minKey: "minPcf",
+        maxKey: "maxPcf",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 30",
+      },
+      {
+        key: "pfcf",
+        label: "P/Free Cash Flow",
+        desc:
+          "Price ÷ free cash flow per share. Free cash flow is cash remaining after capital expenditures.",
+        unit: "x",
+        minKey: "minPfcf",
+        maxKey: "maxPfcf",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 40",
+      },
+    ],
+  },
+  {
+    group: "Profitability",
+    metrics: [
+      {
+        key: "grossMargin",
+        label: "Gross Margin",
+        desc:
+          "Gross profit ÷ revenue. Shows pricing power and production efficiency.",
+        unit: "%",
+        minKey: "minGrossMargin",
+        maxKey: "maxGrossMargin",
+        minPlaceholder: "e.g. 20",
+        maxPlaceholder: "e.g. 80",
+      },
+      {
+        key: "operatingMargin",
+        label:
+          "Operating Margin",
+        desc:
+          "Operating income ÷ revenue. Profit after operating costs but before interest and taxes.",
+        unit: "%",
+        minKey:
+          "minOperatingMargin",
+        maxKey:
+          "maxOperatingMargin",
+        minPlaceholder:
+          "e.g. 10",
+        maxPlaceholder:
+          "e.g. 40",
+      },
+      {
+        key: "netMargin",
+        label:
+          "Net Profit Margin",
+        desc:
+          "Net income ÷ revenue. Bottom-line profitability after all expenses.",
+        unit: "%",
+        minKey:
+          "minNetMargin",
+        maxKey:
+          "maxNetMargin",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 30",
+      },
+      {
+        key: "roe",
+        label: "ROE",
+        desc:
+          "Net income ÷ shareholders' equity. Measures management efficiency.",
+        unit: "%",
+        minKey: "minRoe",
+        maxKey: "maxRoe",
+        minPlaceholder:
+          "e.g. 10",
+        maxPlaceholder:
+          "e.g. 50",
+      },
+      {
+        key: "roa",
+        label: "ROA",
+        desc:
+          "Net income ÷ total assets. Shows how efficiently assets generate profit.",
+        unit: "%",
+        minKey: "minRoa",
+        maxKey: "maxRoa",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 25",
+      },
+      {
+        key: "roic",
+        label: "ROIC",
+        desc:
+          "Return on invested capital. Measures how efficiently capital is allocated.",
+        unit: "%",
+        minKey: "minRoic",
+        maxKey: "maxRoic",
+        minPlaceholder:
+          "e.g. 8",
+        maxPlaceholder:
+          "e.g. 40",
+      },
+    ],
+  },
+  {
+    group: "Growth",
+    metrics: [
+      {
+        key:
+          "revenueGrowth",
+        label:
+          "Revenue Growth (YoY)",
+        desc:
+          "Year-over-year revenue increase. Shows top-line business expansion.",
+        unit: "%",
+        minKey:
+          "minRevenueGrowth",
+        maxKey:
+          "maxRevenueGrowth",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 50",
+      },
+      {
+        key: "epsGrowth",
+        label:
+          "EPS Growth (YoY)",
+        desc:
+          "Year-over-year earnings-per-share growth.",
+        unit: "%",
+        minKey:
+          "minEpsGrowth",
+        maxKey:
+          "maxEpsGrowth",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 50",
+      },
+      {
+        key:
+          "ebitdaGrowth",
+        label:
+          "EBITDA Growth",
+        desc:
+          "Growth in earnings before interest, taxes, depreciation and amortization.",
+        unit: "%",
+        minKey:
+          "minEbitdaGrowth",
+        maxKey:
+          "maxEbitdaGrowth",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 50",
+      },
+      {
+        key: "fcfGrowth",
+        label: "FCF Growth",
+        desc:
+          "Growth in free cash flow after capital expenditures.",
+        unit: "%",
+        minKey:
+          "minFcfGrowth",
+        maxKey:
+          "maxFcfGrowth",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 50",
+      },
+      {
+        key:
+          "week52Change",
+        label:
+          "52W Price Change",
+        desc:
+          "Stock-price change over the past 52 weeks.",
+        unit: "%",
+        minKey:
+          "minWeek52Change",
+        maxKey:
+          "maxWeek52Change",
+        minPlaceholder:
+          "e.g. 10",
+        maxPlaceholder:
+          "e.g. 100",
+      },
+    ],
+  },
+  {
+    group:
+      "Financial Health",
+    metrics: [
+      {
+        key: "deRatio",
+        label: "D/E Ratio",
+        desc:
+          "Total debt ÷ shareholders' equity. Lower generally indicates less financial leverage.",
+        unit: "x",
+        minKey: "minDe",
+        maxKey: "maxDe",
+        minPlaceholder:
+          "e.g. 0",
+        maxPlaceholder:
+          "e.g. 1.5",
+      },
+      {
+        key:
+          "currentRatio",
+        label:
+          "Current Ratio",
+        desc:
+          "Current assets ÷ current liabilities. Measures short-term liquidity.",
+        unit: "x",
+        minKey:
+          "minCurrentRatio",
+        maxKey:
+          "maxCurrentRatio",
+        minPlaceholder:
+          "e.g. 1.5",
+        maxPlaceholder:
+          "e.g. 5",
+      },
+      {
+        key: "quickRatio",
+        label: "Quick Ratio",
+        desc:
+          "Current assets excluding inventory ÷ current liabilities.",
+        unit: "x",
+        minKey:
+          "minQuickRatio",
+        maxKey:
+          "maxQuickRatio",
+        minPlaceholder:
+          "e.g. 1",
+        maxPlaceholder:
+          "e.g. 4",
+      },
+      {
+        key:
+          "interestCoverage",
+        label:
+          "Interest Coverage",
+        desc:
+          "EBIT ÷ interest expense. Measures the ability to pay interest.",
+        unit: "x",
+        minKey:
+          "minInterestCoverage",
+        maxKey:
+          "maxInterestCoverage",
+        minPlaceholder:
+          "e.g. 3",
+        maxPlaceholder:
+          "e.g. 20",
+      },
+      {
+        key:
+          "debtEbitda",
+        label:
+          "Debt/EBITDA",
+        desc:
+          "Total debt ÷ EBITDA. Measures leverage relative to operating earnings.",
+        unit: "x",
+        minKey:
+          "minDebtEbitda",
+        maxKey:
+          "maxDebtEbitda",
+        minPlaceholder:
+          "e.g. 0",
+        maxPlaceholder:
+          "e.g. 4",
+      },
+    ],
+  },
+  {
+    group: "Efficiency",
+    metrics: [
+      {
+        key:
+          "assetTurnover",
+        label:
+          "Asset Turnover",
+        desc:
+          "Revenue ÷ average total assets. Measures asset-use efficiency.",
+        unit: "x",
+        minKey:
+          "minAssetTurnover",
+        maxKey:
+          "maxAssetTurnover",
+        minPlaceholder:
+          "e.g. 0.3",
+        maxPlaceholder:
+          "e.g. 2",
+      },
+      {
+        key:
+          "inventoryTurnover",
+        label:
+          "Inventory Turnover",
+        desc:
+          "Cost of goods sold ÷ average inventory. Measures how quickly inventory sells.",
+        unit: "x",
+        minKey:
+          "minInventoryTurnover",
+        maxKey:
+          "maxInventoryTurnover",
+        minPlaceholder:
+          "e.g. 3",
+        maxPlaceholder:
+          "e.g. 20",
+      },
+      {
+        key:
+          "receivablesTurnover",
+        label:
+          "Receivables Turnover",
+        desc:
+          "Revenue ÷ average accounts receivable. Measures collection efficiency.",
+        unit: "x",
+        minKey:
+          "minReceivablesTurnover",
+        maxKey:
+          "maxReceivablesTurnover",
+        minPlaceholder:
+          "e.g. 3",
+        maxPlaceholder:
+          "e.g. 20",
+      },
+      {
+        key: "dso",
+        label:
+          "Days Sales Outstanding",
+        desc:
+          "Average number of days required to collect payment after a sale.",
+        unit: "days",
+        minKey: "minDso",
+        maxKey: "maxDso",
+        minPlaceholder:
+          "e.g. 10",
+        maxPlaceholder:
+          "e.g. 60",
+      },
+    ],
+  },
+  {
+    group:
+      "Dividends & Returns",
+    metrics: [
+      {
+        key:
+          "dividendYield",
+        label:
+          "Dividend Yield",
+        desc:
+          "Annual dividend ÷ stock price.",
+        unit: "%",
+        minKey:
+          "minDividendYield",
+        maxKey:
+          "maxDividendYield",
+        minPlaceholder:
+          "e.g. 1",
+        maxPlaceholder:
+          "e.g. 8",
+      },
+      {
+        key:
+          "payoutRatio",
+        label:
+          "Payout Ratio",
+        desc:
+          "Dividends ÷ net income. Measures how much profit is distributed to shareholders.",
+        unit: "%",
+        minKey:
+          "minPayoutRatio",
+        maxKey:
+          "maxPayoutRatio",
+        minPlaceholder:
+          "e.g. 0",
+        maxPlaceholder:
+          "e.g. 60",
+      },
+      {
+        key:
+          "dividendGrowth",
+        label:
+          "Dividend Growth (5Y)",
+        desc:
+          "Compound annual dividend growth over five years.",
+        unit: "%",
+        minKey:
+          "minDividendGrowth",
+        maxKey:
+          "maxDividendGrowth",
+        minPlaceholder:
+          "e.g. 3",
+        maxPlaceholder:
+          "e.g. 20",
+      },
+    ],
+  },
+  {
+    group:
+      "Per-Share & Size",
+    metrics: [
+      {
+        key: "marketCapB",
+        label: "Market Cap",
+        desc:
+          "Total market value in billions. Large-cap is generally above $10 billion.",
+        unit: "B",
+        minKey:
+          "minMarketCapB",
+        maxKey:
+          "maxMarketCapB",
+        minPlaceholder:
+          "e.g. 1",
+        maxPlaceholder:
+          "e.g. 500",
+      },
+      {
+        key: "eps",
+        label: "EPS (TTM)",
+        desc:
+          "Trailing twelve-month earnings per share.",
+        unit: "$",
+        minKey: "minEps",
+        maxKey: "maxEps",
+        minPlaceholder:
+          "e.g. 1",
+        maxPlaceholder:
+          "e.g. 20",
+      },
+      {
+        key:
+          "bookValuePerShare",
+        label:
+          "Book Value/Share",
+        desc:
+          "Net assets per share after subtracting liabilities.",
+        unit: "$",
+        minKey:
+          "minBookValue",
+        maxKey:
+          "maxBookValue",
+        minPlaceholder:
+          "e.g. 5",
+        maxPlaceholder:
+          "e.g. 100",
+      },
+      {
+        key: "fcfPerShare",
+        label: "FCF/Share",
+        desc:
+          "Free cash flow generated per share after capital expenditures.",
+        unit: "$",
+        minKey:
+          "minFcfPerShare",
+        maxKey:
+          "maxFcfPerShare",
+        minPlaceholder:
+          "e.g. 1",
+        maxPlaceholder:
+          "e.g. 50",
+      },
+    ],
+  },
+];
+
+const ALL_METRIC_DEFS =
+  METRIC_GROUPS.flatMap(
+    (group) =>
+      group.metrics
+  );
+
+export default function Screener() {
+  const { user } =
+    useAuth();
+
+  const navigate =
+    useNavigate();
+
+  const [filters, setFilters] =
+    useState(() =>
+      readSessionObject(
+        "screener_filters",
+        {}
+      )
+    );
+
+  const [
+    activeMetrics,
+    setActiveMetrics,
+  ] = useState(
+    () =>
+      new Set(
+        readSessionObject(
+          "screener_metrics",
+          []
+        )
+      )
+  );
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    toast,
+    setToast,
+  ] = useState(null);
+
+  const [
+    activePreset,
+    setActivePreset,
+  ] = useState(null);
+
+  const [
+    savedScreens,
+    setSavedScreens,
+  ] = useState([]);
+
+  const [
+    saveDialogOpen,
+    setSaveDialogOpen,
+  ] = useState(false);
+
+  const [
+    saveName,
+    setSaveName,
+  ] = useState("");
+
+  const [
+    saving,
+    setSaving,
+  ] = useState(false);
+
+  const toastTimerRef =
+    useRef(null);
+
+  const showToast =
+    useCallback(
+      (message) => {
+        window.clearTimeout(
+          toastTimerRef.current
+        );
+
+        setToast(message);
+
+        toastTimerRef.current =
+          window.setTimeout(
+            () => {
+              setToast(null);
             },
-          },
-        }),
-      });
+            2500
+          );
+      },
+      []
+    );
 
-      if (!response.ok) {
-        throw new Error("Failed to run screen");
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(
+        toastTimerRef.current
+      );
+    };
+  }, []);
+
+  const loadSavedScreens =
+    useCallback(
+      async () => {
+        if (!user?.id) {
+          setSavedScreens(
+            []
+          );
+
+          return;
+        }
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            "saved_screens"
+          )
+          .select("*")
+          .eq(
+            "user_id",
+            user.id
+          )
+          .order(
+            "created_at",
+            {
+              ascending:
+                false,
+            }
+          );
+
+        if (error) {
+          console.error(
+            "Failed to load saved screens:",
+            error
+          );
+
+          return;
+        }
+
+        setSavedScreens(
+          data || []
+        );
+      },
+      [user?.id]
+    );
+
+  useEffect(() => {
+    void loadSavedScreens();
+  }, [loadSavedScreens]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        "screener_filters",
+        JSON.stringify(
+          filters
+        )
+      );
+    } catch {
+      // Session storage is optional.
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        "screener_metrics",
+        JSON.stringify([
+          ...activeMetrics,
+        ])
+      );
+    } catch {
+      // Session storage is optional.
+    }
+  }, [activeMetrics]);
+
+  const toggleMetric = (
+    key
+  ) => {
+    const currentlyActive =
+      activeMetrics.has(key);
+
+    setActiveMetrics(
+      (previous) => {
+        const next =
+          new Set(
+            previous
+          );
+
+        if (
+          next.has(key)
+        ) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+
+        return next;
+      }
+    );
+
+    if (
+      currentlyActive
+    ) {
+      const definition =
+        ALL_METRIC_DEFS.find(
+          (item) =>
+            item.key === key
+        );
+
+      if (
+        definition
+      ) {
+        setFilters(
+          (previous) => {
+            const next = {
+              ...previous,
+            };
+
+            delete next[
+              definition
+                .minKey
+            ];
+
+            delete next[
+              definition
+                .maxKey
+            ];
+
+            return next;
+          }
+        );
+      }
+    }
+  };
+
+  const runScreen =
+    async (
+      overrideFilters
+    ) => {
+      if (
+        !user?.id ||
+        loading
+      ) {
+        if (
+          !user?.id
+        ) {
+          showToast(
+            "Please sign in to run a screen."
+          );
+        }
+
+        return;
       }
 
-      const res = await response.json();
+      const selectedFilters =
+        removeUndefinedValues(
+          overrideFilters ??
+            filters
+        );
 
-      navigate("/screener/results", {
-        state: { loading: false, results: res.stocks || [] },
-      });
-    } catch {
-      navigate("/screener/results", { state: { loading: false, results: [] } });
-    }
+      setLoading(true);
 
-    setLoading(false);
+      try {
+        window.sessionStorage.setItem(
+          "screener_filters",
+          JSON.stringify(
+            selectedFilters
+          )
+        );
+      } catch {
+        // Session storage is optional.
+      }
+
+      navigate(
+        "/screener/results",
+        {
+          state: {
+            loading: true,
+            results: [],
+            filters:
+              selectedFilters,
+          },
+        }
+      );
+
+      try {
+        const {
+          data,
+          error,
+        } =
+          await supabase.functions.invoke(
+            "stock-screener",
+            {
+              body: {
+                filters:
+                  selectedFilters,
+              },
+            }
+          );
+
+        if (
+          error
+        ) {
+          throw error;
+        }
+
+        if (
+          data?.error
+        ) {
+          throw new Error(
+            data.error
+          );
+        }
+
+        const results =
+          Array.isArray(
+            data?.stocks
+          )
+            ? data.stocks
+            : [];
+
+        try {
+          window.sessionStorage.setItem(
+            "screener_last_results",
+            JSON.stringify(
+              results
+            )
+          );
+        } catch {
+          // Session storage is optional.
+        }
+
+        navigate(
+          "/screener/results",
+          {
+            replace: true,
+            state: {
+              loading:
+                false,
+              results,
+              filters:
+                selectedFilters,
+              error: "",
+            },
+          }
+        );
+      } catch (error) {
+        console.error(
+          "Stock screener failed:",
+          error
+        );
+
+        navigate(
+          "/screener/results",
+          {
+            replace: true,
+            state: {
+              loading:
+                false,
+              results: [],
+              filters:
+                selectedFilters,
+              error:
+                error?.message ||
+                "Unable to run the stock screen.",
+            },
+          }
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  const applyPreset = (
+    preset,
+    index
+  ) => {
+    const presetFilters =
+      removeUndefinedValues(
+        preset.filters
+      );
+
+    setActivePreset(
+      index
+    );
+
+    setFilters(
+      presetFilters
+    );
+
+    const metricKeys =
+      new Set();
+
+    ALL_METRIC_DEFS.forEach(
+      (definition) => {
+        if (
+          presetFilters[
+            definition.minKey
+          ] !==
+            undefined ||
+          presetFilters[
+            definition.maxKey
+          ] !==
+            undefined
+        ) {
+          metricKeys.add(
+            definition.key
+          );
+        }
+      }
+    );
+
+    setActiveMetrics(
+      metricKeys
+    );
+
+    void runScreen(
+      presetFilters
+    );
   };
 
-  const applyPreset = (preset, idx) => {
-    setActivePreset(idx);
-    setFilters(preset.filters);
-    runScreen(preset.filters);
+  const saveScreen =
+    async () => {
+      const trimmedName =
+        saveName.trim();
+
+      if (
+        !trimmedName ||
+        !user?.id ||
+        saving
+      ) {
+        return;
+      }
+
+      setSaving(true);
+
+      try {
+        const {
+          data,
+          error,
+        } = await supabase
+          .from(
+            "saved_screens"
+          )
+          .insert({
+            user_id:
+              user.id,
+            name:
+              trimmedName,
+            filters:
+              removeUndefinedValues(
+                filters
+              ),
+            active_metrics: [
+              ...activeMetrics,
+            ],
+          })
+          .select()
+          .single();
+
+        if (
+          error
+        ) {
+          throw error;
+        }
+
+        setSavedScreens(
+          (previous) => [
+            data,
+            ...previous,
+          ]
+        );
+
+        setSaveDialogOpen(
+          false
+        );
+
+        setSaveName("");
+
+        showToast(
+          "Screen saved!"
+        );
+      } catch (error) {
+        console.error(
+          "Failed to save screen:",
+          error
+        );
+
+        showToast(
+          error?.message ||
+            "Failed to save screen."
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
+
+  const loadSavedScreen = (
+    screen
+  ) => {
+    const savedFilters =
+      removeUndefinedValues(
+        screen?.filters ||
+          {}
+      );
+
+    const savedMetrics =
+      new Set(
+        screen?.active_metrics ||
+          screen?.activeMetrics ||
+          []
+      );
+
+    setFilters(
+      savedFilters
+    );
+
+    setActiveMetrics(
+      savedMetrics
+    );
+
+    setActivePreset(
+      null
+    );
+
+    void runScreen(
+      savedFilters
+    );
   };
 
-  const saveScreen = async () => {
-    if (!saveName.trim() || !user?.id) return;
+  const deleteSavedScreen =
+    async (
+      id,
+      event
+    ) => {
+      event.stopPropagation();
 
-    setSaving(true);
+      if (
+        !user?.id
+      ) {
+        return;
+      }
 
-    await supabase.from("saved_screens").insert({
-      user_id: user.id,
-      name: saveName.trim(),
-      filters,
-      active_metrics: [...activeMetrics],
-    });
+      const previous =
+        savedScreens;
 
-    const { data } = await supabase
-      .from("saved_screens")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      setSavedScreens(
+        (current) =>
+          current.filter(
+            (screen) =>
+              screen.id !==
+              id
+          )
+      );
 
-    setSavedScreens(data || []);
-    setSaving(false);
-    setSaveDialogOpen(false);
-    setSaveName("");
-  };
+      const {
+        error,
+      } = await supabase
+        .from(
+          "saved_screens"
+        )
+        .delete()
+        .eq(
+          "id",
+          id
+        )
+        .eq(
+          "user_id",
+          user.id
+        );
 
-  const loadSavedScreen = (screen) => {
-    const f = screen.filters || {};
-    const metrics = new Set(screen.active_metrics || screen.activeMetrics || []);
-    setFilters(f);
-    setActiveMetrics(metrics);
-    setActivePreset(null);
-    runScreen(f);
-  };
+      if (
+        error
+      ) {
+        console.error(
+          "Failed to delete saved screen:",
+          error
+        );
 
-  const deleteSavedScreen = async (id, e) => {
-    e.stopPropagation();
+        setSavedScreens(
+          previous
+        );
 
-    await supabase.from("saved_screens").delete().eq("id", id).eq("user_id", user?.id);
+        showToast(
+          "Failed to delete screen."
+        );
+      }
+    };
 
-    setSavedScreens((prev) => prev.filter((s) => s.id !== id));
+  const updateNumberFilter = (
+    key,
+    rawValue
+  ) => {
+    setFilters(
+      (previous) => {
+        const next = {
+          ...previous,
+        };
+
+        if (
+          rawValue === ""
+        ) {
+          delete next[key];
+        } else {
+          const value =
+            Number(
+              rawValue
+            );
+
+          if (
+            Number.isFinite(
+              value
+            )
+          ) {
+            next[key] =
+              value;
+          }
+        }
+
+        return next;
+      }
+    );
+
+    setActivePreset(
+      null
+    );
   };
 
   return (
     <div
-      className="min-h-screen flex flex-col"
+      className="flex min-h-screen flex-col"
       style={{
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)",
-        backgroundColor: "hsl(var(--background))",
+        paddingBottom:
+          "calc(env(safe-area-inset-bottom) + 64px)",
+        backgroundColor:
+          "hsl(var(--background))",
       }}
     >
+      {toast && (
+        <div className="fixed bottom-24 left-1/2 z-[100] -translate-x-1/2 whitespace-nowrap rounded-full bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+          {toast}
+        </div>
+      )}
+
       <header
-        className="border-b border-gray-100 sticky top-0 z-10"
+        className="sticky top-0 z-10 border-b border-gray-100"
         style={{
-          paddingTop: "env(safe-area-inset-top)",
-          backgroundColor: "hsl(var(--background))",
+          paddingTop:
+            "env(safe-area-inset-top)",
+          backgroundColor:
+            "hsl(var(--background))",
         }}
       >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex justify-center">
+        <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
           <div className="flex items-center gap-1.5">
-            <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
-              <SlidersHorizontal className="w-5 h-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
+              <SlidersHorizontal className="h-5 w-5 text-white" />
             </div>
+
             <div>
-              <h1 className="font-heading text-2xl font-bold tracking-tight">Screener</h1>
-              <p className="text-xs text-gray-500">Filter stocks by criteria</p>
+              <h1 className="font-heading text-2xl font-bold tracking-tight">
+                Screener
+              </h1>
+
+              <p className="text-xs text-gray-500">
+                Filter stocks by criteria
+              </p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 space-y-5 flex-1">
+      <main className="mx-auto w-full max-w-5xl flex-1 space-y-5 px-4 py-6 sm:px-6">
         <div>
-          <Label className="text-xs text-gray-500 mb-2 block">Quick Screens</Label>
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {POPULAR_SCREENS.map((p, i) => (
-              <Button
-                key={i}
-                variant={activePreset === i ? "default" : "outline"}
-                onClick={() => applyPreset(p, i)}
-                className="whitespace-nowrap"
-              >
-                {p.label}
-              </Button>
-            ))}
+          <Label className="mb-2 block text-xs text-gray-500">
+            Quick Screens
+          </Label>
+
+          <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+            {POPULAR_SCREENS.map(
+              (
+                preset,
+                index
+              ) => (
+                <FilterChip
+                  key={
+                    preset.label
+                  }
+                  label={
+                    preset.label
+                  }
+                  active={
+                    activePreset ===
+                    index
+                  }
+                  onClick={() =>
+                    applyPreset(
+                      preset,
+                      index
+                    )
+                  }
+                />
+              )
+            )}
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <Label className="text-xs text-gray-500 block">Saved Screens</Label>
+          {savedScreens.length >
+            0 && (
+            <div className="mt-3">
+              <Label className="mb-2 block text-xs text-gray-500">
+                Saved Screens
+              </Label>
 
-          {savedScreens.length === 0 ? (
-            <div className="border border-dashed border-gray-200 rounded-2xl p-5 text-sm text-gray-500">
-              No saved screens yet.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {savedScreens.map((screen) => (
-                <button
-                  key={screen.id}
-                  onClick={() => loadSavedScreen(screen)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:bg-gray-50 text-left"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm">{screen.name}</p>
-                  </div>
-                  <button
-                    onClick={(e) => deleteSavedScreen(screen.id, e)}
-                    className="p-2 rounded-lg hover:bg-red-50 text-red-500"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </button>
-              ))}
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                {savedScreens.map(
+                  (screen) => (
+                    <div
+                      key={
+                        screen.id
+                      }
+                      className="flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white py-1 pl-3 pr-1.5 transition-colors hover:border-gray-400"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          loadSavedScreen(
+                            screen
+                          )
+                        }
+                        className="whitespace-nowrap text-xs font-medium"
+                      >
+                        {
+                          screen.name
+                        }
+                      </button>
+
+                      <button
+                        type="button"
+                        aria-label={`Delete ${screen.name}`}
+                        onClick={(
+                          event
+                        ) =>
+                          deleteSavedScreen(
+                            screen.id,
+                            event
+                          )
+                        }
+                        className="p-0.5 text-muted-foreground transition-colors hover:text-red-500"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           )}
         </div>
 
-        <div className="flex gap-2">
-          <Button onClick={() => setSaveDialogOpen(true)} variant="outline" className="flex-1">
-            <Save className="w-4 h-4 mr-2" />
-            Save Screen
-          </Button>
+        <div
+          className="space-y-5 rounded-2xl border border-gray-100 p-4"
+          style={{
+            backgroundColor:
+              "hsl(var(--card))",
+          }}
+        >
+          <p className="font-heading text-sm font-semibold">
+            Filters
+          </p>
 
-          <Button onClick={() => runScreen()} className="flex-1" disabled={loading}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
-            Run Screen
-          </Button>
+          <div>
+            <Label className="mb-2 block text-xs text-gray-500">
+              Sector
+            </Label>
+
+            <div className="flex flex-wrap gap-2">
+              <FilterChip
+                label="All"
+                active={
+                  !filters.sector
+                }
+                onClick={() => {
+                  setFilters(
+                    (
+                      previous
+                    ) => {
+                      const next = {
+                        ...previous,
+                      };
+
+                      delete next.sector;
+
+                      return next;
+                    }
+                  );
+
+                  setActivePreset(
+                    null
+                  );
+                }}
+              />
+
+              {SECTORS.map(
+                (sector) => (
+                  <FilterChip
+                    key={
+                      sector
+                    }
+                    label={
+                      sector
+                    }
+                    active={
+                      filters.sector ===
+                      sector
+                    }
+                    onClick={() => {
+                      setFilters(
+                        (
+                          previous
+                        ) => ({
+                          ...previous,
+                          sector,
+                        })
+                      );
+
+                      setActivePreset(
+                        null
+                      );
+                    }}
+                  />
+                )
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <Label className="block text-xs text-gray-500">
+              Metrics — tap to add a filter
+            </Label>
+
+            {METRIC_GROUPS.map(
+              (group) => (
+                <div
+                  key={
+                    group.group
+                  }
+                >
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                    {
+                      group.group
+                    }
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+                    {group.metrics.map(
+                      (
+                        definition
+                      ) => (
+                        <FilterChip
+                          key={
+                            definition.key
+                          }
+                          label={
+                            definition.label
+                          }
+                          active={activeMetrics.has(
+                            definition.key
+                          )}
+                          onClick={() =>
+                            toggleMetric(
+                              definition.key
+                            )
+                          }
+                          tooltip={
+                            definition.desc
+                          }
+                        />
+                      )
+                    )}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+
+          {activeMetrics.size >
+            0 && (
+            <div className="space-y-4 border-t border-gray-100 pt-4">
+              <p className="text-xs font-semibold text-gray-500">
+                Active Filters
+              </p>
+
+              {ALL_METRIC_DEFS.filter(
+                (definition) =>
+                  activeMetrics.has(
+                    definition.key
+                  )
+              ).map(
+                (definition) => (
+                  <div
+                    key={
+                      definition.key
+                    }
+                  >
+                    <p className="mb-2 text-xs font-medium text-gray-900">
+                      {
+                        definition.label
+                      }{" "}
+                      <span className="font-normal text-gray-500">
+                        (
+                        {
+                          definition.unit
+                        }
+                        )
+                      </span>
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-gray-500">
+                          Min
+                        </Label>
+
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder={
+                            definition.minPlaceholder
+                          }
+                          value={
+                            filters[
+                              definition
+                                .minKey
+                            ] ??
+                            ""
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            updateNumberFilter(
+                              definition.minKey,
+                              event
+                                .target
+                                .value
+                            )
+                          }
+                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400"
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="mb-1 block text-[10px] text-gray-500">
+                          Max
+                        </Label>
+
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder={
+                            definition.maxPlaceholder
+                          }
+                          value={
+                            filters[
+                              definition
+                                .maxKey
+                            ] ??
+                            ""
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            updateNumberFilter(
+                              definition.maxKey,
+                              event
+                                .target
+                                .value
+                            )
+                          }
+                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setActivePreset(
+                  null
+                );
+
+                void runScreen();
+              }}
+              disabled={
+                loading
+              }
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="mr-2 h-4 w-4" />
+              )}
+
+              Run Screen
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                loading
+              }
+              onClick={() => {
+                setSaveName(
+                  ""
+                );
+
+                setSaveDialogOpen(
+                  true
+                );
+              }}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Save
+            </Button>
+          </div>
         </div>
+
+        {!loading && (
+          <div className="py-16 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
+              <SlidersHorizontal className="h-8 w-8 text-gray-400" />
+            </div>
+
+            <h2 className="mb-1 font-heading text-lg font-semibold text-gray-900">
+              Find your next pick
+            </h2>
+
+            <p className="text-sm text-gray-500">
+              Set filters above or pick a quick screen to get started.
+            </p>
+          </div>
+        )}
       </main>
 
-      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={
+          saveDialogOpen
+        }
+        onOpenChange={
+          setSaveDialogOpen
+        }
+      >
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Save Screen</DialogTitle>
+            <DialogTitle>
+              Save Screen
+            </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="screen-name">Screen Name</Label>
+          <div className="space-y-4 pt-1">
+            <div>
+              <Label className="mb-1.5 block text-sm">
+                Screen name
+              </Label>
+
               <Input
-                id="screen-name"
-                value={saveName}
-                onChange={(e) => setSaveName(e.target.value)}
-                placeholder="e.g. Dividend Value Stocks"
+                placeholder="e.g. High-growth tech"
+                value={
+                  saveName
+                }
+                onChange={(
+                  event
+                ) =>
+                  setSaveName(
+                    event.target
+                      .value
+                  )
+                }
+                onKeyDown={(
+                  event
+                ) => {
+                  if (
+                    event.key ===
+                    "Enter"
+                  ) {
+                    event.preventDefault();
+
+                    void saveScreen();
+                  }
+                }}
+                autoFocus
               />
             </div>
 
-            <Button onClick={saveScreen} className="w-full" disabled={saving || !saveName.trim()}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Save
+            <Button
+              className="w-full"
+              onClick={() =>
+                void saveScreen()
+              }
+              disabled={
+                saving ||
+                !saveName.trim()
+              }
+            >
+              {saving && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+
+              Save Screen
             </Button>
           </div>
         </DialogContent>
