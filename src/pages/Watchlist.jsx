@@ -14,35 +14,26 @@ import { motion, AnimatePresence } from "framer-motion";
 function abbreviateExchange(exchange) {
   if (!exchange) return "";
   const e = exchange.toUpperCase();
-
   if (e.includes("NASDAQ")) return "NASDAQ";
   if (e.includes("NYSE AMERICAN") || e.includes("AMEX")) return "AMEX";
   if (e.includes("NEW YORK STOCK EXCHANGE") || e.includes("NYSE")) return "NYSE";
   if (e.includes("OTC") || e.includes("PINK")) return "OTC";
-  if (e.includes("CBOE")) return "CBOE";
-  if (e.includes("BATS")) return "BATS";
   if (e.includes("TSX VENTURE") || e.includes("TSXV")) return "TSXV";
-  if (e.includes("TSX") || e.includes("TORONTO")) return "TSX";
-  if (e.includes("CSE") || e.includes("CANADIAN SECURITIES")) return "CSE";
-  if (e.includes("NEO")) return "NEO";
-  if (e.includes("LONDON") || e.includes("LSE")) return "LSE";
-  if (e.includes("EURONEXT")) return "ENX";
-  if (e.includes("XETRA") || e.includes("FRANKFURT")) return "FRA";
-  if (e.includes("ASX") || e.includes("AUSTRALIAN")) return "ASX";
+  if (e.includes("TSX")) return "TSX";
+  if (e.includes("LSE")) return "LSE";
+  if (e.includes("ASX")) return "ASX";
   if (e.includes("TOKYO") || e.includes("TSE")) return "TSE";
-  if (e.includes("SHANGHAI") || e.includes("SSE")) return "SSE";
-  if (e.includes("SHENZHEN")) return "SZSE";
+  if (e.includes("SHANGHAI")) return "SSE";
   if (e.includes("HONG KONG") || e.includes("HKEX")) return "HKEX";
-  if (e.includes("NSE") || e.includes("NATIONAL STOCK EXCHANGE")) return "NSE";
-  if (e.includes("BSE") || e.includes("BOMBAY")) return "BSE";
-  if (e.includes("KRX") || e.includes("KOREA EXCHANGE")) return "KRX";
+  if (e.includes("NSE")) return "NSE";
+  if (e.includes("BSE")) return "BSE";
+  if (e.includes("KRX")) return "KRX";
   if (e.includes("TWSE")) return "TWSE";
   if (e.includes("SGX")) return "SGX";
   if (e.includes("TADAWUL")) return "TADAWUL";
   if (e.includes("JSE")) return "JSE";
-  if (e.includes("B3") || e.includes("BOVESPA")) return "B3";
+  if (e.includes("B3")) return "B3";
   if (e.includes("BMV")) return "BMV";
-
   return exchange;
 }
 
@@ -72,7 +63,6 @@ function Toast({ message, onDone }) {
 // ==================== REAL 1-MONTH SPARKLINE ====================
 function RealSparkline({ data, isPositive }) {
   if (!data || data.length < 2) return null;
-
   const prices = data.map((d) => Number(d.close)).filter((n) => !isNaN(n));
   if (prices.length < 2) return null;
 
@@ -110,7 +100,7 @@ async function callFinnhub(params) {
   return res.json();
 }
 
-// ==================== ADD TO PORTFOLIO DIALOG (Migrated) ====================
+// ==================== ADD TO PORTFOLIO DIALOG ====================
 function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded, userId }) {
   const [quantity, setQuantity] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
@@ -126,7 +116,7 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
       if (res?.c) currentPrice = res.c;
     } catch {}
 
-    const { error } = await supabase.from("stocks").insert({
+    await supabase.from("stocks").insert({
       user_id: userId,
       ticker: ticker.toUpperCase(),
       company_name: companyName,
@@ -135,12 +125,10 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
       current_price: currentPrice,
     });
 
-    if (!error) {
-      onAdded();
-    }
     setLoading(false);
     setQuantity("");
     setPurchasePrice("");
+    onAdded();
   };
 
   return (
@@ -162,7 +150,7 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
             </div>
           </div>
           <Button type="submit" className="w-full" disabled={loading || !quantity || !purchasePrice}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             Add to Portfolio
           </Button>
         </form>
@@ -171,13 +159,30 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
   );
 }
 
-// ==================== WATCHLIST CARD (with Real Sparkline) ====================
+function AnimatedPrice({ value }) {
+  const [flash, setFlash] = useState(null);
+  const prevRef = useRef(value);
+  useEffect(() => {
+    if (prevRef.current !== value && value !== "—") {
+      const dir = parseFloat(value) > parseFloat(prevRef.current) ? "up" : "down";
+      setFlash(dir);
+      setTimeout(() => setFlash(null), 700);
+      prevRef.current = value;
+    }
+  }, [value]);
+  return (
+    <span className="font-semibold text-sm transition-colors" style={{ color: flash === "up" ? "#10b981" : flash === "down" ? "#ef4444" : undefined }}>
+      {value !== "—" ? `$${value}` : "—"}
+    </span>
+  );
+}
+
+// ==================== WATCHLIST CARD ====================
 function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarToggle, index }) {
   const hasStock = !!stock;
   const companyName = getCompanyName(item.ticker, stock, item);
   const [dragX, setDragX] = useState(0);
   const [swiped, setSwiped] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const isDragging = useRef(false);
@@ -188,13 +193,56 @@ function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarTogg
   const dailyIsPositive = (dailyGainPct ?? 0) >= 0;
   const revealRatio = Math.min(Math.abs(dragX) / REVEAL_WIDTH, 1);
 
-  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; touchStartY.current = e.touches[0].clientY; isDragging.current = false; };
-  const handleTouchMove = (e) => { /* same swipe logic as original */ };
-  const handleTouchEnd = () => { /* same swipe logic as original */ };
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isDragging.current = false;
+  };
+
+  const handleTouchMove = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (!isDragging.current && Math.abs(dy) > Math.abs(dx)) return;
+    isDragging.current = true;
+    if (dx < 0) {
+      const raw = swiped ? -REVEAL_WIDTH + dx : dx;
+      setDragX(Math.max(raw, -REVEAL_WIDTH - 20));
+    } else if (swiped) {
+      setDragX(Math.min(0, -REVEAL_WIDTH + dx));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    const threshold = swiped ? REVEAL_WIDTH * 0.25 : REVEAL_WIDTH * 0.4;
+    if (Math.abs(dragX) >= threshold) {
+      setDragX(-REVEAL_WIDTH);
+      setSwiped(true);
+    } else {
+      setDragX(0);
+      setSwiped(false);
+    }
+    touchStartX.current = null;
+    isDragging.current = false;
+  };
+
   const closeSwipe = () => { setDragX(0); setSwiped(false); };
 
-  const handleShare = (e) => { /* same as original */ closeSwipe(); };
-  const handleDelete = async (e) => { /* same as original */ };
+  const handleShare = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (navigator.share) {
+      navigator.share({ title: item.ticker, text: `Check out ${companyName} (${item.ticker}) — $${displayPrice}` }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(`${item.ticker} — $${displayPrice}`);
+    }
+    closeSwipe();
+  };
+
+  const handleDelete = async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setDragX(-400);
+    setTimeout(() => onRemove(item.id), 260);
+  };
 
   const cardStyle = {
     transform: `translateX(${dragX}px)`,
@@ -202,7 +250,7 @@ function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarTogg
   };
 
   const inner = (
-    <div className="border border-gray-100 rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-all h-[76px]" style={{ ...cardStyle, backgroundColor: "hsl(var(--card))" }}>
+    <div className="border border-gray-100 rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm h-[76px]" style={{ ...cardStyle, backgroundColor: "hsl(var(--card))" }}>
       <button onClick={e => { e.preventDefault(); e.stopPropagation(); onStarToggle(item, stock); }} className="p-1 min-h-[44px] min-w-[36px]">
         <Star className={`w-5 h-5 ${hasStock ? "text-amber-400 fill-amber-400" : "text-gray-300 hover:text-amber-300"}`} />
       </button>
@@ -210,18 +258,18 @@ function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarTogg
       <div className="min-w-0 flex-[2]">
         <p className="font-heading font-bold text-base">{item.ticker}</p>
         <p className="text-xs text-gray-500">{companyName}</p>
-        {item.exchange && <p className="text-[10px] text-gray-400 uppercase">{abbreviateExchange(item.exchange)}</p>}
+        {item.exchange && <p className="text-[10px] text-gray-400 uppercase tracking-wide">{abbreviateExchange(item.exchange)}</p>}
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
         <RealSparkline data={sparklineData} isPositive={dailyIsPositive} />
         <div className="text-center min-w-[64px]">
           <p><AnimatedPrice value={displayPrice} /></p>
-          {dailyGainPct !== null && (
+          {dailyGainPct !== null ? (
             <div className={`inline-flex items-center gap-0.5 text-sm font-semibold px-1.5 py-0.5 rounded-md ${dailyIsPositive ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}`}>
               {dailyIsPositive ? "+" : ""}{dailyGainPct.toFixed(2)}%
             </div>
-          )}
+          ) : <p className="text-xs text-gray-400">—</p>}
         </div>
       </div>
     </div>
@@ -229,7 +277,6 @@ function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarTogg
 
   return (
     <motion.div className="relative overflow-hidden rounded-2xl" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -80 }} layout>
-      {/* Swipe reveal buttons (Share + Delete) - kept exactly as original */}
       <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-3" style={{ pointerEvents: revealRatio > 0.5 ? "auto" : "none" }}>
         <button onClick={handleShare} className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full bg-black text-white text-[10px] font-semibold shadow-lg">Share</button>
         <button onClick={handleDelete} className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full bg-red-500 text-white text-[10px] font-semibold shadow-lg">Delete</button>
@@ -242,22 +289,7 @@ function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarTogg
   );
 }
 
-function AnimatedPrice({ value }) {
-  // kept exactly as in your original
-  const [flash, setFlash] = useState(null);
-  const prevRef = useRef(value);
-  useEffect(() => {
-    if (prevRef.current !== value && value !== "—") {
-      const dir = parseFloat(value) > parseFloat(prevRef.current) ? "up" : "down";
-      setFlash(dir);
-      setTimeout(() => setFlash(null), 700);
-      prevRef.current = value;
-    }
-  }, [value]);
-  return <span className="font-semibold text-sm" style={{ color: flash === "up" ? "#10b981" : flash === "down" ? "#ef4444" : undefined }}>{value !== "—" ? `$${value}` : "—"}</span>;
-}
-
-// ==================== MAIN COMPONENT ====================
+// ==================== MAIN WATCHLIST ====================
 export default function Watchlist() {
   const { user } = useAuth();
   const { quotes: globalQuotes, refreshQuotes } = useMarketData();
@@ -278,22 +310,16 @@ export default function Watchlist() {
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
 
-  // ==================== REAL 1-MONTH SPARKLINES ====================
+  // Load real 1-month sparklines
   const loadSparklines = async (tickers) => {
     const newData = {};
     const oneMonthAgo = Math.floor(Date.now() / 1000) - 30 * 86400;
 
     await Promise.all(tickers.map(async (t) => {
       try {
-        const res = await callFinnhub({
-          action: "candles_range",
-          ticker: t,
-          resolution: "D",
-          from: oneMonthAgo,
-          to: Math.floor(Date.now() / 1000),
-        });
+        const res = await callFinnhub({ action: "candles_range", ticker: t, resolution: "D", from: oneMonthAgo });
         if (res?.candles?.length > 1) {
-          newData[t] = res.candles.map((c) => ({ close: c.v ?? c.c }));
+          newData[t] = res.candles.map(c => ({ close: c.v ?? c.c }));
         }
       } catch {}
     }));
@@ -306,40 +332,26 @@ export default function Watchlist() {
       supabase.from("watchlist_items").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("stocks").select("*").eq("user_id", user.id),
     ]);
-
     setItems(watchData);
     setStocks(stockData);
 
     if (watchData.length > 0) {
-      const tickers = [...new Set(watchData.map(i => i.ticker.toUpperCase()))];
+      const tickers = watchData.map(i => i.ticker.toUpperCase());
       loadSparklines(tickers);
     }
     return watchData;
   };
 
-  // Realtime subscriptions (Supabase)
+  // Realtime
   useEffect(() => {
     if (!user?.id) return;
-
-    const watchChannel = supabase
-      .channel('watchlist-realtime')
+    const channel = supabase.channel('watchlist')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'watchlist_items', filter: `user_id=eq.${user.id}` }, () => load())
       .subscribe();
-
-    const stockChannel = supabase
-      .channel('stocks-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stocks', filter: `user_id=eq.${user.id}` }, () => {
-        supabase.from("stocks").select("*").eq("user_id", user.id).then(({ data }) => setStocks(data || []));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(watchChannel);
-      supabase.removeChannel(stockChannel);
-    };
+    return () => supabase.removeChannel(channel);
   }, [user?.id]);
 
-  // Search suggestions
+  // Search
   useEffect(() => {
     const q = ticker.trim();
     if (!q) { setSuggestions([]); return; }
@@ -355,15 +367,12 @@ export default function Watchlist() {
   }, [ticker]);
 
   useEffect(() => {
-    if (user?.id) {
-      load().then(() => setLoading(false));
-    }
+    if (user?.id) load().then(() => setLoading(false));
   }, [user?.id]);
 
   const addTicker = async (symbol) => {
-    // ... (same logic, using supabase insert)
     const upper = symbol.trim().toUpperCase();
-    if (items.some(i => i.ticker.toUpperCase() === upper)) return;
+    if (items.some(i => i.ticker.toUpperCase() === upper)) return setToast("Already in watchlist");
 
     setAdding(true);
     let company_name = "", exchange = "";
@@ -380,15 +389,14 @@ export default function Watchlist() {
   };
 
   const handleRemove = async (id) => {
-    const previous = items;
-    setItems(prev => prev.filter(i => i.id !== id));
+    const prev = items;
+    setItems(prev.filter(i => i.id !== id));
     const { error } = await supabase.from("watchlist_items").delete().eq("id", id);
-    if (error) setItems(previous);
+    if (error) setItems(prev);
   };
 
   const handleStarToggle = (item, stock) => {
     if (stock) {
-      // Remove from portfolio
       supabase.from("stocks").delete().eq("id", stock.id).then(() => load());
     } else {
       setDialogItem({ ticker: item.ticker, companyName: getCompanyName(item.ticker, null, item) });
@@ -398,13 +406,13 @@ export default function Watchlist() {
   const handlePortfolioAdded = () => {
     setDialogItem(null);
     load();
-    setToast(`${dialogItem?.ticker} added to portfolio`);
+    setToast("Added to portfolio");
   };
 
   const findStock = (t) => stocks.find(s => s.ticker.toUpperCase() === t.toUpperCase());
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "hsl(var(--background))" }}>
       <AnimatePresence>{toast && <Toast message={toast} onDone={() => setToast(null)} />}</AnimatePresence>
 
       {dialogItem && (
@@ -418,22 +426,74 @@ export default function Watchlist() {
         />
       )}
 
-      {/* Header + Form + List — kept visually identical to your original */}
-      {/* ... (the rest of your beautiful UI is unchanged) */}
+      {/* Header */}
+      <header className="border-b border-gray-100 sticky top-0 z-10" style={{ backgroundColor: "hsl(var(--background))" }}>
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+          <div className="flex-1 flex justify-center">
+            <div className="flex items-center gap-2">
+              <Star className="w-7 h-7 text-amber-400 fill-amber-400" />
+              <div>
+                <h1 className="font-heading text-2xl font-bold">Watchlist</h1>
+                <p className="text-xs text-gray-500">Stocks you're watching</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      {/* In the list rendering, pass sparklineData */}
-      {items.map((item, index) => (
-        <WatchlistCard
-          key={item.id}
-          item={item}
-          stock={findStock(item.ticker)}
-          quote={quotes[item.ticker.toUpperCase()]}
-          sparklineData={sparklines[item.ticker.toUpperCase()]}
-          onRemove={handleRemove}
-          onStarToggle={handleStarToggle}
-          index={index}
-        />
-      ))}
+      <main className="max-w-5xl mx-auto w-full px-4 py-6 space-y-4 flex-1">
+        {/* Add Form */}
+        <form onSubmit={(e) => { e.preventDefault(); if (ticker.trim()) addTicker(ticker); }} className="flex gap-2 relative justify-center">
+          <div className="flex-[0_1_76%] relative">
+            <Input
+              ref={inputRef}
+              placeholder="Enter Ticker"
+              value={ticker}
+              onChange={e => { setTicker(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(true)}
+              className="uppercase w-full"
+            />
+            {showSuggestions && (searchLoading || suggestions.length > 0) && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                {searchLoading ? (
+                  <div className="px-4 py-3 text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Searching…</div>
+                ) : suggestions.map(s => (
+                  <button key={s.ticker} type="button" onClick={() => { setTicker(s.ticker); setShowSuggestions(false); addTicker(s.ticker); }} className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-0">
+                    <p className="font-semibold text-sm">{s.ticker}</p>
+                    <p className="text-xs text-gray-500">{s.description}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button type="submit" disabled={adding || !ticker.trim()}>{adding ? <Loader2 className="animate-spin" /> : <Plus />}</Button>
+        </form>
+
+        {loading ? (
+          <div className="flex justify-center py-24"><Loader2 className="w-6 h-6 animate-spin" /></div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-24">
+            <Star className="w-8 h-8 text-gray-400 mx-auto mb-4" />
+            <h2 className="font-heading text-lg font-semibold">Nothing here yet</h2>
+            <p className="text-gray-500 text-sm">Add a ticker above to start watching it.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <WatchlistCard
+                key={item.id}
+                item={item}
+                stock={findStock(item.ticker)}
+                quote={globalQuotes[item.ticker.toUpperCase()] || quotes[item.ticker.toUpperCase()]}
+                sparklineData={sparklines[item.ticker.toUpperCase()]}
+                onRemove={handleRemove}
+                onStarToggle={handleStarToggle}
+                index={index}
+              />
+            ))}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
