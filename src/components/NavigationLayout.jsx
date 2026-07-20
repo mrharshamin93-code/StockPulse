@@ -71,6 +71,7 @@ export default function NavigationLayout() {
 
   const scrollPositions = useRef({});
   const previousTab = useRef(activeTab);
+  const contentScrollRef = useRef(null);
 
   useEffect(() => {
     const previous = previousTab.current;
@@ -79,13 +80,16 @@ export default function NavigationLayout() {
       return;
     }
 
+    const scrollContainer =
+      contentScrollRef.current;
+
     scrollPositions.current[previous] =
-      window.scrollY;
+      scrollContainer?.scrollTop ?? 0;
 
     const savedPosition =
       scrollPositions.current[activeTab] ?? 0;
 
-    window.scrollTo({
+    scrollContainer?.scrollTo({
       top: savedPosition,
       behavior: "instant",
     });
@@ -109,7 +113,7 @@ export default function NavigationLayout() {
 
       scrollPositions.current[path] = 0;
 
-      window.scrollTo({
+      contentScrollRef.current?.scrollTo({
         top: 0,
         behavior: "smooth",
       });
@@ -118,15 +122,12 @@ export default function NavigationLayout() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden">
-      <div
-        className="relative flex-1"
-        style={{
-          minHeight:
-            "calc(100dvh - 70px)",
-        }}
-      >
-        <div className="absolute inset-0 overflow-y-auto">
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={contentScrollRef}
+          className="absolute inset-0 overflow-y-auto overscroll-y-contain"
+        >
           <Outlet />
         </div>
       </div>
@@ -145,7 +146,7 @@ export default function NavigationLayout() {
 
       {showTabs && (
         <nav
-          className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-[hsl(var(--card))]"
+          className="relative z-50 shrink-0 border-t border-gray-100 bg-[hsl(var(--card))]"
           style={{
             paddingBottom:
               "env(safe-area-inset-bottom)",
