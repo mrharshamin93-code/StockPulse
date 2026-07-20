@@ -226,7 +226,7 @@ function StockChart({ ticker, currentPrice, isPositive }) {
           </div>
         )}
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} key={activePeriod + compareTicker}>
             <YAxis
               domain={["auto", "auto"]}
               tickFormatter={v => compareTicker ? `${v.toFixed(0)}%` : `$${v.toFixed(0)}`}
@@ -270,28 +270,9 @@ function StockChart({ ticker, currentPrice, isPositive }) {
                 );
               }}
             />
-            <Line
-              type="monotone"
-              dataKey={ticker}
-              stroke={primaryColor}
-              strokeWidth={2}
-              dot={false}
-              isAnimationActive={true}
-              animationBegin={0}
-              animationDuration={800}
-            />
+            <Line type="monotone" dataKey={ticker} stroke={primaryColor} strokeWidth={2} dot={false} animationDuration={800} />
             {compareTicker && (
-              <Line
-                type="monotone"
-                dataKey={compareTicker}
-                stroke={compareColor}
-                strokeWidth={2}
-                dot={false}
-                strokeDasharray="4 2"
-                isAnimationActive={true}
-                animationBegin={0}
-                animationDuration={800}
-              />
+              <Line type="monotone" dataKey={compareTicker} stroke={compareColor} strokeWidth={2} dot={false} strokeDasharray="4 2" animationDuration={800} />
             )}
           </LineChart>
         </ResponsiveContainer>
