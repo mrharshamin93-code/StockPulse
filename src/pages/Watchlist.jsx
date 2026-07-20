@@ -23,7 +23,7 @@ function abbreviateExchange(exchange) {
   if (e.includes("BATS")) return "BATS";
   if (e.includes("TSX VENTURE") || e.includes("TSXV")) return "TSXV";
   if (e.includes("TSX") || e.includes("TORONTO")) return "TSX";
-  if (e.includes("CSE") || e.includes("CANADIAN SECURITIES")) return "CSE";
+  if (e.includes("CSE")) return "CSE";
   if (e.includes("NEO")) return "NEO";
   if (e.includes("LONDON") || e.includes("LSE")) return "LSE";
   if (e.includes("EURONEXT")) return "ENX";
@@ -33,8 +33,8 @@ function abbreviateExchange(exchange) {
   if (e.includes("SHANGHAI")) return "SSE";
   if (e.includes("SHENZHEN")) return "SZSE";
   if (e.includes("HONG KONG")) return "HKEX";
-  if (e.includes("NSE") || e.includes("NATIONAL STOCK EXCHANGE")) return "NSE";
-  if (e.includes("BSE") || e.includes("BOMBAY")) return "BSE";
+  if (e.includes("NSE")) return "NSE";
+  if (e.includes("BSE")) return "BSE";
   if (e.includes("KRX")) return "KRX";
   if (e.includes("SGX")) return "SGX";
   if (e.includes("TADAWUL")) return "TADAWUL";
@@ -47,8 +47,6 @@ function abbreviateExchange(exchange) {
 function getCompanyName(ticker, stock, item) {
   if (stock?.company_name && stock.company_name !== ticker) return stock.company_name;
   if (item?.company_name && item.company_name !== ticker) return item.company_name;
-  if (stock?.company_name) return stock.company_name;
-  if (item?.company_name) return item.company_name;
   return ticker;
 }
 
@@ -58,6 +56,7 @@ function Toast({ message, onDone }) {
     const t = setTimeout(onDone, 2500);
     return () => clearTimeout(t);
   }, [onDone]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16, scale: 0.95 }}
@@ -103,7 +102,7 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
 
     setLoading(false);
     if (error) {
-      console.error(error);
+      console.error("Error adding to portfolio:", error);
       return;
     }
 
@@ -140,15 +139,41 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
   );
 }
 
-// ==================== MINI SPARKLINE ====================
-function MiniSparkline({ isPositive }) {
+// ==================== REAL 1-MONTH SPARKLINE ====================
+function MiniSparkline({ data = [] }) {
+  if (!data || data.length < 2) {
+    return (
+      <svg width="40" height="36" viewBox="0 0 40 36" fill="none">
+        <line x1="2" y1="18" x2="38" y2="18" stroke="#64748b" strokeWidth="1.5" strokeDasharray="2 2" />
+      </svg>
+    );
+  }
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const points = data
+    .map((price, index) => {
+      const x = (index / (data.length - 1)) * 38 + 1;
+      const y = 34 - ((price - min) / range) * 30;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  const isPositive = data[data.length - 1] >= data[0];
   const color = isPositive ? "#10b981" : "#ef4444";
-  const points = isPositive
-    ? "2,28 8,22 14,26 20,18 26,20 32,12 38,8"
-    : "2,8 8,12 14,10 20,18 26,16 32,22 38,28";
+
   return (
-    <svg width="40" height="36" viewBox="0 0 40 36" fill="none">
-      <polyline points={points} stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="40" height="36" viewBox="0 0 40 36" fill="none" className="shrink-0">
+      <polyline
+        points={points}
+        stroke={color}
+        strokeWidth="1.8"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -178,12 +203,11 @@ function AnimatedPrice({ value }) {
 }
 
 // ==================== WATCHLIST CARD ====================
-function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
+function WatchlistCard({ item, stock, quote, sparklineData, onRemove, onStarToggle, index }) {
   const hasStock = !!stock;
   const companyName = getCompanyName(item.ticker, stock, item);
   const [dragX, setDragX] = useState(0);
   const [swiped, setSwiped] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const isDragging = useRef(false);
@@ -207,6 +231,7 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     if (!isDragging.current && Math.abs(dy) > Math.abs(dx)) return;
     isDragging.current = true;
     e.stopPropagation();
+
     if (dx < 0) {
       const raw = swiped ? -REVEAL_WIDTH + dx : dx;
       setDragX(Math.max(raw, -REVEAL_WIDTH - 20));
@@ -228,12 +253,16 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     isDragging.current = false;
   };
 
-  const closeSwipe = () => { setDragX(0); setSwiped(false); };
+  const closeSwipe = () => {
+    setDragX(0);
+    setSwiped(false);
+  };
 
   const handleShare = (e) => {
-    e.preventDefault(); e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
     if (navigator.share) {
-      navigator.share({ title: item.ticker, text: `Check out ${companyName} (${item.ticker})` }).catch(() => {});
+      navigator.share({ title: item.ticker, text: `${companyName} (${item.ticker})` }).catch(() => {});
     } else {
       navigator.clipboard?.writeText(`${item.ticker}`);
     }
@@ -241,8 +270,8 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
   };
 
   const handleDelete = async (e) => {
-    e.preventDefault(); e.stopPropagation();
-    setIsDeleting(true);
+    e.preventDefault();
+    e.stopPropagation();
     setDragX(-400);
     await new Promise(r => setTimeout(r, 260));
     onRemove(item.id);
@@ -254,53 +283,77 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
   };
 
   const inner = (
-    <div className="border border-gray-100 rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200 h-[76px]"
+    <div
+      className="border border-gray-100 rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200 h-[76px]"
       style={{ ...cardStyle, backgroundColor: "hsl(var(--card))" }}
-      onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
-      <button onClick={e => { e.preventDefault(); e.stopPropagation(); onStarToggle(item, stock); }}
-        className="p-1 min-h-[44px] min-w-[36px] flex items-center justify-center shrink-0">
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStarToggle(item, stock); }}
+        className="p-1 min-h-[44px] min-w-[36px] flex items-center justify-center shrink-0"
+      >
         <Star className={`w-5 h-5 transition-colors ${hasStock ? "text-amber-400 fill-amber-400" : "text-gray-300 hover:text-amber-300"}`} />
       </button>
 
       <div className="min-w-0 flex-[2]">
         <p className="font-heading font-bold text-base leading-tight">{item.ticker}</p>
         <p className="text-xs text-gray-500">{companyName}</p>
-        {item.exchange && <p className="text-[10px] text-gray-400 uppercase tracking-wide">{abbreviateExchange(item.exchange)}</p>}
+        {item.exchange && (
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide">
+            {abbreviateExchange(item.exchange)}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
-        {quote?.c && <MiniSparkline isPositive={dailyIsPositive} />}
+        <MiniSparkline data={sparklineData} />
         <div className="text-center min-w-[64px]">
           <p><AnimatedPrice value={displayPrice} /></p>
           {dailyGainPct !== null ? (
             <div className={`inline-flex items-center gap-0.5 text-sm font-semibold px-1.5 py-0.5 rounded-md ${dailyIsPositive ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}`}>
               {dailyIsPositive ? "+" : ""}{dailyGainPct.toFixed(2)}%
             </div>
-          ) : <p className="text-xs text-gray-400">—</p>}
+          ) : (
+            <p className="text-xs text-gray-400">—</p>
+          )}
         </div>
       </div>
     </div>
   );
 
   return (
-    <motion.div className="relative overflow-hidden rounded-2xl" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -80, scale: 0.94 }} transition={{ duration: 0.28, delay: index * 0.04 }} layout>
+    <motion.div
+      className="relative overflow-hidden rounded-2xl"
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -80, scale: 0.94 }}
+      transition={{ duration: 0.28, delay: index * 0.04 }}
+      layout
+    >
       <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-3" style={{ pointerEvents: revealRatio > 0.5 ? "auto" : "none" }}>
         <button onClick={handleShare} className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full bg-black text-white text-[10px] font-semibold shadow-lg active:scale-95">
-          <Share2 className="w-5 h-5 shrink-0" /><span>Share</span>
+          <Share2 className="w-5 h-5 shrink-0" />
+          <span>Share</span>
         </button>
         <button onClick={handleDelete} className="flex flex-col items-center justify-center gap-1 w-16 h-16 rounded-full bg-red-500 text-white text-[10px] font-semibold shadow-lg active:scale-95">
-          <Trash2 className="w-5 h-5 shrink-0" /><span>Delete</span>
+          <Trash2 className="w-5 h-5 shrink-0" />
+          <span>Delete</span>
         </button>
       </div>
 
-      <Link to={hasStock ? `/stock/${stock.id}` : `/stock/ticker-${item.ticker}`} onClick={swiped ? (e) => { e.preventDefault(); closeSwipe(); } : undefined}>
+      <Link
+        to={hasStock ? `/stock/${stock.id}` : `/stock/ticker-${item.ticker}`}
+        onClick={swiped ? (e) => { e.preventDefault(); closeSwipe(); } : undefined}
+      >
         {inner}
       </Link>
     </motion.div>
   );
 }
 
-// ==================== MAIN COMPONENT ====================
+// ==================== MAIN WATCHLIST COMPONENT ====================
 export default function Watchlist() {
   const { user } = useAuth();
   const { quotes: globalQuotes, refreshQuotes } = useMarketData();
@@ -308,6 +361,7 @@ export default function Watchlist() {
   const [items, setItems] = useState([]);
   const [stocks, setStocks] = useState([]);
   const [quotes, setQuotes] = useState(globalQuotes);
+  const [sparklines, setSparklines] = useState({}); // { TICKER: [close prices] }
   const [loading, setLoading] = useState(true);
   const [ticker, setTicker] = useState("");
   const [adding, setAdding] = useState(false);
@@ -321,7 +375,7 @@ export default function Watchlist() {
   const suggestionsRef = useRef(null);
   const searchTimeout = useRef(null);
 
-  // Close suggestions on click outside
+  // Close suggestions on outside click
   useEffect(() => {
     const handler = (e) => {
       if (!inputRef.current?.contains(e.target) && !suggestionsRef.current?.contains(e.target)) {
@@ -335,22 +389,65 @@ export default function Watchlist() {
   // Search suggestions
   useEffect(() => {
     const q = ticker.trim();
-    if (!q) { setSuggestions([]); return; }
+    if (!q) {
+      setSuggestions([]);
+      return;
+    }
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(async () => {
       setSearchLoading(true);
       try {
-        const { data: res } = await supabase.functions.invoke("finnhub", { body: { action: "search", query: q } });
+        const { data: res } = await supabase.functions.invoke("finnhub", {
+          body: { action: "search", query: q },
+        });
         setSuggestions(res?.results || []);
-      } catch { setSuggestions([]); }
+      } catch {
+        setSuggestions([]);
+      }
       setSearchLoading(false);
     }, 300);
     return () => clearTimeout(searchTimeout.current);
   }, [ticker]);
 
-  // Load data from Supabase
+  // ==================== FETCH 1-MONTH SPARKLINES ====================
+  const fetchSparklines = async (tickers) => {
+    const unique = [...new Set(tickers.map(t => t.toUpperCase()))];
+    const toFetch = unique.filter(t => !sparklines[t]);
+
+    if (toFetch.length === 0) return;
+
+    const newSparklines = { ...sparklines };
+
+    for (const tickerSymbol of toFetch) {
+      try {
+        const to = Math.floor(Date.now() / 1000);
+        const from = to - 30 * 24 * 60 * 60; // last 30 days
+
+        const { data: res } = await supabase.functions.invoke("finnhub", {
+          body: {
+            action: "candle",
+            ticker: tickerSymbol,
+            resolution: "D",
+            from,
+            to,
+          },
+        });
+
+        if (res?.c && Array.isArray(res.c)) {
+          newSparklines[tickerSymbol] = res.c;
+        }
+      } catch (err) {
+        console.error(`Sparkline fetch failed for ${tickerSymbol}`, err);
+      }
+    }
+
+    setSparklines(newSparklines);
+  };
+
+  // ==================== LOAD DATA ====================
   const load = async () => {
     if (!user?.id) return [];
+
     const [watchRes, stockRes] = await Promise.all([
       supabase.from("watchlist_items").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("stocks").select("*").eq("user_id", user.id),
@@ -370,22 +467,29 @@ export default function Watchlist() {
         seedQuotes[t] = { c: item.cached_price, dp: item.cached_change_pct };
       }
     });
-    if (Object.keys(seedQuotes).length > 0) setQuotes(prev => ({ ...seedQuotes, ...prev }));
+    if (Object.keys(seedQuotes).length > 0) {
+      setQuotes(prev => ({ ...seedQuotes, ...prev }));
+    }
 
     return watchData;
   };
 
+  // Sync global quotes
   useEffect(() => {
     if (Object.keys(globalQuotes).length > 0) {
       setQuotes(prev => ({ ...prev, ...globalQuotes }));
     }
   }, [globalQuotes]);
 
+  // Initial load + fetch sparklines
   useEffect(() => {
     if (user?.id) {
       load().then(watchData => {
         setLoading(false);
-        if (watchData?.length) refreshQuotes(watchData.map(i => i.ticker.toUpperCase()));
+        if (watchData?.length) {
+          refreshQuotes(watchData.map(i => i.ticker.toUpperCase()));
+          fetchSparklines(watchData.map(i => i.ticker));
+        }
       });
     }
   }, [user?.id]);
@@ -393,51 +497,81 @@ export default function Watchlist() {
   // Realtime subscriptions
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase.channel("stocks-realtime")
+
+    const stockChannel = supabase
+      .channel("stocks-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "stocks", filter: `user_id=eq.${user.id}` }, () => {
         supabase.from("stocks").select("*").eq("user_id", user.id).then(({ data }) => setStocks(data || []));
-      }).subscribe();
-    return () => supabase.removeChannel(channel);
-  }, [user?.id]);
+      })
+      .subscribe();
 
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase.channel("watchlist-realtime")
+    const watchChannel = supabase
+      .channel("watchlist-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "watchlist_items", filter: `user_id=eq.${user.id}` }, () => {
         supabase.from("watchlist_items").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
           .then(({ data }) => setItems(data || []));
-      }).subscribe();
-    return () => supabase.removeChannel(channel);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(stockChannel);
+      supabase.removeChannel(watchChannel);
+    };
   }, [user?.id]);
 
+  // ==================== ADD TICKER ====================
   const addTicker = async (symbol, exchange = "") => {
-    // ... (same logic as before, using supabase insert)
     symbol = symbol.trim().toUpperCase();
     if (!symbol || !user) return;
+
     if (items.find(i => i.ticker.toUpperCase() === symbol)) {
-      setToast(`"${symbol}" is already in your watchlist.`); return;
+      setToast(`"${symbol}" is already in your watchlist.`);
+      return;
     }
+
     setAdding(true);
     setShowSuggestions(false);
 
     let company_name = "";
     try {
-      const { data: res } = await supabase.functions.invoke("finnhub", { body: { action: "profile", ticker: symbol } });
+      const { data: res } = await supabase.functions.invoke("finnhub", {
+        body: { action: "profile", ticker: symbol },
+      });
       company_name = res?.name || "";
       if (!exchange && res?.exchange) exchange = res.exchange;
     } catch {}
 
-    await supabase.from("watchlist_items").insert({ user_id: user.id, ticker: symbol, exchange, company_name });
+    const { error } = await supabase.from("watchlist_items").insert({
+      user_id: user.id,
+      ticker: symbol,
+      exchange,
+      company_name,
+    });
+
     setTicker("");
-    const watchData = await load();
     setAdding(false);
-    if (watchData?.length) refreshQuotes(watchData.map(i => i.ticker.toUpperCase()));
+
+    if (error) {
+      setToast("Failed to add ticker");
+      return;
+    }
+
+    const watchData = await load();
+    if (watchData?.length) {
+      refreshQuotes(watchData.map(i => i.ticker.toUpperCase()));
+      fetchSparklines(watchData.map(i => i.ticker));
+    }
   };
 
-  const handleAdd = (e) => { e.preventDefault(); addTicker(ticker); };
+  const handleAdd = (e) => {
+    e.preventDefault();
+    addTicker(ticker);
+  };
+
   const handleRemove = async (id) => {
     const previous = items;
     setItems(prev => prev.filter(i => i.id !== id));
+
     const { error } = await supabase.from("watchlist_items").delete().eq("id", id);
     if (error) setItems(previous);
   };
@@ -447,7 +581,8 @@ export default function Watchlist() {
       setStocks(prev => prev.filter(s => s.id !== stock.id));
       await supabase.from("stocks").delete().eq("id", stock.id);
     } else {
-      setDialogItem({ ticker: item.ticker, companyName: getCompanyName(item.ticker, null, item) });
+      const companyName = getCompanyName(item.ticker, null, item);
+      setDialogItem({ ticker: item.ticker, companyName });
     }
   };
 
@@ -460,10 +595,18 @@ export default function Watchlist() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}>
-      <AnimatePresence>{toast && <Toast message={toast} onDone={() => setToast(null)} />}</AnimatePresence>
+      <AnimatePresence>
+        {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      </AnimatePresence>
 
       {dialogItem && (
-        <AddToPortfolioDialog open={true} onOpenChange={() => setDialogItem(null)} ticker={dialogItem.ticker} companyName={dialogItem.companyName} onAdded={handlePortfolioAdded} />
+        <AddToPortfolioDialog
+          open={true}
+          onOpenChange={() => setDialogItem(null)}
+          ticker={dialogItem.ticker}
+          companyName={dialogItem.companyName}
+          onAdded={handlePortfolioAdded}
+        />
       )}
 
       {/* Header */}
@@ -485,8 +628,16 @@ export default function Watchlist() {
         {/* Search Bar */}
         <form onSubmit={handleAdd} className="flex gap-2 relative justify-center">
           <div className="flex-[0_1_76%] relative">
-            <Input ref={inputRef} placeholder="Enter Ticker or Company Name" value={ticker} onChange={e => { setTicker(e.target.value); setShowSuggestions(true); }} onFocus={() => setShowSuggestions(true)} className="uppercase" />
-            {/* Suggestions dropdown - keep your original if you want */}
+            <Input
+              ref={inputRef}
+              placeholder="Enter Ticker or Company Name"
+              value={ticker}
+              onChange={e => { setTicker(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(true)}
+              className="uppercase placeholder:normal-case"
+              autoComplete="off"
+            />
+            {/* You can add suggestion dropdown here if needed */}
           </div>
           <Button type="submit" disabled={adding || !ticker.trim()}>
             {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -494,14 +645,31 @@ export default function Watchlist() {
         </form>
 
         {loading ? (
-          <div className="flex justify-center py-24"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          <div className="flex justify-center py-24">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-24">Nothing here yet. Add a ticker above.</div>
+          <div className="text-center py-24">
+            <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              <Star className="w-8 h-8 text-gray-400" />
+            </div>
+            <h2 className="font-heading text-lg font-semibold mb-1">Nothing here yet</h2>
+            <p className="text-gray-500 text-sm">Add a ticker above to start watching it.</p>
+          </div>
         ) : (
           <motion.div className="space-y-3" layout>
-            <AnimatePresence>
+            <AnimatePresence initial={false}>
               {items.map((item, index) => (
-                <WatchlistCard key={item.id} item={item} stock={findStock(item.ticker)} quote={quotes[item.ticker.toUpperCase()]} onRemove={handleRemove} onStarToggle={handleStarToggle} index={index} />
+                <WatchlistCard
+                  key={item.id}
+                  item={item}
+                  stock={findStock(item.ticker)}
+                  quote={quotes[item.ticker.toUpperCase()]}
+                  sparklineData={sparklines[item.ticker.toUpperCase()]}
+                  onRemove={handleRemove}
+                  onStarToggle={handleStarToggle}
+                  index={index}
+                />
               ))}
             </AnimatePresence>
           </motion.div>
