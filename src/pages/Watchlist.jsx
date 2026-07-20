@@ -31,6 +31,44 @@ import {
 const sparklineCache = new Map();
 const SPARKLINE_CACHE_DURATION = 5 * 60 * 1000;
 
+const EXCHANGE_RULES = [
+  [["NASDAQ"], "NASDAQ"],
+  [["NYSE AMERICAN", "AMEX"], "AMEX"],
+  [["NEW YORK STOCK EXCHANGE", "NYSE"], "NYSE"],
+  [["OTC", "PINK"], "OTC"],
+  [["CBOE", "BATS"], "CBOE"],
+  [["TSX VENTURE", "TSXV"], "TSXV"],
+  [["TSX", "TORONTO"], "TSX"],
+  [["CSE", "CANADIAN SECURITIES"], "CSE"],
+  [["NEO"], "NEO"],
+  [["LONDON", "LSE"], "LSE"],
+  [["EURONEXT PARIS", "XPAR"], "EPA"],
+  [["EURONEXT AMSTERDAM", "XAMS"], "AMS"],
+  [["EURONEXT BRUSSELS", "XBRU"], "EBR"],
+  [["EURONEXT"], "ENX"],
+  [["XETRA", "FRANKFURT", "FSE", "FWB"], "FRA"],
+  [["SIX", "SWISS", "ZURICH"], "SIX"],
+  [["MILAN", "BORSA ITALIANA"], "BIT"],
+  [["MADRID", "BME"], "BME"],
+  [["OSLO", "OSE"], "OSE"],
+  [["STOCKHOLM", "OMX"], "STO"],
+  [["COPENHAGEN", "CPH"], "CPH"],
+  [["HELSINKI", "HEL"], "HEL"],
+  [["ASX", "AUSTRALIAN"], "ASX"],
+  [["NZX", "NEW ZEALAND"], "NZX"],
+  [["TOKYO", "TSE", "JPX"], "TSE"],
+  [["SHANGHAI", "SHSE"], "SSE"],
+  [["SHENZHEN", "SZSE"], "SZSE"],
+  [["HONG KONG", "HKEX", "HKG"], "HKEX"],
+  [["NATIONAL STOCK EXCHANGE"], "NSE"],
+  [["BOMBAY"], "BSE"],
+  [["KRX", "KOREA EXCHANGE"], "KRX"],
+  [["SGX", "SINGAPORE"], "SGX"],
+  [["TADAWUL", "SAUDI"], "TADAWUL"],
+  [["JSE", "JOHANNESBURG"], "JSE"],
+  [["B3", "BOVESPA", "BRAZIL"], "B3"],
+];
+
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(Math.max(value, minimum), maximum);
 }
@@ -38,251 +76,25 @@ function clamp(value, minimum = 0, maximum = 1) {
 function smoothstep(value) {
   const normalized = clamp(value);
 
-  return normalized * normalized * (3 - 2 * normalized);
+  return (
+    normalized *
+    normalized *
+    (3 - 2 * normalized)
+  );
 }
 
 function abbreviateExchange(exchange) {
-  if (!exchange) return "";
+  if (!exchange) {
+    return "";
+  }
 
   const normalized = exchange.toUpperCase();
 
-  if (normalized.includes("NASDAQ")) {
-    return "NASDAQ";
-  }
+  const match = EXCHANGE_RULES.find(([terms]) =>
+    terms.some((term) => normalized.includes(term))
+  );
 
-  if (
-    normalized.includes("NYSE AMERICAN") ||
-    normalized.includes("AMEX")
-  ) {
-    return "AMEX";
-  }
-
-  if (
-    normalized.includes("NEW YORK STOCK EXCHANGE") ||
-    normalized.includes("NYSE")
-  ) {
-    return "NYSE";
-  }
-
-  if (
-    normalized.includes("OTC") ||
-    normalized.includes("PINK")
-  ) {
-    return "OTC";
-  }
-
-  if (
-    normalized.includes("CBOE") ||
-    normalized.includes("BATS")
-  ) {
-    return "CBOE";
-  }
-
-  if (
-    normalized.includes("TSX VENTURE") ||
-    normalized.includes("TSXV")
-  ) {
-    return "TSXV";
-  }
-
-  if (
-    normalized.includes("TSX") ||
-    normalized.includes("TORONTO")
-  ) {
-    return "TSX";
-  }
-
-  if (
-    normalized.includes("CSE") ||
-    normalized.includes("CANADIAN SECURITIES")
-  ) {
-    return "CSE";
-  }
-
-  if (normalized.includes("NEO")) {
-    return "NEO";
-  }
-
-  if (
-    normalized.includes("LONDON") ||
-    normalized.includes("LSE")
-  ) {
-    return "LSE";
-  }
-
-  if (
-    normalized.includes("EURONEXT PARIS") ||
-    normalized.includes("XPAR")
-  ) {
-    return "EPA";
-  }
-
-  if (
-    normalized.includes("EURONEXT AMSTERDAM") ||
-    normalized.includes("XAMS")
-  ) {
-    return "AMS";
-  }
-
-  if (
-    normalized.includes("EURONEXT BRUSSELS") ||
-    normalized.includes("XBRU")
-  ) {
-    return "EBR";
-  }
-
-  if (normalized.includes("EURONEXT")) {
-    return "ENX";
-  }
-
-  if (
-    normalized.includes("XETRA") ||
-    normalized.includes("FRANKFURT") ||
-    normalized.includes("FSE") ||
-    normalized.includes("FWB")
-  ) {
-    return "FRA";
-  }
-
-  if (
-    normalized.includes("SIX") ||
-    normalized.includes("SWISS") ||
-    normalized.includes("ZURICH")
-  ) {
-    return "SIX";
-  }
-
-  if (
-    normalized.includes("MILAN") ||
-    normalized.includes("BORSA ITALIANA")
-  ) {
-    return "BIT";
-  }
-
-  if (
-    normalized.includes("MADRID") ||
-    normalized.includes("BME")
-  ) {
-    return "BME";
-  }
-
-  if (
-    normalized.includes("OSLO") ||
-    normalized.includes("OSE")
-  ) {
-    return "OSE";
-  }
-
-  if (
-    normalized.includes("STOCKHOLM") ||
-    normalized.includes("OMX")
-  ) {
-    return "STO";
-  }
-
-  if (
-    normalized.includes("COPENHAGEN") ||
-    normalized.includes("CPH")
-  ) {
-    return "CPH";
-  }
-
-  if (
-    normalized.includes("HELSINKI") ||
-    normalized.includes("HEL")
-  ) {
-    return "HEL";
-  }
-
-  if (
-    normalized.includes("ASX") ||
-    normalized.includes("AUSTRALIAN")
-  ) {
-    return "ASX";
-  }
-
-  if (
-    normalized.includes("NZX") ||
-    normalized.includes("NEW ZEALAND")
-  ) {
-    return "NZX";
-  }
-
-  if (
-    normalized.includes("TOKYO") ||
-    normalized.includes("TSE") ||
-    normalized.includes("JPX")
-  ) {
-    return "TSE";
-  }
-
-  if (
-    normalized.includes("SHANGHAI") ||
-    normalized.includes("SHSE")
-  ) {
-    return "SSE";
-  }
-
-  if (
-    normalized.includes("SHENZHEN") ||
-    normalized.includes("SZSE")
-  ) {
-    return "SZSE";
-  }
-
-  if (
-    normalized.includes("HONG KONG") ||
-    normalized.includes("HKEX") ||
-    normalized.includes("HKG")
-  ) {
-    return "HKEX";
-  }
-
-  if (normalized.includes("NATIONAL STOCK EXCHANGE")) {
-    return "NSE";
-  }
-
-  if (normalized.includes("BOMBAY")) {
-    return "BSE";
-  }
-
-  if (
-    normalized.includes("KRX") ||
-    normalized.includes("KOREA EXCHANGE")
-  ) {
-    return "KRX";
-  }
-
-  if (
-    normalized.includes("SGX") ||
-    normalized.includes("SINGAPORE")
-  ) {
-    return "SGX";
-  }
-
-  if (
-    normalized.includes("TADAWUL") ||
-    normalized.includes("SAUDI")
-  ) {
-    return "TADAWUL";
-  }
-
-  if (
-    normalized.includes("JSE") ||
-    normalized.includes("JOHANNESBURG")
-  ) {
-    return "JSE";
-  }
-
-  if (
-    normalized.includes("B3") ||
-    normalized.includes("BOVESPA") ||
-    normalized.includes("BRAZIL")
-  ) {
-    return "B3";
-  }
-
-  return exchange;
+  return match?.[1] || exchange;
 }
 
 function getCompanyName(ticker, stock, item) {
@@ -809,22 +621,30 @@ function SwipeActionButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={`group relative flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full border bg-white outline-none transition-[background-color,border-color,box-shadow,filter] duration-200 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
+      className={`group relative flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full border text-white outline-none transition-[background-color,border-color,box-shadow,filter] duration-200 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed ${
         isDelete
-          ? "border-red-100 text-red-500 hover:border-red-200 hover:bg-red-50 focus-visible:ring-red-300"
-          : "border-gray-100 text-gray-700 hover:border-gray-200 hover:bg-gray-50 focus-visible:ring-gray-300"
+          ? "border-red-400 bg-red-500 hover:border-red-500 hover:bg-red-600 focus-visible:ring-red-300"
+          : "border-sky-400 bg-sky-500 hover:border-sky-500 hover:bg-sky-600 focus-visible:ring-sky-300"
       }`}
       style={{
         opacity: easedProgress,
         transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
         transformOrigin: "right center",
-        boxShadow: `
-          0 5px 14px rgba(15, 23, 42, ${
-            0.05 + easedProgress * 0.06
-          }),
-          0 1px 3px rgba(15, 23, 42, 0.08),
-          inset 0 1px 0 rgba(255, 255, 255, 0.95)
-        `,
+        boxShadow: isDelete
+          ? `
+              0 7px 18px rgba(239, 68, 68, ${
+                0.16 + easedProgress * 0.18
+              }),
+              0 2px 5px rgba(15, 23, 42, 0.10),
+              inset 0 1px 0 rgba(255,255,255,0.30)
+            `
+          : `
+              0 7px 18px rgba(14, 165, 233, ${
+                0.16 + easedProgress * 0.18
+              }),
+              0 2px 5px rgba(15, 23, 42, 0.10),
+              inset 0 1px 0 rgba(255,255,255,0.30)
+            `,
         pointerEvents:
           disabled || easedProgress < 0.76
             ? "none"
@@ -833,7 +653,7 @@ function SwipeActionButton({
     >
       <Icon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110 group-active:scale-90" />
 
-      <span className="text-[8px] font-semibold leading-none">
+      <span className="text-[8px] font-bold leading-none text-white">
         {label}
       </span>
     </button>
@@ -905,18 +725,10 @@ function WatchlistCard({
     Math.abs(dragX) / REVEAL_WIDTH
   );
 
-  /*
-   * Delete is closest to the right edge,
-   * so it reveals first.
-   */
   const deleteProgress = clamp(
     revealProgress / 0.55
   );
 
-  /*
-   * Share begins appearing once Delete
-   * is mostly visible.
-   */
   const shareProgress = clamp(
     (revealProgress - 0.34) / 0.66
   );
@@ -929,7 +741,9 @@ function WatchlistCard({
       : `/stock/ticker-${item.ticker}`;
 
   function handleTouchStart(event) {
-    if (deleting) return;
+    if (deleting) {
+      return;
+    }
 
     touchStartXRef.current =
       event.touches[0].clientX;
@@ -994,7 +808,9 @@ function WatchlistCard({
   }
 
   function handleTouchEnd() {
-    if (deleting) return;
+    if (deleting) {
+      return;
+    }
 
     const openThreshold =
       swiped
@@ -1068,7 +884,9 @@ function WatchlistCard({
     event.preventDefault();
     event.stopPropagation();
 
-    if (deleting) return;
+    if (deleting) {
+      return;
+    }
 
     setDeleting(true);
     setDragX(-420);
@@ -1077,7 +895,13 @@ function WatchlistCard({
       window.setTimeout(resolve, 240);
     });
 
-    await onRemove(item.id);
+    const removed = await onRemove(item.id);
+
+    if (!removed) {
+      setDeleting(false);
+      setDragX(0);
+      setSwiped(false);
+    }
   }
 
   function handleLinkClick(event) {
@@ -1513,7 +1337,10 @@ export default function Watchlist() {
 
       controller.abort();
     };
-  }, [ticker, normalizeSearchResults]);
+  }, [
+    ticker,
+    normalizeSearchResults,
+  ]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -1535,7 +1362,9 @@ export default function Watchlist() {
         }
       })
       .catch((error) => {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         console.error(
           "Watchlist load failed:",
@@ -1785,6 +1614,7 @@ export default function Watchlist() {
 
   function handleAdd(event) {
     event.preventDefault();
+
     addTicker(ticker);
   }
 
@@ -1814,6 +1644,8 @@ export default function Watchlist() {
       setToast(
         "Removed from watchlist"
       );
+
+      return true;
     } catch (error) {
       console.error(
         "Remove ticker failed:",
@@ -1825,6 +1657,8 @@ export default function Watchlist() {
       setToast(
         "Failed to remove ticker."
       );
+
+      return false;
     }
   }
 
@@ -1956,10 +1790,14 @@ export default function Watchlist() {
       )}
 
       <main className="mx-auto max-w-3xl">
-        <div className="mb-6">
-          <h1 className="font-heading text-3xl font-bold text-gray-900">
-            Watchlist
-          </h1>
+        <div className="mb-6 text-center">
+          <div className="flex items-center justify-center gap-1">
+            <Star className="h-7 w-7 shrink-0 fill-amber-400 text-amber-400 drop-shadow-[0_2px_5px_rgba(251,191,36,0.28)]" />
+
+            <h1 className="font-heading text-3xl font-bold text-gray-900">
+              Watchlist
+            </h1>
+          </div>
 
           <p className="mt-1 text-sm text-gray-500">
             Stocks you&apos;re watching
@@ -2127,7 +1965,7 @@ export default function Watchlist() {
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-14 text-center">
-            <Star className="mx-auto h-8 w-8 text-gray-300" />
+            <Star className="mx-auto h-8 w-8 fill-amber-400 text-amber-400" />
 
             <h2 className="mt-3 text-base font-semibold text-gray-900">
               Nothing here yet
