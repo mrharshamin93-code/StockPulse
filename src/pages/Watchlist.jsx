@@ -310,6 +310,14 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
     transition: isDragging.current ? "none" : "transform 0.32s cubic-bezier(0.34, 1.2, 0.64, 1)",
   };
 
+  // --- SAFE LINK: absolutely prevents /stock/undefined ---
+  const linkTo = (hasStock && stock.id && stock.id !== "undefined")
+    ? `/stock/${stock.id}`
+    : `/stock/ticker-${item.ticker}`;
+
+  // Debug log to verify what's happening
+  console.log(`WatchlistCard link: ticker=${item.ticker}, hasStock=${hasStock}, stockId=${stock?.id}, linkTo=${linkTo}`);
+
   const inner = (
     <div className="border border-gray-100 rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-200 transition-all duration-200 h-[76px]"
       style={{ ...cardStyle, backgroundColor: "hsl(var(--card))" }}
@@ -347,13 +355,9 @@ function WatchlistCard({ item, stock, quote, onRemove, onStarToggle, index }) {
           <Trash2 className="w-5 h-5 shrink-0" /><span>Delete</span>
         </button>
       </div>
-      {/* SAFE LINK: avoids /stock/undefined */}
+      {/* ULTRA-SAFE LINK */}
       <Link
-        to={
-          hasStock && stock.id
-            ? `/stock/${stock.id}`
-            : `/stock/ticker-${item.ticker}`
-        }
+        to={linkTo}
         onClick={swiped ? (e) => { e.preventDefault(); closeSwipe(); } : undefined}
       >
         {inner}
@@ -423,7 +427,8 @@ export default function Watchlist() {
       supabase.from("stocks").select("*").eq("user_id", user.id),
     ]);
     const watchData = watchRes.data || [];
-    const stockData = stockRes.data || [];
+    // Filter out any stock that doesn't have a valid id
+    const stockData = (stockRes.data || []).filter(s => s && s.id && s.id !== "undefined");
     setItems(watchData);
     setStocks(stockData);
     return watchData;
