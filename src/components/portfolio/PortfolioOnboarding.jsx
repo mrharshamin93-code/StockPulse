@@ -19,7 +19,7 @@ const STEPS = [
   },
 ];
 
-export default function PortfolioOnboarding({ onStockAdded }) {
+export default function PortfolioOnboarding() {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 max-w-lg mx-auto text-center">
       {/* Hero */}
