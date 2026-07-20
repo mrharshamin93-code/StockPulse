@@ -627,7 +627,7 @@ export default function PortfolioGrowthChart({
             />
 
             <Area
-              type="monotone"
+              type="linear"
               dataKey="value"
               stroke={color}
               strokeWidth={2}
