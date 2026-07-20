@@ -1,302 +1,207 @@
+import React, { useCallback, useEffect, useRef } from "react";
 import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+  Link,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import {
-  AlertCircle,
-  Loader2,
+  BriefcaseBusiness,
+  Settings,
+  SlidersHorizontal,
+  Star,
+  TrendingUp,
 } from "lucide-react";
 
-import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
+import AddStockDialog from "@/components/portfolio/AddStockDialog";
 
-function getSafeNextPath(searchParams) {
-  const next =
-    searchParams.get("next") || "/";
+const tabs = [
+  {
+    label: "Watchlist",
+    path: "/watchlist",
+    icon: Star,
+  },
+  {
+    label: "Portfolio",
+    path: "/home",
+    icon: BriefcaseBusiness,
+  },
+  {
+    label: "Analysis",
+    path: "/analysis",
+    icon: TrendingUp,
+  },
+  {
+    label: "Screener",
+    path: "/screener",
+    icon: SlidersHorizontal,
+  },
+  {
+    label: "Settings",
+    path: "/settings",
+    icon: Settings,
+  },
+];
 
-  /*
-   * Only allow internal application paths.
-   */
-  if (
-    !next.startsWith("/") ||
-    next.startsWith("//")
-  ) {
-    return "/";
-  }
+export default function NavigationLayout() {
+  const location = useLocation();
+  const { pathname } = location;
+  const navigate = useNavigate();
 
-  return next;
-}
-
-function getProviderError(searchParams) {
-  const description =
-    searchParams.get(
-      "error_description"
-    );
-
-  const error =
-    searchParams.get("error");
-
-  if (description) {
-    try {
-      return decodeURIComponent(
-        description.replace(/\+/g, " ")
-      );
-    } catch {
-      return description;
+  const activeTab = (() => {
+    if (
+      pathname === "/" ||
+      pathname === "/watchlist" ||
+      pathname.startsWith("/stock/")
+    ) {
+      return "/watchlist";
     }
-  }
 
-  return error || "";
-}
+    const root = `/${pathname.split("/")[1]}`;
 
-export default function AuthCallback() {
-  const callbackStartedRef =
-    useRef(false);
+    return tabs.some(
+      (tab) => tab.path === root
+    )
+      ? root
+      : "/watchlist";
+  })();
 
-  const [status, setStatus] =
-    useState("processing");
+  const showTabs =
+    !pathname.startsWith("/stock/");
 
-  const [message, setMessage] =
-    useState(
-      "Completing your Google sign-in…"
-    );
+  const scrollPositions = useRef({});
+  const previousTab = useRef(activeTab);
 
   useEffect(() => {
-    /*
-     * Prevent the one-time OAuth code from
-     * being exchanged more than once.
-     */
-    if (callbackStartedRef.current) {
-      return undefined;
+    const previous = previousTab.current;
+
+    if (previous === activeTab) {
+      return;
     }
 
-    callbackStartedRef.current = true;
+    scrollPositions.current[previous] =
+      window.scrollY;
 
-    let cancelled = false;
-    let timeoutId;
+    const savedPosition =
+      scrollPositions.current[activeTab] ?? 0;
 
-    async function completeSignIn() {
-      try {
-        const searchParams =
-          new URLSearchParams(
-            window.location.search
-          );
+    window.scrollTo({
+      top: savedPosition,
+      behavior: "instant",
+    });
 
-        const providerError =
-          getProviderError(
-            searchParams
-          );
+    previousTab.current = activeTab;
+  }, [activeTab]);
 
-        if (providerError) {
-          throw new Error(
-            providerError
-          );
-        }
-
-        const nextPath =
-          getSafeNextPath(
-            searchParams
-          );
-
-        /*
-         * Handle a refreshed callback page after
-         * the session was already saved.
-         */
-        const {
-          data: existingSessionData,
-          error: existingSessionError,
-        } =
-          await supabase.auth.getSession();
-
-        if (existingSessionError) {
-          console.warn(
-            "Existing session check failed:",
-            existingSessionError
-          );
-        }
-
-        if (
-          existingSessionData?.session?.user
-        ) {
-          window.clearTimeout(
-            timeoutId
-          );
-
-          window.location.replace(
-            nextPath
-          );
-
-          return;
-        }
-
-        const code =
-          searchParams.get("code");
-
-        if (!code) {
-          throw new Error(
-            "Google did not return an authorization code. " +
-              "Please start the sign-in process again."
-          );
-        }
-
-        const {
-          data,
-          error,
-        } =
-          await supabase.auth.exchangeCodeForSession(
-            code
-          );
-
-        if (error) {
-          throw error;
-        }
-
-        if (!data?.session?.user) {
-          throw new Error(
-            "Google sign-in completed, but no session was created."
-          );
-        }
-
-        /*
-         * Confirm that Supabase persisted the session
-         * before entering protected routes.
-         */
-        const {
-          data: verifiedSessionData,
-          error: verificationError,
-        } =
-          await supabase.auth.getSession();
-
-        if (verificationError) {
-          throw verificationError;
-        }
-
-        if (
-          !verifiedSessionData?.session?.user
-        ) {
-          throw new Error(
-            "The session could not be saved in this browser."
-          );
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        window.clearTimeout(
-          timeoutId
-        );
-
-        setStatus("success");
-        setMessage(
-          "Signed in successfully."
-        );
-
-        /*
-         * Perform a full reload after the session is
-         * stored. This avoids a race between AuthContext,
-         * React Router, and ProtectedRoute on slower
-         * mobile devices.
-         */
-        window.location.replace(
-          nextPath
-        );
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        window.clearTimeout(
-          timeoutId
-        );
-
-        console.error(
-          "OAuth callback failed:",
-          error
-        );
-
-        setStatus("error");
-
-        setMessage(
-          error?.message ||
-            "Google sign-in failed."
-        );
+  const handleTabClick = useCallback(
+    (event, path) => {
+      if (activeTab !== path) {
+        return;
       }
-    }
 
-    timeoutId =
-      window.setTimeout(() => {
-        if (cancelled) {
-          return;
-        }
+      event.preventDefault();
 
-        setStatus("error");
+      if (pathname !== path) {
+        navigate(path, {
+          replace: true,
+        });
+      }
 
-        setMessage(
-          "The sign-in request took too long. " +
-            "Please try again in Safari or Chrome."
-        );
-      }, 30000);
+      scrollPositions.current[path] = 0;
 
-    completeSignIn();
-
-    return () => {
-      cancelled = true;
-
-      window.clearTimeout(
-        timeoutId
-      );
-    };
-  }, []);
-
-  function returnToLogin() {
-    window.location.replace(
-      "/login"
-    );
-  }
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    },
+    [activeTab, pathname, navigate]
+  );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
-        {status === "error" ? (
-          <>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
-              <AlertCircle className="h-6 w-6 text-red-500" />
-            </div>
-
-            <h1 className="mt-4 text-lg font-semibold text-gray-900">
-              Couldn&apos;t sign you in
-            </h1>
-
-            <p className="mt-2 break-words text-sm leading-6 text-gray-500">
-              {message}
-            </p>
-
-            <Button
-              type="button"
-              onClick={
-                returnToLogin
-              }
-              className="mt-5 w-full"
-            >
-              Back to login
-            </Button>
-          </>
-        ) : (
-          <>
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-900" />
-
-            <h1 className="mt-4 text-lg font-semibold text-gray-900">
-              Signing you in
-            </h1>
-
-            <p className="mt-2 text-sm text-gray-500">
-              {message}
-            </p>
-          </>
-        )}
+    <div className="flex min-h-screen flex-col overflow-hidden">
+      <div
+        className="relative flex-1"
+        style={{
+          minHeight:
+            "calc(100dvh - 70px)",
+        }}
+      >
+        <div className="absolute inset-0 overflow-y-auto">
+          <Outlet />
+        </div>
       </div>
+
+      {pathname === "/home" && (
+        <div
+          className="fixed left-1/2 z-50 -translate-x-1/2"
+          style={{
+            bottom:
+              "calc(env(safe-area-inset-bottom) + 68px)",
+          }}
+        >
+          <AddStockDialog />
+        </div>
+      )}
+
+      {showTabs && (
+        <nav
+          className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-[hsl(var(--card))]"
+          style={{
+            paddingBottom:
+              "env(safe-area-inset-bottom)",
+          }}
+        >
+          <div className="mx-auto flex max-w-lg">
+            {tabs.map(
+              ({
+                label,
+                path,
+                icon: Icon,
+              }) => {
+                const active =
+                  activeTab === path;
+
+                return (
+                  <Link
+                    key={path}
+                    to={path}
+                    onClick={(event) =>
+                      handleTabClick(
+                        event,
+                        path
+                      )
+                    }
+                    className={`relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors ${
+                      active
+                        ? "text-[hsl(var(--primary))]"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {label ===
+                    "Watchlist" ? (
+                      <Star
+                        className={`h-5 w-5 ${
+                          active
+                            ? "fill-amber-400 text-amber-400"
+                            : ""
+                        }`}
+                      />
+                    ) : (
+                      <Icon className="h-5 w-5" />
+                    )}
+
+                    <span>{label}</span>
+
+                    {active && (
+                      <div className="absolute bottom-1 h-0.5 w-6 rounded-full bg-[hsl(var(--primary))]" />
+                    )}
+                  </Link>
+                );
+              }
+            )}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

@@ -10,7 +10,45 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/lib/AuthContext";
+import { supabase } from "@/lib/supabase";
+
+/*
+ * OAuth authorization codes can only be exchanged once.
+ * Keep one promise across component re-renders so a slow
+ * mobile browser cannot start a duplicate exchange.
+ */
+let callbackPromise = null;
+
+const AUTH_STEP_TIMEOUT_MS =
+  20000;
+
+function runWithTimeout(
+  operation,
+  timeoutMessage
+) {
+  let timeoutId;
+
+  const timeoutPromise =
+    new Promise((_, reject) => {
+      timeoutId =
+        window.setTimeout(() => {
+          reject(
+            new Error(
+              timeoutMessage
+            )
+          );
+        }, AUTH_STEP_TIMEOUT_MS);
+    });
+
+  return Promise.race([
+    operation,
+    timeoutPromise,
+  ]).finally(() => {
+    window.clearTimeout(
+      timeoutId
+    );
+  });
+}
 
 function getSafeNextPath() {
   const searchParams =
@@ -35,19 +73,14 @@ function getSafeNextPath() {
   return requestedPath;
 }
 
-function getProviderError() {
-  const searchParams =
-    new URLSearchParams(
-      window.location.search
-    );
-
+function getProviderError(
+  searchParams
+) {
   const rawError =
     searchParams.get(
       "error_description"
     ) ||
-    searchParams.get(
-      "error"
-    ) ||
+    searchParams.get("error") ||
     searchParams.get(
       "error_code"
     ) ||
@@ -69,69 +102,201 @@ function getProviderError() {
   }
 }
 
-export default function AuthCallback() {
-  const {
-    isAuthenticated,
-    isLoadingAuth,
-    authError,
-  } = useAuth();
+async function completeOAuthCallback(
+  reportStage
+) {
+  const searchParams =
+    new URLSearchParams(
+      window.location.search
+    );
 
-  const [showFailure, setShowFailure] =
-    useState(false);
+  const providerError =
+    getProviderError(
+      searchParams
+    );
+
+  if (providerError) {
+    throw new Error(
+      providerError
+    );
+  }
+
+  const nextPath =
+    getSafeNextPath();
+
+  /*
+   * A refreshed callback may already have a persisted
+   * session even though its one-use code is still visible.
+   */
+  reportStage(
+    "Checking browser session…"
+  );
+
+  const {
+    data: existingData,
+    error: existingError,
+  } = await runWithTimeout(
+    supabase.auth.getSession(),
+    "Checking the existing browser session timed out. Please reload and try Google sign-in again."
+  );
+
+  if (existingError) {
+    console.warn(
+      "Existing session check failed:",
+      existingError
+    );
+  }
+
+  if (existingData?.session?.user) {
+    return nextPath;
+  }
+
+  const code =
+    searchParams.get("code");
+
+  if (!code) {
+    throw new Error(
+      "Google did not return an authorization code. " +
+        "Please begin the sign-in process again."
+    );
+  }
+
+  reportStage(
+    "Exchanging secure Google sign-in code…"
+  );
+
+  const {
+    data,
+    error,
+  } = await runWithTimeout(
+    supabase.auth.exchangeCodeForSession(
+      code
+    ),
+    "The secure Google code exchange timed out. Check that this exact preview callback URL is allowed in Supabase."
+  );
+
+  if (error) {
+    /*
+     * If another render completed first, recover its
+     * persisted session before displaying an error.
+     */
+    reportStage(
+      "Recovering saved session…"
+    );
+
+    const {
+      data: recoveredData,
+    } = await runWithTimeout(
+      supabase.auth.getSession(),
+      "Session recovery timed out after the Google code exchange."
+    );
+
+    if (recoveredData?.session?.user) {
+      return nextPath;
+    }
+
+    throw error;
+  }
+
+  if (!data?.session?.user) {
+    throw new Error(
+      "Google sign-in completed, but no session was created."
+    );
+  }
+
+  reportStage(
+    "Saving your login session…"
+  );
+
+  const {
+    data: verifiedData,
+    error: verificationError,
+  } = await runWithTimeout(
+    supabase.auth.getSession(),
+    "Saving the Google login session timed out."
+  );
+
+  if (verificationError) {
+    throw verificationError;
+  }
+
+  if (!verifiedData?.session?.user) {
+    throw new Error(
+      "The login session could not be saved in this browser."
+    );
+  }
+
+  return nextPath;
+}
+
+function runCallbackOnce(
+  reportStage
+) {
+  if (!callbackPromise) {
+    callbackPromise =
+      completeOAuthCallback(
+        reportStage
+      );
+  }
+
+  return callbackPromise;
+}
+
+export default function AuthCallback() {
+  const [status, setStatus] =
+    useState("processing");
+
+  const [message, setMessage] =
+    useState(
+      "Completing your Google sign-in…"
+    );
 
   const nextPath = useMemo(
     () => getSafeNextPath(),
     []
   );
 
-  const providerError = useMemo(
-    () => getProviderError(),
-    []
-  );
-
   useEffect(() => {
-    if (providerError) {
-      setShowFailure(true);
-      return undefined;
-    }
+    let active = true;
 
-    if (isAuthenticated) {
-      /*
-       * Replace removes the one-use OAuth callback URL
-       * from browser history and starts the app using
-       * the newly persisted session.
-       */
-      window.location.replace(
-        nextPath
-      );
+    runCallbackOnce(
+      setMessage
+    )
+      .then(() => {
+        if (!active) {
+          return;
+        }
 
-      return undefined;
-    }
+        setStatus("success");
+        setMessage(
+          "Opening your watchlist…"
+        );
 
-    if (isLoadingAuth) {
-      return undefined;
-    }
+        window.location.replace(
+          nextPath
+        );
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
 
-    /*
-     * Give a SIGNED_IN notification a brief chance to
-     * follow INITIAL_SESSION on a slow mobile browser.
-     */
-    const failureTimer =
-      window.setTimeout(() => {
-        setShowFailure(true);
-      }, 1500);
+        console.error(
+          "OAuth callback failed:",
+          error
+        );
+
+        setStatus("error");
+        setMessage(
+          error?.message ||
+            "Google sign-in failed."
+        );
+      });
 
     return () => {
-      window.clearTimeout(
-        failureTimer
-      );
+      active = false;
     };
-  }, [
-    providerError,
-    isAuthenticated,
-    isLoadingAuth,
-    nextPath,
-  ]);
+  }, [nextPath]);
 
   function returnToLogin() {
     window.location.replace(
@@ -139,15 +304,7 @@ export default function AuthCallback() {
     );
   }
 
-  const errorMessage =
-    providerError ||
-    authError?.message ||
-    "Google sign-in did not create a session. Please start a new login attempt.";
-
-  if (
-    showFailure &&
-    !isAuthenticated
-  ) {
+  if (status === "error") {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-4">
         <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
@@ -160,7 +317,7 @@ export default function AuthCallback() {
           </h1>
 
           <p className="mt-2 break-words text-sm leading-6 text-gray-500">
-            {errorMessage}
+            {message}
           </p>
 
           <Button
@@ -180,22 +337,20 @@ export default function AuthCallback() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
-        {isAuthenticated ? (
+        {status === "success" ? (
           <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
         ) : (
           <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-900" />
         )}
 
         <h1 className="mt-4 text-lg font-semibold text-gray-900">
-          {isAuthenticated
+          {status === "success"
             ? "Signed in"
             : "Signing you in"}
         </h1>
 
         <p className="mt-2 text-sm text-gray-500">
-          {isAuthenticated
-            ? "Opening your watchlist…"
-            : "Completing your Google sign-in…"}
+          {message}
         </p>
       </div>
     </div>
