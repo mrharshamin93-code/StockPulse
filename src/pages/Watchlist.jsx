@@ -10,10 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { motion, AnimatePresence } from "framer-motion";
 
-// ==================== CACHE FOR SPARKLINE DATA ====================
-const sparklineCache = new Map(); // In-memory cache: { ticker: { data, timestamp } }
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
 // ==================== HELPER FUNCTIONS ====================
 function abbreviateExchange(exchange) {
   if (!exchange) return "";
@@ -144,117 +140,120 @@ function AddToPortfolioDialog({ open, onOpenChange, ticker, companyName, onAdded
   );
 }
 
-// ==================== FETCH SPARKLINE DATA ====================
+// ==================== CACHE FOR SPARKLINE DATA ====================
+const sparklineCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 async function fetchSparklineData(ticker) {
-  // Check cache first
-  const cached = sparklineCache.get(ticker);
+  const cacheKey = ticker.toUpperCase();
+  const cached = sparklineCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data;
   }
 
   try {
-    // Calculate timestamps for last 30 days
     const now = Math.floor(Date.now() / 1000);
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60;
-    
+
     const res = await fetch("/api/finnhub", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "candle",
+        action: "candles_range",   // ✅ matches your Finnhub proxy
         ticker,
-        resolution: "D", // Daily candles
+        resolution: "D",
         from: thirtyDaysAgo,
         to: now,
       }),
     });
-    
-    const data = await res.json();
-    
-    if (data?.c && Array.isArray(data.c) && data.c.length > 0) {
-      // Store in cache
-      sparklineCache.set(ticker, {
-        data: data.c,
-        timestamp: Date.now(),
-      });
-      return data.c;
+
+    const json = await res.json();
+
+    // Proxy returns { candles: [{ t, v }, ...] }
+    if (json?.candles && Array.isArray(json.candles) && json.candles.length >= 2) {
+      const closePrices = json.candles.map(c => c.v);  // v = close price
+      sparklineCache.set(cacheKey, { data: closePrices, timestamp: Date.now() });
+      return closePrices;
     }
-    return null;
+    return null; // signals fallback to static line
   } catch (error) {
-    console.error(`Error fetching sparkline for ${ticker}:`, error);
+    console.error(`Sparkline fetch error for ${ticker}:`, error);
     return null;
   }
 }
 
-// ==================== MiniSparkline Component ====================
+// ==================== MiniSparkline (static fallback kept) ====================
 function MiniSparkline({ data, isPositive }) {
-  if (!data || data.length < 2) {
-    // Fallback to simple static sparkline if no data
+  // Use real data if available; otherwise draw the static generic line
+  if (data && data.length >= 2) {
+    const width = 40;
+    const height = 36;
+    const padding = 2;
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+
+    const points = data
+      .map((price, i) => {
+        const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
+        const y = padding + ((max - price) / range) * (height - 2 * padding);
+        return `${x},${y}`;
+      })
+      .join(" ");
+
     const color = isPositive ? "#10b981" : "#ef4444";
-    const points = isPositive
-      ? "2,28 8,22 14,26 20,18 26,20 32,12 38,8"
-      : "2,8 8,12 14,10 20,18 26,16 32,22 38,28";
+
     return (
-      <svg width="40" height="36" viewBox="0 0 40 36" fill="none">
-        <polyline points={points} stroke={color} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="40" height="36" viewBox={`0 0 ${width} ${height}`} fill="none">
+        <polyline
+          points={points}
+          stroke={color}
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     );
   }
 
-  const width = 40;
-  const height = 36;
-  const padding = 2;
-  
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  
-  const points = data.map((price, i) => {
-    const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
-    const y = padding + ((max - price) / range) * (height - 2 * padding);
-    return `${x},${y}`;
-  }).join(" ");
-  
+  // Static fallback (your original design)
   const color = isPositive ? "#10b981" : "#ef4444";
+  const points = isPositive
+    ? "2,28 8,22 14,26 20,18 26,20 32,12 38,8"
+    : "2,8 8,12 14,10 20,18 26,16 32,22 38,28";
 
   return (
-    <svg width="40" height="36" viewBox={`0 0 ${width} ${height}`} fill="none">
-      <polyline 
-        points={points} 
-        stroke={color} 
-        strokeWidth="1.5" 
-        fill="none" 
-        strokeLinecap="round" 
-        strokeLinejoin="round" 
+    <svg width="40" height="36" viewBox="0 0 40 36" fill="none">
+      <polyline
+        points={points}
+        stroke={color}
+        strokeWidth="1.5"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
 }
 
-// ==================== SparklineWrapper with data fetching ====================
+// ==================== SparklineWrapper ====================
 function SparklineWrapper({ ticker, isPositive }) {
   const [sparklineData, setSparklineData] = useState(null);
-  
+
   useEffect(() => {
     let mounted = true;
-    
-    async function loadSparkline() {
-      const data = await fetchSparklineData(ticker);
-      if (mounted) {
-        setSparklineData(data);
-      }
-    }
-    
-    loadSparkline();
-    
-    return () => {
-      mounted = false;
-    };
+    fetchSparklineData(ticker).then((data) => {
+      if (mounted) setSparklineData(data);
+    });
+    return () => { mounted = false; };
   }, [ticker]);
-  
+
   return <MiniSparkline data={sparklineData} isPositive={isPositive} />;
 }
 
+// ==================== AnimatedPrice ====================
 function AnimatedPrice({ value }) {
   const [flash, setFlash] = useState(null);
   const prevRef = useRef(value);
