@@ -408,15 +408,22 @@ export default function StockDetail() {
   const isTickerRoute = id?.startsWith("ticker-");
   const tickerFromRoute = isTickerRoute ? id.replace("ticker-", "").toUpperCase() : null;
 
-  // Load stock data
   useEffect(() => {
     const load = async () => {
       setError(null);
       setLoading(true);
+
+      // REJECT invalid id early
+      if (!id || id === "undefined" || (isTickerRoute && !tickerFromRoute)) {
+        setStock(null);
+        setError("Invalid stock link");
+        setLoading(false);
+        return;
+      }
+
       try {
         if (isTickerRoute) {
           console.log("Loading ticker route:", tickerFromRoute);
-          // We'll load quote and profile, but if either fails, we show an error message
           const [quoteData, profileData] = await Promise.all([
             finnhubProxy({ action: "quote", ticker: tickerFromRoute }).catch(e => {
               console.error("Quote fetch failed:", e);
@@ -443,6 +450,7 @@ export default function StockDetail() {
             setStock({ ...data, _watchlistOnly: false });
           } else {
             setStock(null);
+            setError("Stock not found in portfolio");
           }
         }
       } catch (err) {
@@ -456,7 +464,7 @@ export default function StockDetail() {
     load();
   }, [id, isTickerRoute, tickerFromRoute]);
 
-  // Load news (from Finnhub)
+  // Load news
   useEffect(() => {
     if (!stock) return;
     const fetchNews = async () => {
