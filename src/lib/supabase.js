@@ -9,8 +9,7 @@ const supabaseAnonKey =
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     "Missing Supabase environment variables. " +
-      "Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY " +
-      "in your Vercel project settings."
+      "Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY."
   );
 }
 
@@ -20,24 +19,25 @@ export const supabase = createClient(
   {
     auth: {
       /*
-       * Save the user session in browser storage so the
-       * user remains signed in after refreshes and redirects.
+       * Preserve login across reloads and mobile
+       * browser restarts.
        */
       persistSession: true,
 
       /*
-       * Automatically refresh expired access tokens.
+       * Automatically renew expired access tokens.
        */
       autoRefreshToken: true,
 
       /*
-       * AuthCallback manually exchanges the OAuth code.
+       * The dedicated callback page manually exchanges
+       * the returned authorization code.
        */
       detectSessionInUrl: false,
 
       /*
-       * Google returns an authorization code that
-       * /auth/callback exchanges for a session.
+       * signInWithOAuth will create a PKCE verifier,
+       * and /auth/callback will exchange the returned code.
        */
       flowType: "pkce",
     },
