@@ -4,9 +4,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  useLocation,
-} from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   Loader2,
   TrendingDown,
@@ -21,7 +19,7 @@ function readStoredResults() {
   try {
     const stored =
       window.sessionStorage.getItem(
-        "screener_last_results"
+        "screener_last_results",
       );
 
     if (!stored) {
@@ -31,9 +29,7 @@ function readStoredResults() {
     const parsed =
       JSON.parse(stored);
 
-    return Array.isArray(
-      parsed
-    )
+    return Array.isArray(parsed)
       ? parsed
       : [];
   } catch {
@@ -41,31 +37,33 @@ function readStoredResults() {
   }
 }
 
-function finiteNumber(
-  value
-) {
+function finiteNumber(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
   const parsed =
     Number(value);
 
-  return Number.isFinite(
-    parsed
-  )
+  return Number.isFinite(parsed)
     ? parsed
     : null;
 }
 
 function formatFixed(
   value,
-  digits = 2
+  digits = 2,
 ) {
   const parsed =
     finiteNumber(value);
 
   return parsed === null
     ? null
-    : parsed.toFixed(
-        digits
-      );
+    : parsed.toFixed(digits);
 }
 
 function Metric({
@@ -93,33 +91,55 @@ function ResultRow({
 }) {
   const ticker =
     String(
-      stock?.ticker || ""
+      stock?.ticker || "",
     )
       .trim()
       .toUpperCase();
 
   const change =
     finiteNumber(
-      stock?.changePercent
+      stock?.changePercent,
     );
 
   const week52Change =
     finiteNumber(
-      stock?.week52Change
+      stock?.week52Change,
     );
 
   const price =
     finiteNumber(
-      stock?.price
+      stock?.price,
     );
 
   const changePositive =
-    (change ?? 0) >=
-    0;
+    (change ?? 0) >= 0;
 
   const week52Positive =
-    (week52Change ??
-      0) >= 0;
+    (week52Change ?? 0) >= 0;
+
+  const formattedEps =
+    formatFixed(
+      stock?.eps,
+      2,
+    );
+
+  const formattedMarketCap =
+    formatFixed(
+      stock?.marketCapB,
+      1,
+    );
+
+  const formattedDividendYield =
+    formatFixed(
+      stock?.dividendYield,
+      2,
+    );
+
+  const formattedRoe =
+    formatFixed(
+      stock?.roe,
+      1,
+    );
 
   return (
     <div className="space-y-3 rounded-2xl border border-gray-100 bg-white px-4 py-3">
@@ -132,23 +152,18 @@ function ResultRow({
 
             {stock?.exchange && (
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60">
-                {
-                  stock.exchange
-                }
+                {stock.exchange}
               </span>
             )}
           </div>
 
           <p className="truncate text-xs text-muted-foreground">
-            {stock?.name ||
-              ticker}
+            {stock?.name || ticker}
           </p>
 
           {stock?.sector && (
             <p className="text-[10px] text-muted-foreground/50">
-              {
-                stock.sector
-              }
+              {stock.sector}
             </p>
           )}
         </div>
@@ -157,13 +172,10 @@ function ResultRow({
           <p className="text-sm font-semibold">
             {price === null
               ? "—"
-              : `$${price.toFixed(
-                  2
-                )}`}
+              : `$${price.toFixed(2)}`}
           </p>
 
-          {change !==
-            null && (
+          {change !== null && (
             <div
               className={`inline-flex items-center gap-0.5 text-xs font-semibold ${
                 changePositive
@@ -180,10 +192,7 @@ function ResultRow({
               {changePositive
                 ? "+"
                 : ""}
-              {change.toFixed(
-                2
-              )}
-              %
+              {change.toFixed(2)}%
             </div>
           )}
         </div>
@@ -212,8 +221,7 @@ function ResultRow({
         <Metric
           label="52W Chg"
           value={
-            week52Change !==
-            null ? (
+            week52Change !== null ? (
               <span
                 className={
                   week52Positive
@@ -224,10 +232,7 @@ function ResultRow({
                 {week52Positive
                   ? "+"
                   : ""}
-                {week52Change.toFixed(
-                  1
-                )}
-                %
+                {week52Change.toFixed(1)}%
               </span>
             ) : null
           }
@@ -237,21 +242,15 @@ function ResultRow({
           label="P/E"
           value={formatFixed(
             stock?.pe,
-            1
+            1,
           )}
         />
 
         <Metric
           label="EPS"
           value={
-            formatFixed(
-              stock?.eps,
-              2
-            ) !== null
-              ? `$${formatFixed(
-                  stock?.eps,
-                  2
-                )}`
+            formattedEps !== null
+              ? `$${formattedEps}`
               : null
           }
         />
@@ -260,21 +259,15 @@ function ResultRow({
           label="D/E"
           value={formatFixed(
             stock?.deRatio,
-            2
+            2,
           )}
         />
 
         <Metric
           label="Mkt Cap"
           value={
-            formatFixed(
-              stock?.marketCapB,
-              1
-            ) !== null
-              ? `$${formatFixed(
-                  stock?.marketCapB,
-                  1
-                )}B`
+            formattedMarketCap !== null
+              ? `$${formattedMarketCap}B`
               : null
           }
         />
@@ -282,14 +275,8 @@ function ResultRow({
         <Metric
           label="Div Yield"
           value={
-            formatFixed(
-              stock?.dividendYield,
-              2
-            ) !== null
-              ? `${formatFixed(
-                  stock?.dividendYield,
-                  2
-                )}%`
+            formattedDividendYield !== null
+              ? `${formattedDividendYield}%`
               : null
           }
         />
@@ -298,21 +285,15 @@ function ResultRow({
           label="P/B"
           value={formatFixed(
             stock?.pb,
-            2
+            2,
           )}
         />
 
         <Metric
           label="ROE %"
           value={
-            formatFixed(
-              stock?.roe,
-              1
-            ) !== null
-              ? `${formatFixed(
-                  stock?.roe,
-                  1
-                )}%`
+            formattedRoe !== null
+              ? `${formattedRoe}%`
               : null
           }
         />
@@ -322,9 +303,8 @@ function ResultRow({
 }
 
 export default function ScreenerResults() {
-  const {
-    state,
-  } = useLocation();
+  const { state } =
+    useLocation();
 
   const { user } =
     useAuth();
@@ -343,90 +323,76 @@ export default function ScreenerResults() {
     addedTickers,
     setAddedTickers,
   ] = useState(
-    new Set()
+    new Set(),
   );
 
   const toastTimerRef =
     useRef(null);
 
-  const results =
-    useMemo(() => {
-      if (
-        Array.isArray(
-          state?.results
-        )
-      ) {
-        if (
-          state.results
-            .length > 0
-        ) {
-          return state.results;
-        }
-
-        if (
-          state?.loading
-        ) {
-          return [];
-        }
-
-        if (
-          state?.error
-        ) {
-          return [];
-        }
-      }
-
-      return readStoredResults();
-    }, [
-      state?.results,
-      state?.loading,
-      state?.error,
-    ]);
-
   const loading =
     Boolean(
-      state?.loading
+      state?.loading,
     );
 
   const error =
     state?.error || "";
 
+  const results =
+    useMemo(() => {
+      if (loading) {
+        return [];
+      }
+
+      if (error) {
+        return [];
+      }
+
+      if (
+        Array.isArray(
+          state?.results,
+        )
+      ) {
+        return state.results;
+      }
+
+      return readStoredResults();
+    }, [
+      state?.results,
+      loading,
+      error,
+    ]);
+
   useEffect(() => {
     return () => {
       window.clearTimeout(
-        toastTimerRef.current
+        toastTimerRef.current,
       );
     };
   }, []);
 
   const showToast = (
-    message
+    message,
   ) => {
     window.clearTimeout(
-      toastTimerRef.current
+      toastTimerRef.current,
     );
 
-    setToast(
-      message
-    );
+    setToast(message);
 
     toastTimerRef.current =
       window.setTimeout(
         () => {
           setToast(null);
         },
-        2500
+        2500,
       );
   };
 
   const addToWatchlist =
-    async (
-      stock
-    ) => {
+    async (stock) => {
       const ticker =
         String(
-          stock?.ticker ||
-            ""
+          stock?.ticker || "",
         )
           .trim()
           .toUpperCase();
@@ -436,72 +402,61 @@ export default function ScreenerResults() {
         !user?.id ||
         addingTicker
       ) {
-        if (
-          !user?.id
-        ) {
+        if (!user?.id) {
           showToast(
-            "Please sign in first."
+            "Please sign in first.",
           );
         }
 
         return;
       }
 
-      setAddingTicker(
-        ticker
-      );
+      setAddingTicker(ticker);
 
       try {
         const {
-          data:
-            existingItem,
-          error:
-            existingError,
+          data: existingItem,
+          error: existingError,
         } = await supabase
           .from(
-            "watchlist_items"
+            "watchlist_items",
           )
           .select("id")
           .eq(
             "user_id",
-            user.id
+            user.id,
           )
           .eq(
             "ticker",
-            ticker
+            ticker,
           )
           .maybeSingle();
 
-        if (
-          existingError
-        ) {
+        if (existingError) {
           throw existingError;
         }
 
-        if (
-          existingItem
-        ) {
+        if (existingItem) {
           setAddedTickers(
             (previous) =>
               new Set([
                 ...previous,
                 ticker,
-              ])
+              ]),
           );
 
           showToast(
-            `${ticker} already in watchlist`
+            `${ticker} already in watchlist`,
           );
 
           return;
         }
 
         const {
-          error:
-            insertError,
+          error: insertError,
         } = await supabase
           .from(
-            "watchlist_items"
+            "watchlist_items",
           )
           .insert({
             user_id:
@@ -515,25 +470,21 @@ export default function ScreenerResults() {
               "",
           });
 
-        if (
-          insertError
-        ) {
+        if (insertError) {
           if (
             insertError.code ===
             "23505"
           ) {
             setAddedTickers(
-              (
-                previous
-              ) =>
+              (previous) =>
                 new Set([
                   ...previous,
                   ticker,
-                ])
+                ]),
             );
 
             showToast(
-              `${ticker} already in watchlist`
+              `${ticker} already in watchlist`,
             );
 
             return;
@@ -547,26 +498,24 @@ export default function ScreenerResults() {
             new Set([
               ...previous,
               ticker,
-            ])
+            ]),
         );
 
         showToast(
-          `${ticker} added to watchlist`
+          `${ticker} added to watchlist`,
         );
       } catch (error) {
         console.error(
           "Failed to add screener result to watchlist:",
-          error
+          error,
         );
 
         showToast(
           error?.message ||
-            "Failed to add to watchlist"
+            "Failed to add to watchlist",
         );
       } finally {
-        setAddingTicker(
-          ""
-        );
+        setAddingTicker("");
       }
     };
 
@@ -585,7 +534,11 @@ export default function ScreenerResults() {
       )}
 
       <SubPageHeader
-        title={`Results · ${results.length} found`}
+        title={
+          loading
+            ? ""
+            : `Results · ${results.length} found`
+        }
         backPath="/screener"
       />
 
@@ -611,8 +564,7 @@ export default function ScreenerResults() {
 
         {!loading &&
           !error &&
-          results.length ===
-            0 && (
+          results.length === 0 && (
             <div className="py-24 text-center text-sm text-muted-foreground">
               No results found. Try adjusting your filters.
             </div>
@@ -623,12 +575,11 @@ export default function ScreenerResults() {
           results.map(
             (
               stock,
-              index
+              index,
             ) => {
               const ticker =
                 String(
-                  stock?.ticker ||
-                    ""
+                  stock?.ticker || "",
                 )
                   .trim()
                   .toUpperCase();
@@ -636,9 +587,7 @@ export default function ScreenerResults() {
               return (
                 <ResultRow
                   key={`${ticker || "stock"}-${index}`}
-                  stock={
-                    stock
-                  }
+                  stock={stock}
                   onAdd={
                     addToWatchlist
                   }
@@ -647,11 +596,11 @@ export default function ScreenerResults() {
                     ticker
                   }
                   added={addedTickers.has(
-                    ticker
+                    ticker,
                   )}
                 />
               );
-            }
+            },
           )}
       </main>
     </div>
