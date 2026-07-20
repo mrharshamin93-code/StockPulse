@@ -33,6 +33,7 @@ async function finnhubProxy(body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
@@ -67,7 +68,9 @@ async function fetchChartData(ticker, period, basePrice) {
         return { label, [ticker]: c.v };
       });
     }
-  } catch {}
+  } catch (e) {
+    console.warn("Candle fetch failed, using fallback", e);
+  }
   return buildFallbackData(ticker, period, basePrice);
 }
 
@@ -400,6 +403,7 @@ export default function StockDetail() {
   const [newsLoading, setNewsLoading] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
+  const [error, setError] = useState(null);
 
   const isTickerRoute = id?.startsWith("ticker-");
   const tickerFromRoute = isTickerRoute ? id.replace("ticker-", "").toUpperCase() : null;
@@ -407,11 +411,21 @@ export default function StockDetail() {
   // Load stock data
   useEffect(() => {
     const load = async () => {
-      if (isTickerRoute) {
-        try {
+      setError(null);
+      setLoading(true);
+      try {
+        if (isTickerRoute) {
+          console.log("Loading ticker route:", tickerFromRoute);
+          // We'll load quote and profile, but if either fails, we show an error message
           const [quoteData, profileData] = await Promise.all([
-            finnhubProxy({ action: "quote", ticker: tickerFromRoute }),
-            finnhubProxy({ action: "profile", ticker: tickerFromRoute }),
+            finnhubProxy({ action: "quote", ticker: tickerFromRoute }).catch(e => {
+              console.error("Quote fetch failed:", e);
+              return { c: 0, pc: 0, dp: null };
+            }),
+            finnhubProxy({ action: "profile", ticker: tickerFromRoute }).catch(e => {
+              console.error("Profile fetch failed:", e);
+              return { name: tickerFromRoute, exchange: "", logo: "" };
+            }),
           ]);
           setStock({
             ticker: tickerFromRoute,
@@ -423,23 +437,26 @@ export default function StockDetail() {
             quantity: 0,
             _watchlistOnly: true,
           });
-        } catch {
-          setStock(null);
-        }
-      } else {
-        const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
-        if (data) {
-          setStock({ ...data, _watchlistOnly: false });
         } else {
-          setStock(null);
+          const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
+          if (data) {
+            setStock({ ...data, _watchlistOnly: false });
+          } else {
+            setStock(null);
+          }
         }
+      } catch (err) {
+        console.error("StockDetail load error:", err);
+        setError(err.message || "Failed to load stock data");
+        setStock(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     load();
   }, [id, isTickerRoute, tickerFromRoute]);
 
-  // Load news (from Finnhub instead of AI)
+  // Load news (from Finnhub)
   useEffect(() => {
     if (!stock) return;
     const fetchNews = async () => {
@@ -447,7 +464,8 @@ export default function StockDetail() {
       try {
         const result = await finnhubProxy({ action: "news", ticker: stock.ticker });
         setNews(result?.articles || []);
-      } catch {
+      } catch (e) {
+        console.warn("News fetch failed:", e);
         setNews([]);
       }
       setNewsLoading(false);
@@ -460,7 +478,6 @@ export default function StockDetail() {
     const newQty = stock.quantity + qty;
     const newAvgCost = stock.quantity ? ((stock.purchase_price * stock.quantity) + (price * qty)) / newQty : price;
 
-    // Optimistic update
     setStock(prev => ({ ...prev, quantity: newQty, purchase_price: +newAvgCost.toFixed(4) }));
     setBuyOpen(false);
 
@@ -470,7 +487,6 @@ export default function StockDetail() {
       if (res?.c) currentPrice = res.c;
     } catch {}
 
-    // Record transaction (non-critical)
     await supabase.from("stock_transactions").insert({
       user_id: user.id,
       ticker: stock.ticker.toUpperCase(),
@@ -482,7 +498,6 @@ export default function StockDetail() {
     }).catch(err => console.warn("Transaction log failed:", err));
 
     if (stock._watchlistOnly) {
-      // Create new stock entry
       const { error } = await supabase.from("stocks").insert({
         user_id: user.id,
         ticker: stock.ticker.toUpperCase(),
@@ -493,12 +508,10 @@ export default function StockDetail() {
         sector: stock.sector || "",
       });
       if (error) {
-        // rollback optimistic update
         setStock(prev => ({ ...prev, quantity: 0, purchase_price: price }));
         return;
       }
     } else {
-      // Update existing stock
       await supabase.from("stocks").update({
         quantity: newQty,
         purchase_price: +newAvgCost.toFixed(4),
@@ -506,7 +519,6 @@ export default function StockDetail() {
       }).eq("id", id);
     }
 
-    // Refresh stock state from DB if it's an existing stock, else remain optimistic
     if (!stock._watchlistOnly) {
       const { data } = await supabase.from("stocks").select("*").eq("id", id).single();
       if (data) setStock({ ...data, _watchlistOnly: false });
@@ -519,7 +531,6 @@ export default function StockDetail() {
     const sellPrice = stock.current_price || stock.purchase_price;
 
     if (qty >= stock.quantity) {
-      // Remove stock entirely
       setSellOpen(false);
       navigate("/home");
       await supabase.from("stocks").delete().eq("id", id);
@@ -558,11 +569,11 @@ export default function StockDetail() {
     );
   }
 
-  if (!stock) {
+  if (error || !stock) {
     return (
       <div className="min-h-screen bg-gray-50/50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500 mb-4">Stock not found</p>
+          <p className="text-gray-500 mb-4">{error || "Stock not found"}</p>
           <Link to="/"><Button variant="outline">Back to Portfolio</Button></Link>
         </div>
       </div>
@@ -587,7 +598,6 @@ export default function StockDetail() {
       <BuyDetailDialog open={buyOpen} onOpenChange={setBuyOpen} stock={stock} onDone={handleBuyDone} />
       <SellDetailDialog open={sellOpen} onOpenChange={setSellOpen} stock={stock} onDone={handleSellDone} />
 
-      {/* Fixed back button */}
       <div
         className="fixed top-0 left-0 z-50 flex items-center"
         style={{ paddingTop: "env(safe-area-inset-top)", backgroundColor: "transparent" }}
@@ -602,7 +612,6 @@ export default function StockDetail() {
       </div>
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 space-y-8" style={{ paddingTop: "calc(env(safe-area-inset-top) + 64px)", paddingBottom: "calc(env(safe-area-inset-bottom) + 32px)" }}>
-        {/* Stock Overview */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 sm:p-8 relative">
           <div className="absolute top-8 right-4 flex items-center gap-2">
             <button onClick={() => setBuyOpen(true)} className="h-8 px-3 text-xs font-semibold rounded-md bg-black text-white hover:bg-gray-800 active:scale-95 transition-all">Buy</button>
@@ -640,10 +649,8 @@ export default function StockDetail() {
           )}
         </div>
 
-        {/* Chart */}
         <StockChart ticker={stock.ticker} currentPrice={stock.current_price || stock.purchase_price} isPositive={isPositive} />
 
-        {/* Key Metrics */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6">
           <h2 className="font-heading font-semibold text-sm uppercase tracking-wider text-gray-500 mb-4">Key Metrics</h2>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-4 gap-y-5">
@@ -656,7 +663,6 @@ export default function StockDetail() {
           </div>
         </div>
 
-        {/* News */}
         {newsLoading ? (
           <div className="bg-white border border-gray-100 rounded-2xl p-12 flex flex-col items-center justify-center">
             <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
