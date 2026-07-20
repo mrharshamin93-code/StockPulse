@@ -93,7 +93,7 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: "Authentication required" }, 401);
   }
 
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  const apiKey = Deno.env.get("XAI_API_KEY");
 
   if (!apiKey) {
     return jsonResponse(
@@ -111,14 +111,15 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: "Invalid ticker" }, 400);
     }
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://api.x.ai/v1/responses", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini",
+        model: Deno.env.get("XAI_MODEL") || "grok-4.3",
+        reasoning: { effort: "none" },
         store: false,
         max_output_tokens: 1800,
         input: [
@@ -153,7 +154,7 @@ Deno.serve(async (request) => {
     const payload = await response.json();
 
     if (!response.ok) {
-      console.error("OpenAI response error", response.status, payload?.error);
+      console.error("xAI response error", response.status, payload?.error);
       return jsonResponse({ error: "Unable to generate stock analysis" }, 502);
     }
 
