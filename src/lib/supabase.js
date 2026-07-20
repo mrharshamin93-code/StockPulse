@@ -31,13 +31,11 @@ export const supabase = createClient(
       autoRefreshToken: true,
 
       /*
-       * Automatically detect ?code=... on the OAuth
-       * callback and complete the PKCE exchange.
-       *
-       * Do not also call exchangeCodeForSession()
-       * manually in callback.jsx.
+       * The dedicated callback page exchanges the
+       * one-use OAuth code exactly once. Keeping this
+       * disabled avoids racing the callback component.
        */
-      detectSessionInUrl: true,
+      detectSessionInUrl: false,
 
       /*
        * Use the OAuth authorization-code PKCE flow.
