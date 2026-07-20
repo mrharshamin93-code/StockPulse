@@ -544,8 +544,16 @@ export default function ScreenerResults() {
 
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-3 px-4 py-6 sm:px-6">
         {loading && (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <Loader2 className="mb-4 h-7 w-7 animate-spin text-muted-foreground" />
+
+            <p className="text-sm font-semibold text-foreground">
+              Please wait...
+            </p>
+
+            <p className="mt-1 text-xs text-muted-foreground">
+              Finding stocks that match your filters.
+            </p>
           </div>
         )}
 
