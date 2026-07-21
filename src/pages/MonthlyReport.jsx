@@ -9,9 +9,12 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  Download,
+  Eye,
+  FileText,
   Loader2,
-  Mail,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -20,12 +23,15 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import SubPageHeader from "@/components/SubPageHeader";
 
-const DELIVERY_LABELS = {
+const REPORT_BUCKET = "monthly-reports";
+
+const STATUS_LABELS = {
   pending: "Queued",
   processing: "Generating",
-  sent: "Sent",
+  ready: "Ready",
   failed: "Failed",
   skipped: "Skipped",
+  sent: "Sent",
 };
 
 function getLocalTimezone() {
@@ -42,9 +48,8 @@ function getLocalTimezone() {
 
 function getCurrency() {
   return (
-    localStorage.getItem(
-      "currency",
-    ) || "USD"
+    localStorage.getItem("currency") ||
+    "USD"
   )
     .trim()
     .toUpperCase();
@@ -52,19 +57,15 @@ function getCurrency() {
 
 function formatMonth(value) {
   if (!value) {
-    return "Monthly report";
+    return "Portfolio report";
   }
 
   const date = new Date(
     `${value}T00:00:00Z`,
   );
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
-    return "Monthly report";
+  if (Number.isNaN(date.getTime())) {
+    return "Portfolio report";
   }
 
   return date.toLocaleDateString(
@@ -84,11 +85,7 @@ function formatTimestamp(value) {
 
   const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "";
   }
 
@@ -97,22 +94,66 @@ function formatTimestamp(value) {
     {
       month: "short",
       day: "numeric",
+      year: "numeric",
       hour: "numeric",
       minute: "2-digit",
     },
   );
 }
 
-function deliveryTone(status) {
-  if (status === "sent") {
+function formatMoney(value, currency) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "—";
+  }
+
+  try {
+    return new Intl.NumberFormat(
+      "en-US",
+      {
+        style: "currency",
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      },
+    ).format(number);
+  } catch {
+    return `${currency} ${number.toFixed(2)}`;
+  }
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "—";
+  }
+
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
+}
+
+function formatFileSize(value) {
+  const bytes = Number(value);
+
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "PDF";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function reportTone(status) {
+  if (status === "ready" || status === "sent") {
     return {
       icon: CheckCircle2,
-      iconClass:
-        "text-emerald-600",
-      backgroundClass:
-        "bg-emerald-50",
-      textClass:
-        "text-emerald-700",
+      iconClass: "text-emerald-600",
+      backgroundClass: "bg-emerald-50",
+      textClass: "text-emerald-700",
     };
   }
 
@@ -120,173 +161,132 @@ function deliveryTone(status) {
     return {
       icon: AlertCircle,
       iconClass: "text-red-600",
-      backgroundClass:
-        "bg-red-50",
-      textClass:
-        "text-red-700",
+      backgroundClass: "bg-red-50",
+      textClass: "text-red-700",
     };
   }
 
   return {
     icon: Clock3,
-    iconClass:
-      "text-blue-600",
-    backgroundClass:
-      "bg-blue-50",
-    textClass:
-      "text-blue-700",
+    iconClass: "text-blue-600",
+    backgroundClass: "bg-blue-50",
+    textClass: "text-blue-700",
   };
+}
+
+async function createReportSignedUrl(storagePath) {
+  const { data, error } = await supabase.storage
+    .from(REPORT_BUCKET)
+    .createSignedUrl(storagePath, 60);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.signedUrl) {
+    throw new Error("A secure report link could not be created.");
+  }
+
+  return data.signedUrl;
 }
 
 export default function MonthlyReport() {
   const { user } = useAuth();
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [busyReportId, setBusyReportId] = useState("");
+  const [autoReport, setAutoReport] = useState(false);
+  const [timezone, setTimezone] = useState(getLocalTimezone);
+  const [currency] = useState(getCurrency);
+  const [reports, setReports] = useState([]);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  const [saving, setSaving] =
-    useState(false);
+  const loadSettings = useCallback(async () => {
+    if (!user?.id) {
+      return;
+    }
 
-  const [sending, setSending] =
-    useState(false);
+    setLoading(true);
+    setError("");
 
-  const [autoReport, setAutoReport] =
-    useState(false);
+    try {
+      const [profileResult, reportsResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(
+            "monthly_report_opt_in,report_timezone,report_currency,monthly_report_last_generated_at",
+          )
+          .eq("id", user.id)
+          .single(),
 
-  const [timezone, setTimezone] =
-    useState(getLocalTimezone);
+        supabase
+          .from("monthly_report_deliveries")
+          .select(
+            "id,report_month,delivery_kind,status,report_currency,storage_path,file_name,file_size_bytes,portfolio_value,cost_basis,gain_loss,gain_loss_percent,generated_at,created_at,error_message",
+          )
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          })
+          .limit(12),
+      ]);
 
-  const [currency] =
-    useState(getCurrency);
-
-  const [deliveries, setDeliveries] =
-    useState([]);
-
-  const [message, setMessage] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-  const recipientEmail =
-    user?.email || "your account email";
-
-  const loadSettings =
-    useCallback(async () => {
-      if (!user?.id) {
-        return;
+      if (profileResult.error) {
+        throw profileResult.error;
       }
 
-      setLoading(true);
-      setError("");
-
-      try {
-        const [
-          profileResult,
-          deliveriesResult,
-        ] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select(
-              "monthly_report_opt_in,report_timezone,report_currency,monthly_report_last_sent_at",
-            )
-            .eq("id", user.id)
-            .single(),
-
-          supabase
-            .from(
-              "monthly_report_deliveries",
-            )
-            .select(
-              "id,report_month,delivery_kind,status,recipient_email,created_at,sent_at,error_message",
-            )
-            .eq(
-              "user_id",
-              user.id,
-            )
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              },
-            )
-            .limit(6),
-        ]);
-
-        if (
-          profileResult.error
-        ) {
-          throw profileResult.error;
-        }
-
-        if (
-          deliveriesResult.error
-        ) {
-          throw deliveriesResult.error;
-        }
-
-        const profile =
-          profileResult.data;
-
-        setAutoReport(
-          Boolean(
-            profile
-              ?.monthly_report_opt_in,
-          ),
-        );
-
-        setTimezone(
-          profile
-            ?.report_timezone ||
-            getLocalTimezone(),
-        );
-
-        setDeliveries(
-          deliveriesResult.data || [],
-        );
-      } catch (loadError) {
-        console.error(
-          "Monthly report settings failed:",
-          loadError,
-        );
-
-        setError(
-          loadError?.message ||
-            "Unable to load report settings.",
-        );
-      } finally {
-        setLoading(false);
+      if (reportsResult.error) {
+        throw reportsResult.error;
       }
-    }, [user?.id]);
+
+      const profile = profileResult.data;
+
+      setAutoReport(
+        Boolean(profile?.monthly_report_opt_in),
+      );
+      setTimezone(
+        profile?.report_timezone || getLocalTimezone(),
+      );
+      setReports(reportsResult.data || []);
+    } catch (loadError) {
+      console.error(
+        "Monthly report settings failed:",
+        loadError,
+      );
+
+      setError(
+        loadError?.message ||
+          "Unable to load report settings.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  const nextReportText =
-    useMemo(() => {
-      if (!autoReport) {
-        return "Automatic delivery is off";
-      }
+  const readyReports = useMemo(
+    () =>
+      reports.filter(
+        (report) =>
+          report.status === "ready" &&
+          report.storage_path,
+      ),
+    [reports],
+  );
 
-      return `Sent monthly to ${recipientEmail}`;
-    }, [
-      autoReport,
-      recipientEmail,
-    ]);
-
-  async function toggleAutoReport(
-    enabled,
-  ) {
-    if (
-      !user?.id ||
-      saving
-    ) {
+  async function toggleAutoReport(enabled) {
+    if (!user?.id || saving) {
       return;
     }
 
-    const previous =
-      autoReport;
+    const previous = autoReport;
+    const localTimezone = getLocalTimezone();
 
     setAutoReport(enabled);
     setSaving(true);
@@ -294,20 +294,12 @@ export default function MonthlyReport() {
     setMessage("");
 
     try {
-      const localTimezone =
-        getLocalTimezone();
-
-      const {
-        error: updateError,
-      } = await supabase
+      const { error: updateError } = await supabase
         .from("profiles")
         .update({
-          monthly_report_opt_in:
-            enabled,
-          report_timezone:
-            localTimezone,
-          report_currency:
-            currency,
+          monthly_report_opt_in: enabled,
+          report_timezone: localTimezone,
+          report_currency: currency,
         })
         .eq("id", user.id);
 
@@ -315,26 +307,21 @@ export default function MonthlyReport() {
         throw updateError;
       }
 
-      setTimezone(
-        localTimezone,
-      );
-
+      setTimezone(localTimezone);
       localStorage.setItem(
         "monthlyReport",
         String(enabled),
       );
-
       setMessage(
         enabled
-          ? "Automatic monthly reports are enabled."
-          : "Automatic monthly reports are disabled.",
+          ? "Automatic monthly report generation is enabled."
+          : "Automatic monthly report generation is disabled.",
       );
     } catch (saveError) {
       console.error(
         "Monthly report preference failed:",
         saveError,
       );
-
       setAutoReport(previous);
       setError(
         saveError?.message ||
@@ -345,38 +332,28 @@ export default function MonthlyReport() {
     }
   }
 
-  async function handleEmailNow() {
-    if (
-      !user?.id ||
-      sending
-    ) {
+  async function handleGenerateNow() {
+    if (!user?.id || generating) {
       return;
     }
 
-    setSending(true);
+    setGenerating(true);
     setError("");
-    setMessage(
-      "Generating your PDF and emailing it…",
-    );
+    setMessage("Generating your private PDF in Supabase…");
 
     try {
-      const localTimezone =
-        getLocalTimezone();
-
-      const {
-        data,
-        error: functionError,
-      } = await supabase.functions.invoke(
-        "monthly-report",
-        {
-          body: {
-            action: "request",
-            currency,
-            timezone:
-              localTimezone,
+      const localTimezone = getLocalTimezone();
+      const { data, error: functionError } =
+        await supabase.functions.invoke(
+          "monthly-report",
+          {
+            body: {
+              action: "request",
+              currency,
+              timezone: localTimezone,
+            },
           },
-        },
-      );
+        );
 
       if (functionError) {
         throw functionError;
@@ -385,35 +362,155 @@ export default function MonthlyReport() {
       if (!data?.ok) {
         throw new Error(
           data?.error ||
-            "The report could not be emailed.",
+            "The report could not be generated.",
         );
       }
 
-      setTimezone(
-        localTimezone,
-      );
-
+      setTimezone(localTimezone);
       setMessage(
-        `Report sent to ${
-          data.recipient ||
-          recipientEmail
-        }.`,
+        "Your report is ready and stored privately in StockPulse.",
       );
-
       await loadSettings();
-    } catch (sendError) {
+    } catch (generateError) {
       console.error(
-        "Monthly report email failed:",
-        sendError,
+        "Monthly report generation failed:",
+        generateError,
       );
-
       setMessage("");
       setError(
-        sendError?.message ||
-          "The report could not be emailed. Please try again.",
+        generateError?.message ||
+          "The report could not be generated. Please try again.",
       );
     } finally {
-      setSending(false);
+      setGenerating(false);
+    }
+  }
+
+  async function handleView(report) {
+    if (!report?.storage_path) {
+      return;
+    }
+
+    setBusyReportId(report.id);
+    setError("");
+
+    try {
+      const signedUrl = await createReportSignedUrl(
+        report.storage_path,
+      );
+      window.open(
+        signedUrl,
+        "_blank",
+        "noopener,noreferrer",
+      );
+    } catch (viewError) {
+      console.error("Report open failed:", viewError);
+      setError(
+        viewError?.message ||
+          "The report could not be opened.",
+      );
+    } finally {
+      setBusyReportId("");
+    }
+  }
+
+  async function handleDownload(report) {
+    if (!report?.storage_path) {
+      return;
+    }
+
+    setBusyReportId(report.id);
+    setError("");
+
+    try {
+      const signedUrl = await createReportSignedUrl(
+        report.storage_path,
+      );
+      const response = await fetch(signedUrl);
+
+      if (!response.ok) {
+        throw new Error("The report download failed.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download =
+        report.file_name ||
+        `StockPulse-${report.report_month.slice(0, 7)}-Portfolio-Report.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (downloadError) {
+      console.error(
+        "Report download failed:",
+        downloadError,
+      );
+      setError(
+        downloadError?.message ||
+          "The report could not be downloaded.",
+      );
+    } finally {
+      setBusyReportId("");
+    }
+  }
+
+  async function handleDelete(report) {
+    if (!report?.id || busyReportId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete the ${formatMonth(report.report_month)} report?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyReportId(report.id);
+    setError("");
+    setMessage("");
+
+    try {
+      const { data, error: functionError } =
+        await supabase.functions.invoke(
+          "monthly-report",
+          {
+            body: {
+              action: "delete",
+              reportId: report.id,
+            },
+          },
+        );
+
+      if (functionError) {
+        throw functionError;
+      }
+
+      if (!data?.ok) {
+        throw new Error(
+          data?.error ||
+            "The report could not be deleted.",
+        );
+      }
+
+      setReports((previous) =>
+        previous.filter(
+          (item) => item.id !== report.id,
+        ),
+      );
+      setMessage("Report deleted.");
+    } catch (deleteError) {
+      console.error("Report deletion failed:", deleteError);
+      setError(
+        deleteError?.message ||
+          "The report could not be deleted.",
+      );
+    } finally {
+      setBusyReportId("");
     }
   }
 
@@ -435,18 +532,18 @@ export default function MonthlyReport() {
           <div className="border-b border-gray-100 p-5">
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-900">
-                <Mail className="h-5 w-5 text-white" />
+                <FileText className="h-5 w-5 text-white" />
               </div>
 
               <div>
                 <h2 className="font-heading text-base font-bold text-gray-900">
                   Monthly portfolio PDF
                 </h2>
-
                 <p className="mt-1 text-xs leading-5 text-gray-500">
-                  A polished report with portfolio value, entered cost basis,
-                  unrealized performance, allocation, current holdings, and the
-                  selected month&apos;s real buy and sell history.
+                  Generated securely by Supabase using your real holdings,
+                  entered purchase prices, current market prices, allocation,
+                  unrealized performance, and the month&apos;s recorded buys and
+                  sells.
                 </p>
               </div>
             </div>
@@ -454,31 +551,25 @@ export default function MonthlyReport() {
 
           <button
             type="button"
-            onClick={
-              handleEmailNow
-            }
-            disabled={
-              sending ||
-              loading
-            }
+            onClick={handleGenerateNow}
+            disabled={generating || loading}
             className="flex min-h-[68px] w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50">
-                {sending ? (
+                {generating ? (
                   <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                 ) : (
-                  <Mail className="h-4 w-4 text-blue-600" />
+                  <FileText className="h-4 w-4 text-blue-600" />
                 )}
               </div>
 
               <div>
                 <span className="text-sm font-semibold text-gray-900">
-                  Email my report now
+                  Generate my report
                 </span>
-
                 <p className="mt-0.5 text-xs text-gray-500">
-                  Sends the previous completed month to {recipientEmail}
+                  Creates the previous completed month and stores it privately
                 </p>
               </div>
             </div>
@@ -492,11 +583,12 @@ export default function MonthlyReport() {
 
               <div>
                 <span className="text-sm font-semibold text-gray-900">
-                  Automatic monthly email
+                  Automatic monthly report
                 </span>
-
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {nextReportText}
+                  {autoReport
+                    ? "A new private report will be generated every month"
+                    : "Automatic generation is off"}
                 </p>
               </div>
             </div>
@@ -505,15 +597,9 @@ export default function MonthlyReport() {
               <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
             ) : (
               <Switch
-                checked={
-                  autoReport
-                }
-                onCheckedChange={
-                  toggleAutoReport
-                }
-                disabled={
-                  loading
-                }
+                checked={autoReport}
+                onCheckedChange={toggleAutoReport}
+                disabled={loading}
               />
             )}
           </div>
@@ -545,9 +631,9 @@ export default function MonthlyReport() {
           </div>
 
           <p className="mt-3 text-xs leading-5 text-gray-500">
-            Currency follows your StockPulse currency setting. The timezone is
-            detected from this device and saved when you enable automatic
-            reports or request a report.
+            Only your latest three completed reports are retained to keep
+            Supabase Storage usage low. Reports are private and opened with
+            short-lived secure links.
           </p>
         </section>
 
@@ -573,25 +659,24 @@ export default function MonthlyReport() {
 
         <section className="rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-            <h2 className="text-sm font-semibold text-gray-900">
-              Delivery history
-            </h2>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">
+                My reports
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-400">
+                {readyReports.length} ready
+              </p>
+            </div>
 
             <button
               type="button"
-              onClick={
-                loadSettings
-              }
-              disabled={
-                loading
-              }
+              onClick={loadSettings}
+              disabled={loading}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-900 disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 ${
-                  loading
-                    ? "animate-spin"
-                    : ""
+                  loading ? "animate-spin" : ""
                 }`}
               />
               Refresh
@@ -602,91 +687,174 @@ export default function MonthlyReport() {
             <div className="flex items-center justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
             </div>
-          ) : deliveries.length === 0 ? (
-            <div className="px-5 py-8 text-center">
-              <Clock3 className="mx-auto h-6 w-6 text-gray-300" />
-              <p className="mt-2 text-sm text-gray-500">
-                No reports have been requested yet.
+          ) : reports.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <FileText className="mx-auto h-7 w-7 text-gray-300" />
+              <p className="mt-2 text-sm font-medium text-gray-600">
+                No reports yet
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Generate your first monthly portfolio PDF above.
               </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {deliveries.map(
-                (delivery) => {
-                  const tone =
-                    deliveryTone(
-                      delivery.status,
-                    );
-                  const Icon =
-                    tone.icon;
+              {reports.map((report) => {
+                const tone = reportTone(report.status);
+                const Icon = tone.icon;
+                const isReady =
+                  report.status === "ready" && report.storage_path;
+                const isBusy = busyReportId === report.id;
+                const reportCurrency =
+                  report.report_currency || currency;
 
-                  return (
-                    <div
-                      key={
-                        delivery.id
-                      }
-                      className="flex items-center gap-3 px-5 py-4"
-                    >
+                return (
+                  <div
+                    key={report.id}
+                    className="px-5 py-4"
+                  >
+                    <div className="flex items-start gap-3">
                       <div
                         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone.backgroundClass}`}
                       >
-                        <Icon
-                          className={`h-4 w-4 ${tone.iconClass}`}
-                        />
+                        {isBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                        ) : (
+                          <Icon className={`h-4 w-4 ${tone.iconClass}`} />
+                        )}
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-gray-900">
-                          {formatMonth(
-                            delivery.report_month,
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {formatMonth(report.report_month)}
+                          </p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.backgroundClass} ${tone.textClass}`}
+                          >
+                            {STATUS_LABELS[report.status] || report.status}
+                          </span>
+                        </div>
+
+                        {isReady ? (
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                                Value
+                              </p>
+                              <p className="mt-0.5 truncate text-xs font-semibold text-gray-700">
+                                {formatMoney(
+                                  report.portfolio_value,
+                                  reportCurrency,
+                                )}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                                P&amp;L
+                              </p>
+                              <p
+                                className={`mt-0.5 truncate text-xs font-semibold ${
+                                  Number(report.gain_loss) >= 0
+                                    ? "text-emerald-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {formatMoney(
+                                  report.gain_loss,
+                                  reportCurrency,
+                                )}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                                Return
+                              </p>
+                              <p
+                                className={`mt-0.5 text-xs font-semibold ${
+                                  Number(report.gain_loss_percent) >= 0
+                                    ? "text-emerald-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {formatPercent(report.gain_loss_percent)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
+                                File
+                              </p>
+                              <p className="mt-0.5 text-xs font-semibold text-gray-700">
+                                {formatFileSize(report.file_size_bytes)}
+                              </p>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <p className="mt-2 text-[11px] text-gray-400">
+                          {formatTimestamp(
+                            report.generated_at || report.created_at,
                           )}
                         </p>
 
-                        <p className="mt-0.5 text-xs text-gray-500">
-                          {delivery.delivery_kind ===
-                          "manual"
-                            ? "Requested manually"
-                            : "Automatic report"}
-
-                          {delivery.sent_at
-                            ? ` · ${formatTimestamp(
-                                delivery.sent_at,
-                              )}`
-                            : delivery.created_at
-                              ? ` · ${formatTimestamp(
-                                  delivery.created_at,
-                                )}`
-                              : ""}
-                        </p>
-
-                        {delivery.error_message ? (
-                          <p className="mt-1 line-clamp-2 text-xs text-red-600">
-                            {
-                              delivery.error_message
-                            }
+                        {report.status === "failed" && report.error_message ? (
+                          <p className="mt-2 text-xs leading-5 text-red-600">
+                            {report.error_message}
                           </p>
                         ) : null}
-                      </div>
 
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${tone.backgroundClass} ${tone.textClass}`}
-                      >
-                        {DELIVERY_LABELS[
-                          delivery.status
-                        ] ||
-                          delivery.status}
-                      </span>
+                        {isReady ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleView(report)}
+                              disabled={Boolean(busyReportId)}
+                              className="h-8 gap-1.5 text-xs"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              View
+                            </Button>
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDownload(report)}
+                              disabled={Boolean(busyReportId)}
+                              className="h-8 gap-1.5 text-xs"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              Download
+                            </Button>
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDelete(report)}
+                              disabled={Boolean(busyReportId)}
+                              className="h-8 gap-1.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  );
-                },
-              )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
 
-        <p className="px-2 text-center text-[11px] leading-5 text-gray-400">
-          Market prices may be delayed. Reports use the purchase prices entered
-          by the user and are provided for informational purposes only.
+        <p className="px-1 text-center text-[11px] leading-5 text-gray-400">
+          Reports use your entered portfolio data and available market prices.
+          Market data may be delayed. StockPulse does not provide financial
+          advice.
         </p>
       </main>
     </div>
