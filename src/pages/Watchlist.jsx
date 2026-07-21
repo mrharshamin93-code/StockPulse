@@ -1780,29 +1780,27 @@ export default function Watchlist() {
       )}
 
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
-          <div aria-hidden="true" />
+  <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
+    <div aria-hidden="true" />
 
-          <div className="flex items-center justify-center gap-1">
-            <Star className="h-9 w-9 shrink-0 fill-amber-400 text-amber-400" />
+    <div className="flex items-center justify-center gap-1">
+      <Star className="h-9 w-9 shrink-0 fill-amber-400 text-amber-400" />
 
-            <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
-              Watchlist
-            </h1>
-          </div>
+      <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
+        Watchlist
+      </h1>
+    </div>
 
-          <button
-  type="button"
-  aria-label="Add stock to watchlist"
-  onClick={() => setAddDialogOpen(true)}
-  className="flex h-11 w-11 items-center justify-center justify-self-center rounded-xl border border-gray-200 bg-white text-gray-900 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-95"
->
-  <Plus className="h-5 w-5" strokeWidth={2} />
-</button>
-            <Plus className="h-7 w-7" />
-          </button>
-        </div>
-      </header>
+    <button
+      type="button"
+      aria-label="Add stock to watchlist"
+      onClick={() => setAddDialogOpen(true)}
+      className="flex h-11 w-11 items-center justify-center justify-self-center rounded-xl border border-gray-200 bg-white text-gray-900 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-95"
+    >
+      <Plus className="h-5 w-5" strokeWidth={2} />
+    </button>
+  </div>
+</header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-6 pt-2 sm:px-6 sm:pt-3">
         {loading ? (
