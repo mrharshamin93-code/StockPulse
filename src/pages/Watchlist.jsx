@@ -652,9 +652,14 @@ function MiniSparkline({
       })
       .join(" ");
   } else {
-    points = isPositive
-      ? "2,27 8,22 14,24 20,17 26,19 32,11 42,7"
-      : "2,7 8,11 14,9 20,17 26,15 32,22 42,27";
+    return (
+      <div
+        className="flex h-[34px] w-[44px] items-center justify-center text-xs text-gray-300"
+        aria-label="Chart unavailable"
+      >
+        —
+      </div>
+    );
   }
 
   return (
@@ -1183,7 +1188,7 @@ function WatchlistCard({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-3">
             <div className="flex w-[44px] shrink-0 items-center justify-center">
               <Sparkline
                 ticker={item.ticker}
