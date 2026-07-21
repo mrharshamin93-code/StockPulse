@@ -50,7 +50,6 @@ type StockRow = {
 type TransactionRow = {
   id: string;
   ticker: string;
-  company_name: string | null;
   type: "buy" | "sell" | string;
   quantity: number | string | null;
   price: number | string | null;
@@ -375,7 +374,7 @@ async function fetchAllTransactions(
     const { data, error } = await service
       .from("stock_transactions")
       .select(
-        "id,ticker,company_name,type,quantity,price,total,created_at",
+        "id,ticker,type,quantity,price,total,created_at",
       )
       .eq("user_id", userId)
       .gte("created_at", startIso)
@@ -566,8 +565,7 @@ function buildTransactionSummaries(
         date: transaction.created_at,
         type,
         ticker,
-        companyName:
-          String(transaction.company_name || ticker).trim() || ticker,
+        companyName: ticker,
         quantity,
         price,
         total: suppliedTotal > 0 ? suppliedTotal : quantity * price,
