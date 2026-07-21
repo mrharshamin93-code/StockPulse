@@ -1797,17 +1797,17 @@ export default function Watchlist() {
     </div>
 
     <button
-      type="button"
-      aria-label="Add stock to watchlist"
-      onClick={() => setAddDialogOpen(true)}
-      className="flex h-10 w-10 translate-x-2 items-center justify-center justify-self-center rounded-none border-2 border-black bg-white transition-colors hover:bg-gray-50 active:scale-95"
-    >
-      <Plus
-        size={25}
-        strokeWidth={1.8}
-        className="text-black"
-      />
-    </button>
+  type="button"
+  aria-label="Add stock to watchlist"
+  onClick={() => setAddDialogOpen(true)}
+  className="flex h-10 w-10 translate-x-2 items-center justify-center justify-self-center rounded-xl border-2 border-black bg-white transition-colors hover:bg-gray-50 active:scale-95"
+>
+  <Plus
+    size={25}
+    strokeWidth={1.8}
+    className="text-black"
+  />
+</button>
   </div>
 </header>
 
