@@ -1792,13 +1792,13 @@ export default function Watchlist() {
           </div>
 
           <button
-            type="button"
-            aria-label="Add stock to watchlist"
-            onClick={() =>
-              setAddDialogOpen(true)
-            }
-            className="flex h-14 w-14 items-center justify-center justify-self-center rounded-full bg-gray-900 text-white shadow-md transition-transform hover:bg-gray-800 active:scale-95"
-          >
+  type="button"
+  aria-label="Add stock to watchlist"
+  onClick={() => setAddDialogOpen(true)}
+  className="flex h-11 w-11 items-center justify-center justify-self-center rounded-xl border border-gray-200 bg-white text-gray-900 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-95"
+>
+  <Plus className="h-5 w-5" strokeWidth={2} />
+</button>
             <Plus className="h-7 w-7" />
           </button>
         </div>
