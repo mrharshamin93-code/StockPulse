@@ -17,15 +17,14 @@ import { Label } from "@/components/ui/label";
 
 const MIN_PASSWORD_LENGTH = 6;
 const AUTH_STEP_TIMEOUT_MS = 20000;
+
 const RECOVERY_MARKER_KEY =
   "stockpulse:password-recovery";
+
 const RECOVERY_MARKER_MAX_AGE_MS =
   60 * 60 * 1000;
 
-let activeRecoveryAttempt = {
-  key: "",
-  promise: null,
-};
+let recoveryInitializationPromise = null;
 
 function runWithTimeout(
   operation,
@@ -60,52 +59,7 @@ function runWithTimeout(
   });
 }
 
-function getUrlError() {
-  const url =
-    new URL(
-      window.location.href,
-    );
-
-  const hashParams =
-    new URLSearchParams(
-      url.hash.replace(
-        /^#/,
-        "",
-      ),
-    );
-
-  const rawError =
-    url.searchParams.get(
-      "error_description",
-    ) ||
-    url.searchParams.get(
-      "error",
-    ) ||
-    hashParams.get(
-      "error_description",
-    ) ||
-    hashParams.get(
-      "error",
-    ) ||
-    "";
-
-  if (!rawError) {
-    return "";
-  }
-
-  try {
-    return decodeURIComponent(
-      rawError.replace(
-        /\+/g,
-        " ",
-      ),
-    );
-  } catch {
-    return rawError;
-  }
-}
-
-function getRecoveryInputs() {
+function getUrlParameters() {
   const url =
     new URL(
       window.location.href,
@@ -120,6 +74,24 @@ function getRecoveryInputs() {
     );
 
   return {
+    tokenHash:
+      url.searchParams.get(
+        "token_hash",
+      ) ||
+      hashParams.get(
+        "token_hash",
+      ) ||
+      "",
+
+    type:
+      url.searchParams.get(
+        "type",
+      ) ||
+      hashParams.get(
+        "type",
+      ) ||
+      "",
+
     code:
       url.searchParams.get(
         "code",
@@ -134,25 +106,22 @@ function getRecoveryInputs() {
       hashParams.get(
         "refresh_token",
       ) || "",
+
+    error:
+      url.searchParams.get(
+        "error_description",
+      ) ||
+      url.searchParams.get(
+        "error",
+      ) ||
+      hashParams.get(
+        "error_description",
+      ) ||
+      hashParams.get(
+        "error",
+      ) ||
+      "",
   };
-}
-
-function getRecoveryAttemptKey() {
-  const {
-    code,
-    accessToken,
-  } =
-    getRecoveryInputs();
-
-  if (code) {
-    return `code:${code}`;
-  }
-
-  if (accessToken) {
-    return `token:${accessToken}`;
-  }
-
-  return "saved-session";
 }
 
 function cleanRecoveryUrl() {
@@ -161,24 +130,13 @@ function cleanRecoveryUrl() {
       window.location.href,
     );
 
-  [
-    "code",
-    "type",
-    "error",
-    "error_code",
-    "error_description",
-  ].forEach((key) => {
-    url.searchParams.delete(
-      key,
-    );
-  });
-
+  url.search = "";
   url.hash = "";
 
   window.history.replaceState(
     {},
     document.title,
-    `${url.pathname}${url.search}`,
+    url.pathname,
   );
 }
 
@@ -191,16 +149,13 @@ function saveRecoveryMarker(
       JSON.stringify({
         userId:
           session.user.id,
+
         createdAt:
           Date.now(),
       }),
     );
   } catch {
-    /*
-     * Session storage is only an additional guard.
-     * Supabase's authenticated recovery session remains
-     * the actual authorization mechanism.
-     */
+    // The Supabase recovery session remains authoritative.
   }
 }
 
@@ -210,7 +165,7 @@ function clearRecoveryMarker() {
       RECOVERY_MARKER_KEY,
     );
   } catch {
-    // Nothing else is required.
+    // No further action is required.
   }
 }
 
@@ -230,15 +185,16 @@ function readRecoveryMarker() {
         rawValue,
       );
 
-    if (
-      !marker?.userId ||
-      !Number.isFinite(
+    const valid =
+      marker?.userId &&
+      Number.isFinite(
         marker?.createdAt,
-      ) ||
+      ) &&
       Date.now() -
-        marker.createdAt >
-        RECOVERY_MARKER_MAX_AGE_MS
-    ) {
+        marker.createdAt <=
+        RECOVERY_MARKER_MAX_AGE_MS;
+
+    if (!valid) {
       clearRecoveryMarker();
       return null;
     }
@@ -250,147 +206,81 @@ function readRecoveryMarker() {
   }
 }
 
-async function establishRecoverySession() {
-  const providerError =
-    getUrlError();
+function decodeUrlError(
+  rawError,
+) {
+  if (!rawError) {
+    return "";
+  }
 
-  if (providerError) {
-    throw new Error(
-      providerError,
+  try {
+    return decodeURIComponent(
+      String(
+        rawError,
+      ).replace(
+        /\+/g,
+        " ",
+      ),
+    );
+  } catch {
+    return String(
+      rawError,
     );
   }
-
-  const {
-    code,
-    accessToken,
-    refreshToken,
-  } =
-    getRecoveryInputs();
-
-  let session = null;
-
-  if (code) {
-    const {
-      data,
-      error,
-    } =
-      await runWithTimeout(
-        supabase.auth.exchangeCodeForSession(
-          code,
-        ),
-        "The password reset link took too long to verify. Please request a new link.",
-      );
-
-    if (error) {
-      throw error;
-    }
-
-    session =
-      data?.session ||
-      null;
-  } else if (
-    accessToken &&
-    refreshToken
-  ) {
-    /*
-     * This supports older implicit-flow recovery links.
-     * The app's current Supabase client uses PKCE, where
-     * the recovery URL normally contains a `code`.
-     */
-    const {
-      data,
-      error,
-    } =
-      await runWithTimeout(
-        supabase.auth.setSession({
-          access_token:
-            accessToken,
-          refresh_token:
-            refreshToken,
-        }),
-        "The password reset session took too long to verify. Please request a new link.",
-      );
-
-    if (error) {
-      throw error;
-    }
-
-    session =
-      data?.session ||
-      null;
-  } else {
-    const marker =
-      readRecoveryMarker();
-
-    if (!marker) {
-      throw new Error(
-        "This password reset link is invalid or has expired. Please request a new one.",
-      );
-    }
-
-    const {
-      data,
-      error,
-    } =
-      await runWithTimeout(
-        supabase.auth.getSession(),
-        "Checking the password reset session took too long. Please request a new link.",
-      );
-
-    if (error) {
-      throw error;
-    }
-
-    session =
-      data?.session ||
-      null;
-
-    if (
-      !session?.user ||
-      session.user.id !==
-        marker.userId
-    ) {
-      clearRecoveryMarker();
-
-      throw new Error(
-        "This password reset session is no longer valid. Please request a new link.",
-      );
-    }
-  }
-
-  if (!session?.user) {
-    throw new Error(
-      "The password reset session could not be created. Please request a new link.",
-    );
-  }
-
-  saveRecoveryMarker(
-    session,
-  );
-
-  cleanRecoveryUrl();
-
-  return session;
 }
 
-function initializeRecoveryOnce() {
-  const attemptKey =
-    getRecoveryAttemptKey();
+function getRecoveryErrorMessage(
+  error,
+) {
+  const message =
+    String(
+      error?.message || "",
+    );
+
+  const lowerMessage =
+    message.toLowerCase();
 
   if (
-    activeRecoveryAttempt.key !==
-      attemptKey ||
-    !activeRecoveryAttempt.promise
+    lowerMessage.includes(
+      "code challenge",
+    ) ||
+    lowerMessage.includes(
+      "code verifier",
+    ) ||
+    lowerMessage.includes(
+      "bad_code_verifier",
+    )
   ) {
-    activeRecoveryAttempt = {
-      key:
-        attemptKey,
-      promise:
-        establishRecoverySession(),
-    };
+    return (
+      "This is an older password-reset link that used the browser-specific " +
+      "PKCE flow. Request a new reset link and open the new email."
+    );
   }
 
-  return activeRecoveryAttempt.promise;
+  if (
+    lowerMessage.includes(
+      "expired",
+    ) ||
+    lowerMessage.includes(
+      "invalid",
+    ) ||
+    lowerMessage.includes(
+      "otp_expired",
+    ) ||
+    lowerMessage.includes(
+      "token",
+    )
+  ) {
+    return (
+      "This password-reset link is invalid, expired, or has already been used. " +
+      "Please request a new link."
+    );
+  }
+
+  return (
+    message ||
+    "The password-reset link could not be verified. Please request a new link."
+  );
 }
 
 function getUpdateErrorMessage(
@@ -437,12 +327,203 @@ function getUpdateErrorMessage(
     ) ||
     lowerMessage.includes(
       "session",
+    ) ||
+    lowerMessage.includes(
+      "jwt",
     )
   ) {
-    return "Your password reset session expired. Please request a new link.";
+    return (
+      "Your password-reset session expired. Please request a new link."
+    );
   }
 
-  return "We could not update your password. Please try again.";
+  return (
+    "We could not update your password. Please try again."
+  );
+}
+
+async function establishRecoverySession() {
+  const {
+    tokenHash,
+    type,
+    code,
+    accessToken,
+    refreshToken,
+    error: urlError,
+  } =
+    getUrlParameters();
+
+  if (urlError) {
+    throw new Error(
+      decodeUrlError(
+        urlError,
+      ),
+    );
+  }
+
+  let session = null;
+
+  /*
+   * Preferred recovery flow.
+   *
+   * The token hash comes directly from the customized
+   * Supabase recovery email. Unlike a PKCE auth code,
+   * it is not tied to the browser that requested the
+   * email, so it also works when an email app opens the
+   * link in a different browser context.
+   */
+  if (tokenHash) {
+    const verificationType =
+      type === "recovery"
+        ? "recovery"
+        : "recovery";
+
+    const {
+      data,
+      error,
+    } =
+      await runWithTimeout(
+        supabase.auth.verifyOtp({
+          token_hash:
+            tokenHash,
+
+          type:
+            verificationType,
+        }),
+        "Verifying the password-reset link took too long. Please request a new link.",
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    session =
+      data?.session ||
+      null;
+  } else if (
+    accessToken &&
+    refreshToken
+  ) {
+    /*
+     * Backward compatibility for older implicit-flow
+     * recovery links that return tokens in the URL hash.
+     */
+    const {
+      data,
+      error,
+    } =
+      await runWithTimeout(
+        supabase.auth.setSession({
+          access_token:
+            accessToken,
+
+          refresh_token:
+            refreshToken,
+        }),
+        "Creating the password-reset session took too long. Please request a new link.",
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    session =
+      data?.session ||
+      null;
+  } else if (code) {
+    /*
+     * Backward compatibility only.
+     *
+     * Old PKCE links can still work when opened in the
+     * same browser context that requested them. New links
+     * should use token_hash instead.
+     */
+    const {
+      data,
+      error,
+    } =
+      await runWithTimeout(
+        supabase.auth.exchangeCodeForSession(
+          code,
+        ),
+        "Verifying the older password-reset link took too long. Please request a new link.",
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    session =
+      data?.session ||
+      null;
+  } else {
+    /*
+     * Permit a refresh after this page has already
+     * verified the token and removed it from the URL.
+     */
+    const marker =
+      readRecoveryMarker();
+
+    if (!marker) {
+      throw new Error(
+        "This password-reset link is missing its verification token. Please request a new link.",
+      );
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await runWithTimeout(
+        supabase.auth.getSession(),
+        "Checking the password-reset session took too long. Please request a new link.",
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    session =
+      data?.session ||
+      null;
+
+    if (
+      !session?.user ||
+      session.user.id !==
+        marker.userId
+    ) {
+      clearRecoveryMarker();
+
+      throw new Error(
+        "This password-reset session is no longer valid. Please request a new link.",
+      );
+    }
+  }
+
+  if (!session?.user) {
+    throw new Error(
+      "The password-reset session could not be created. Please request a new link.",
+    );
+  }
+
+  saveRecoveryMarker(
+    session,
+  );
+
+  cleanRecoveryUrl();
+
+  return session;
+}
+
+function initializeRecoveryOnce() {
+  if (
+    !recoveryInitializationPromise
+  ) {
+    recoveryInitializationPromise =
+      establishRecoverySession();
+  }
+
+  return recoveryInitializationPromise;
 }
 
 export default function ResetPassword() {
@@ -502,9 +583,9 @@ export default function ResetPassword() {
           clearRecoveryMarker();
 
           setError(
-            recoveryError
-              ?.message ||
-              "This password reset link is invalid or has expired.",
+            getRecoveryErrorMessage(
+              recoveryError,
+            ),
           );
 
           setStatus(
@@ -570,10 +651,6 @@ export default function ResetPassword() {
 
       clearRecoveryMarker();
 
-      /*
-       * End the temporary recovery session so the user
-       * signs in normally with the new password.
-       */
       const {
         error: signOutError,
       } =
@@ -583,13 +660,14 @@ export default function ResetPassword() {
 
       if (signOutError) {
         console.warn(
-          "Password changed, but the temporary local recovery session could not be cleared normally:",
+          "Password changed, but the temporary recovery session could not be cleared normally:",
           signOutError,
         );
       }
 
       setPassword("");
       setConfirmPassword("");
+
       setStatus(
         "success",
       );
@@ -619,6 +697,7 @@ export default function ResetPassword() {
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
+
           paddingBottom:
             "env(safe-area-inset-bottom)",
         }}
@@ -648,6 +727,7 @@ export default function ResetPassword() {
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
+
           paddingBottom:
             "env(safe-area-inset-bottom)",
         }}
@@ -692,6 +772,7 @@ export default function ResetPassword() {
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
+
           paddingBottom:
             "env(safe-area-inset-bottom)",
         }}
@@ -725,6 +806,7 @@ export default function ResetPassword() {
       style={{
         paddingTop:
           "env(safe-area-inset-top)",
+
         paddingBottom:
           "env(safe-area-inset-bottom)",
       }}
