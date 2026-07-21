@@ -123,19 +123,13 @@ const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const FINNHUB_API_KEY =
   Deno.env.get("FINNHUB_API_KEY") || "";
-const BREVO_API_KEY =
-  Deno.env.get("BREVO_API_KEY") || "";
-const BREVO_SENDER_EMAIL =
-  Deno.env.get("BREVO_SENDER_EMAIL") || "";
-const BREVO_SENDER_NAME =
-  Deno.env.get("BREVO_SENDER_NAME") || "StockPulse";
-const BREVO_REPLY_TO =
-  Deno.env.get("BREVO_REPLY_TO") || "";
 const MONTHLY_REPORT_CRON_SECRET =
   Deno.env.get("MONTHLY_REPORT_CRON_SECRET") || "";
 
 const MAX_WORKER_ATTEMPTS = 4;
 const SCHEDULED_DAILY_LIMIT = 250;
+const REPORT_BUCKET = "monthly-reports";
+const MAX_STORED_REPORTS_PER_USER = 3;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -176,8 +170,6 @@ function requireEnvironment(): void {
     ["SUPABASE_URL", SUPABASE_URL],
     ["SUPABASE_ANON_KEY", SUPABASE_ANON_KEY],
     ["SUPABASE_SERVICE_ROLE_KEY", SUPABASE_SERVICE_ROLE_KEY],
-    ["BREVO_API_KEY", BREVO_API_KEY],
-    ["BREVO_SENDER_EMAIL", BREVO_SENDER_EMAIL],
   ]
     .filter(([, value]) => !value)
     .map(([name]) => name);
@@ -211,15 +203,6 @@ function normalizeCurrency(value: unknown): string {
     .toUpperCase();
 
   return /^[A-Z]{3}$/.test(normalized) ? normalized : "USD";
-}
-
-function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function formatMoney(value: number, currency: string): string {
@@ -1490,234 +1473,90 @@ async function generatePdf(data: ReportData): Promise<Uint8Array> {
   });
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  return btoa(binary);
+function getReportFileName(reportMonth: string): string {
+  return `StockPulse-${reportMonth.slice(0, 7)}-Portfolio-Report.pdf`;
 }
 
-function buildEmailHtml(data: ReportData): string {
-  const positive = data.summary.totalGainLoss >= 0;
-  const pnlColor = positive ? "#059669" : "#dc2626";
-  const topHoldings = data.holdings.slice(0, 5);
-
-  const holdingRows = topHoldings.length
-    ? topHoldings
-        .map(
-          (holding) => `
-            <tr>
-              <td style="padding:12px 0;border-bottom:1px solid #eceef2;font-weight:700;color:#111827;">${escapeHtml(
-                holding.ticker,
-              )}</td>
-              <td style="padding:12px 0;border-bottom:1px solid #eceef2;text-align:right;color:#4b5563;">${
-                holding.marketValue === null
-                  ? "—"
-                  : escapeHtml(
-                      formatMoney(
-                        holding.marketValue,
-                        data.summary.currency,
-                      ),
-                    )
-              }</td>
-              <td style="padding:12px 0;border-bottom:1px solid #eceef2;text-align:right;font-weight:700;color:${
-                (holding.gainLoss || 0) >= 0 ? "#059669" : "#dc2626"
-              };">${escapeHtml(formatPercent(holding.gainLossPercent))}</td>
-            </tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="3" style="padding:18px 0;color:#6b7280;">No current holdings found.</td></tr>`;
-
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f5f7;padding:24px 12px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;">
-            <tr>
-              <td style="background:#111318;padding:30px 32px;color:#ffffff;">
-                <div style="font-size:24px;font-weight:800;letter-spacing:-0.4px;">StockPulse</div>
-                <div style="margin-top:6px;color:#b8bec9;font-size:14px;">${escapeHtml(
-                  data.summary.reportLabel,
-                )} portfolio report</div>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:30px 32px 10px;">
-                <div style="font-size:18px;font-weight:700;">Hi ${escapeHtml(
-                  data.profile.full_name || "there",
-                )},</div>
-                <p style="margin:10px 0 0;color:#6b7280;line-height:1.6;font-size:14px;">
-                  Your monthly StockPulse report is ready. The detailed holdings and transaction report is attached as a PDF.
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:18px 32px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td width="48%" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:18px;">
-                      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;">Portfolio value</div>
-                      <div style="margin-top:8px;font-size:23px;font-weight:800;">${escapeHtml(
-                        formatMoney(
-                          data.summary.totalMarketValue,
-                          data.summary.currency,
-                        ),
-                      )}</div>
-                    </td>
-                    <td width="4%"></td>
-                    <td width="48%" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:18px;">
-                      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.8px;font-weight:700;">Unrealized P&amp;L</div>
-                      <div style="margin-top:8px;font-size:23px;font-weight:800;color:${pnlColor};">${escapeHtml(
-                        `${positive ? "+" : ""}${formatMoney(
-                          data.summary.totalGainLoss,
-                          data.summary.currency,
-                        )}`,
-                      )}</div>
-                      <div style="margin-top:4px;font-size:13px;font-weight:700;color:${pnlColor};">${escapeHtml(
-                        formatPercent(data.summary.totalGainLossPercent),
-                      )}</div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:6px 32px 22px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
-                  <tr>
-                    <th align="left" style="padding:0 0 8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.7px;">Top holdings</th>
-                    <th align="right" style="padding:0 0 8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.7px;">Value</th>
-                    <th align="right" style="padding:0 0 8px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.7px;">P&amp;L</th>
-                  </tr>
-                  ${holdingRows}
-                </table>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 32px 30px;">
-                <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:16px;color:#4b5563;font-size:13px;line-height:1.6;">
-                  <strong style="color:#111827;">Monthly activity:</strong>
-                  ${data.summary.transactionCount} transaction${
-                    data.summary.transactionCount === 1 ? "" : "s"
-                  }, ${escapeHtml(
-                    formatMoney(data.summary.buysTotal, data.summary.currency),
-                  )} in purchases and ${escapeHtml(
-                    formatMoney(data.summary.sellsTotal, data.summary.currency),
-                  )} in sales.
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:20px 32px;color:#6b7280;font-size:11px;line-height:1.6;">
-                Market prices may be delayed. Portfolio performance uses prices available when the report is generated and the purchase prices entered by the user. This report is informational only and is not financial advice.
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
+function getReportStoragePath(
+  delivery: MonthlyReportDelivery,
+): string {
+  return `${delivery.user_id}/${delivery.report_month}/${delivery.id}.pdf`;
 }
 
-function buildEmailText(data: ReportData): string {
-  return [
-    `StockPulse ${data.summary.reportLabel} Portfolio Report`,
-    "",
-    `Portfolio value: ${formatMoney(
-      data.summary.totalMarketValue,
-      data.summary.currency,
-    )}`,
-    `Entered cost basis: ${formatMoney(
-      data.summary.totalCostBasis,
-      data.summary.currency,
-    )}`,
-    `Unrealized P&L: ${data.summary.totalGainLoss >= 0 ? "+" : ""}${formatMoney(
-      data.summary.totalGainLoss,
-      data.summary.currency,
-    )} (${formatPercent(data.summary.totalGainLossPercent)})`,
-    `Monthly purchases: ${formatMoney(
-      data.summary.buysTotal,
-      data.summary.currency,
-    )}`,
-    `Monthly sales: ${formatMoney(
-      data.summary.sellsTotal,
-      data.summary.currency,
-    )}`,
-    `Transactions: ${data.summary.transactionCount}`,
-    "",
-    "Your detailed PDF report is attached.",
-    "Market prices may be delayed. Not financial advice.",
-  ].join("\n");
-}
-
-async function sendBrevoEmail(
-  data: ReportData,
+async function uploadReportPdf(
+  service: SupabaseClient,
+  delivery: MonthlyReportDelivery,
   pdfBytes: Uint8Array,
-): Promise<string | null> {
-  const attachmentName = `StockPulse-${data.delivery.report_month.slice(
-    0,
-    7,
-  )}-Portfolio-Report.pdf`;
+): Promise<{ storagePath: string; fileName: string }> {
+  const storagePath = getReportStoragePath(delivery);
+  const fileName = getReportFileName(delivery.report_month);
 
-  const payload: Record<string, unknown> = {
-    sender: {
-      name: BREVO_SENDER_NAME,
-      email: BREVO_SENDER_EMAIL,
-    },
-    to: [
-      {
-        email: data.delivery.recipient_email,
-        name: data.profile.full_name || undefined,
-      },
-    ],
-    subject: `Your StockPulse ${data.summary.reportLabel} report`,
-    htmlContent: buildEmailHtml(data),
-    textContent: buildEmailText(data),
-    attachment: [
-      {
-        content: bytesToBase64(pdfBytes),
-        name: attachmentName,
-      },
-    ],
-    tags: ["monthly-report"],
+  const { error } = await service.storage
+    .from(REPORT_BUCKET)
+    .upload(storagePath, pdfBytes, {
+      contentType: "application/pdf",
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    storagePath,
+    fileName,
   };
+}
 
-  if (BREVO_REPLY_TO) {
-    payload.replyTo = {
-      email: BREVO_REPLY_TO,
-      name: "StockPulse Support",
-    };
+async function cleanupOldReports(
+  service: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  const { data, error } = await service
+    .from("monthly_report_deliveries")
+    .select("id,storage_path,generated_at,created_at")
+    .eq("user_id", userId)
+    .eq("status", "ready")
+    .not("storage_path", "is", null)
+    .order("generated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.warn("Unable to load old report records:", error);
+    return;
   }
 
-  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "api-key": BREVO_API_KEY,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  const oldReports = (data || []).slice(MAX_STORED_REPORTS_PER_USER);
 
-  const result = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(
-      result?.message ||
-        result?.error ||
-        `Brevo email request failed with status ${response.status}`,
-    );
+  if (!oldReports.length) {
+    return;
   }
 
-  return result?.messageId || null;
+  const paths = oldReports
+    .map((report) => String(report.storage_path || ""))
+    .filter(Boolean);
+
+  if (paths.length) {
+    const { error: storageError } = await service.storage
+      .from(REPORT_BUCKET)
+      .remove(paths);
+
+    if (storageError) {
+      console.warn("Unable to delete old report files:", storageError);
+      return;
+    }
+  }
+
+  const ids = oldReports.map((report) => report.id);
+  const { error: deleteError } = await service
+    .from("monthly_report_deliveries")
+    .delete()
+    .in("id", ids);
+
+  if (deleteError) {
+    console.warn("Unable to delete old report records:", deleteError);
+  }
 }
 
 async function markDeliveryFailed(
@@ -1726,7 +1565,7 @@ async function markDeliveryFailed(
   error: unknown,
 ): Promise<void> {
   const message =
-    error instanceof Error ? error.message : "Unknown report delivery error";
+    error instanceof Error ? error.message : "Unknown report generation error";
   const delayMinutes = Math.min(
     360,
     Math.max(15, Math.pow(Math.max(1, delivery.attempt_count), 2) * 15),
@@ -1752,31 +1591,62 @@ async function markDeliveryFailed(
 async function processDelivery(
   service: SupabaseClient,
   delivery: MonthlyReportDelivery,
-): Promise<{ messageId: string | null; pages: number | null }> {
+): Promise<{
+  storagePath: string;
+  fileName: string;
+  fileSizeBytes: number;
+}> {
   try {
     const data = await loadReportData(service, delivery);
     const pdfBytes = await generatePdf(data);
-    const messageId = await sendBrevoEmail(data, pdfBytes);
+    const { storagePath, fileName } = await uploadReportPdf(
+      service,
+      delivery,
+      pdfBytes,
+    );
+    const generatedAt = new Date().toISOString();
 
     const { error: deliveryError } = await service
       .from("monthly_report_deliveries")
       .update({
-        status: "sent",
-        provider_message_id: messageId,
-        sent_at: new Date().toISOString(),
+        status: "ready",
+        storage_path: storagePath,
+        file_name: fileName,
+        file_size_bytes: pdfBytes.length,
+        portfolio_value: data.summary.totalMarketValue,
+        cost_basis: data.summary.totalCostBasis,
+        gain_loss: data.summary.totalGainLoss,
+        gain_loss_percent: data.summary.totalGainLossPercent,
+        generated_at: generatedAt,
         error_message: null,
+        failed_at: null,
         processing_started_at: null,
         metadata: {
           holdings_count: data.holdings.length,
           transactions_count: data.transactions.length,
           portfolio_value: data.summary.totalMarketValue,
+          cost_basis: data.summary.totalCostBasis,
+          gain_loss: data.summary.totalGainLoss,
+          gain_loss_percent: data.summary.totalGainLossPercent,
           currency: data.summary.currency,
           pdf_bytes: pdfBytes.length,
+          price_sources: {
+            finnhub: data.holdings.filter(
+              (holding) => holding.priceSource === "finnhub",
+            ).length,
+            stored: data.holdings.filter(
+              (holding) => holding.priceSource === "stored",
+            ).length,
+            unavailable: data.holdings.filter(
+              (holding) => holding.priceSource === "unavailable",
+            ).length,
+          },
         },
       })
       .eq("id", delivery.id);
 
     if (deliveryError) {
+      await service.storage.from(REPORT_BUCKET).remove([storagePath]);
       throw deliveryError;
     }
 
@@ -1784,21 +1654,24 @@ async function processDelivery(
       const { error: profileUpdateError } = await service
         .from("profiles")
         .update({
-          monthly_report_last_sent_at: new Date().toISOString(),
+          monthly_report_last_generated_at: generatedAt,
         })
         .eq("id", delivery.user_id);
 
       if (profileUpdateError) {
         console.warn(
-          "Report sent, but last-sent profile timestamp failed:",
+          "Report generated, but profile timestamp update failed:",
           profileUpdateError,
         );
       }
     }
 
+    await cleanupOldReports(service, delivery.user_id);
+
     return {
-      messageId,
-      pages: null,
+      storagePath,
+      fileName,
+      fileSizeBytes: pdfBytes.length,
     };
   } catch (error) {
     await markDeliveryFailed(service, delivery, error);
@@ -1892,9 +1765,72 @@ async function handleManualRequest(
   return jsonResponse({
     ok: true,
     deliveryId: delivery.id,
-    messageId: result.messageId,
-    recipient: delivery.recipient_email,
     reportMonth: delivery.report_month,
+    storagePath: result.storagePath,
+    fileName: result.fileName,
+    fileSizeBytes: result.fileSizeBytes,
+  });
+}
+
+async function handleDeleteReport(
+  req: Request,
+  body: Record<string, unknown>,
+  service: SupabaseClient,
+): Promise<Response> {
+  const authorization = req.headers.get("Authorization") || "";
+
+  if (!authorization.toLowerCase().startsWith("bearer ")) {
+    return jsonResponse({ error: "Authentication required" }, 401);
+  }
+
+  const userClient = createUserClient(authorization);
+  const { data: userData, error: userError } =
+    await userClient.auth.getUser();
+
+  if (userError || !userData.user) {
+    return jsonResponse({ error: "Invalid or expired session" }, 401);
+  }
+
+  const reportId = String(body.reportId || "").trim();
+
+  if (!reportId) {
+    return jsonResponse({ error: "Missing reportId" }, 400);
+  }
+
+  const { data: report, error: reportError } = await service
+    .from("monthly_report_deliveries")
+    .select("id,user_id,storage_path")
+    .eq("id", reportId)
+    .eq("user_id", userData.user.id)
+    .single();
+
+  if (reportError || !report) {
+    return jsonResponse({ error: "Report not found" }, 404);
+  }
+
+  if (report.storage_path) {
+    const { error: storageError } = await service.storage
+      .from(REPORT_BUCKET)
+      .remove([String(report.storage_path)]);
+
+    if (storageError) {
+      throw storageError;
+    }
+  }
+
+  const { error: deleteError } = await service
+    .from("monthly_report_deliveries")
+    .delete()
+    .eq("id", report.id)
+    .eq("user_id", userData.user.id);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  return jsonResponse({
+    ok: true,
+    reportId,
   });
 }
 
@@ -1960,7 +1896,8 @@ async function handleWorker(
     queued: numberOrZero(queued),
     processed: true,
     deliveryId: delivery.id,
-    messageId: result.messageId,
+    storagePath: result.storagePath,
+    fileName: result.fileName,
   });
 }
 
@@ -1991,6 +1928,10 @@ export default {
 
       if (action === "worker") {
         return await handleWorker(req, service);
+      }
+
+      if (action === "delete") {
+        return await handleDeleteReport(req, body, service);
       }
 
       return jsonResponse({ error: "Unknown action" }, 400);
