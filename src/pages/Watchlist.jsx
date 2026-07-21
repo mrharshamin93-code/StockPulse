@@ -11,7 +11,9 @@ import {
   motion,
 } from "framer-motion";
 import {
+  Check,
   Loader2,
+  Menu,
   Plus,
   Search,
   Share2,
@@ -34,6 +36,54 @@ import {
 
 const sparklineCache = new Map();
 const SPARKLINE_TTL = 5 * 60 * 1000;
+const WATCHLIST_SORT_KEY = "stockpulse:watchlist-sort";
+
+function getStoredSortMode() {
+  try {
+    const stored =
+      window.localStorage.getItem(
+        WATCHLIST_SORT_KEY,
+      );
+
+    return stored === "price"
+      ? "price"
+      : "percentage";
+  } catch {
+    return "percentage";
+  }
+}
+
+function getStoredWatchlistId(userId) {
+  if (!userId) {
+    return null;
+  }
+
+  try {
+    return window.localStorage.getItem(
+      `stockpulse:active-watchlist:${userId}`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function storeActiveWatchlistId(
+  userId,
+  watchlistId,
+) {
+  if (!userId || !watchlistId) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      `stockpulse:active-watchlist:${userId}`,
+      watchlistId,
+    );
+  } catch {
+    // Supabase remains the source of truth.
+  }
+}
 
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(
@@ -1278,6 +1328,32 @@ export default function Watchlist() {
   const [stocks, setStocks] =
     useState([]);
 
+  const [watchlists, setWatchlists] =
+    useState([]);
+
+  const [
+    activeWatchlistId,
+    setActiveWatchlistId,
+  ] = useState(null);
+
+  const [
+    watchlistMenuOpen,
+    setWatchlistMenuOpen,
+  ] = useState(false);
+
+  const [
+    newWatchlistName,
+    setNewWatchlistName,
+  ] = useState("");
+
+  const [
+    watchlistSaving,
+    setWatchlistSaving,
+  ] = useState(false);
+
+  const [sortMode, setSortMode] =
+    useState(getStoredSortMode);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -1307,6 +1383,102 @@ export default function Watchlist() {
 
   const searchTimer = useRef(null);
 
+  const loadWatchlists =
+    useCallback(async () => {
+      if (!user?.id) {
+        return [];
+      }
+
+      let { data, error } =
+        await supabase
+          .from("watchlists")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("is_default", {
+            ascending: false,
+          })
+          .order("created_at", {
+            ascending: true,
+          });
+
+      if (error) {
+        throw error;
+      }
+
+      let nextWatchlists =
+        data || [];
+
+      if (
+        nextWatchlists.length === 0
+      ) {
+        const {
+          data: created,
+          error: createError,
+        } = await supabase
+          .from("watchlists")
+          .insert({
+            user_id: user.id,
+            name: "Watchlist",
+            is_default: true,
+          })
+          .select("*")
+          .single();
+
+        if (createError) {
+          throw createError;
+        }
+
+        nextWatchlists = [
+          created,
+        ];
+      }
+
+      setWatchlists(
+        nextWatchlists,
+      );
+
+      setActiveWatchlistId(
+        (currentId) => {
+          const storedId =
+            getStoredWatchlistId(
+              user.id,
+            );
+
+          const nextId =
+            nextWatchlists.some(
+              (list) =>
+                list.id ===
+                currentId,
+            )
+              ? currentId
+              : nextWatchlists.some(
+                    (list) =>
+                      list.id ===
+                      storedId,
+                  )
+                ? storedId
+                : (
+                    nextWatchlists.find(
+                      (list) =>
+                        list.is_default,
+                    ) ||
+                    nextWatchlists[0]
+                  )?.id;
+
+          if (nextId) {
+            storeActiveWatchlistId(
+              user.id,
+              nextId,
+            );
+          }
+
+          return nextId || null;
+        },
+      );
+
+      return nextWatchlists;
+    }, [user?.id]);
+
   const refreshWatchlistQuotes =
     useCallback(
       (watchItems) => {
@@ -1328,7 +1500,10 @@ export default function Watchlist() {
     );
 
   const load = useCallback(async () => {
-    if (!user?.id) {
+    if (
+      !user?.id ||
+      !activeWatchlistId
+    ) {
       return [];
     }
 
@@ -1340,6 +1515,10 @@ export default function Watchlist() {
         .from("watchlist_items")
         .select("*")
         .eq("user_id", user.id)
+        .eq(
+          "watchlist_id",
+          activeWatchlistId,
+        )
         .order("created_at", {
           ascending: false,
         }),
@@ -1371,7 +1550,51 @@ export default function Watchlist() {
     setStocks(portfolioStocks);
 
     return watchItems;
-  }, [user?.id]);
+  }, [
+    user?.id,
+    activeWatchlistId,
+  ]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setWatchlists([]);
+      setActiveWatchlistId(null);
+      setItems([]);
+      setStocks([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+
+    setLoading(true);
+
+    loadWatchlists().catch(
+      (error) => {
+        if (!active) {
+          return;
+        }
+
+        console.error(
+          "Unable to load watchlists:",
+          error,
+        );
+
+        setToast(
+          "Unable to load watchlists.",
+        );
+
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [
+    user?.id,
+    loadWatchlists,
+  ]);
 
   useEffect(() => {
     const query = ticker.trim();
@@ -1442,12 +1665,16 @@ export default function Watchlist() {
   }, [ticker, addDialogOpen]);
 
   useEffect(() => {
-    if (!user?.id) {
-      setLoading(false);
+    if (
+      !user?.id ||
+      !activeWatchlistId
+    ) {
       return undefined;
     }
 
     let active = true;
+
+    setLoading(true);
 
     load()
       .then((watchItems) => {
@@ -1476,6 +1703,7 @@ export default function Watchlist() {
     };
   }, [
     user?.id,
+    activeWatchlistId,
     load,
     refreshWatchlistQuotes,
   ]);
@@ -1499,7 +1727,10 @@ export default function Watchlist() {
   ]);
 
   useEffect(() => {
-    if (!user?.id) {
+    if (
+      !user?.id ||
+      !activeWatchlistId
+    ) {
       return undefined;
     }
 
@@ -1509,6 +1740,10 @@ export default function Watchlist() {
           .from("watchlist_items")
           .select("*")
           .eq("user_id", user.id)
+          .eq(
+            "watchlist_id",
+            activeWatchlistId,
+          )
           .order("created_at", {
             ascending: false,
           });
@@ -1571,8 +1806,214 @@ export default function Watchlist() {
       supabase.removeChannel(channel);
   }, [
     user?.id,
+    activeWatchlistId,
     refreshWatchlistQuotes,
   ]);
+
+  function changeSortMode(
+    nextMode,
+  ) {
+    const normalizedMode =
+      nextMode === "price"
+        ? "price"
+        : "percentage";
+
+    setSortMode(
+      normalizedMode,
+    );
+
+    try {
+      window.localStorage.setItem(
+        WATCHLIST_SORT_KEY,
+        normalizedMode,
+      );
+    } catch {
+      // The in-memory preference still applies.
+    }
+  }
+
+  function switchWatchlist(
+    watchlistId,
+  ) {
+    if (
+      !watchlistId ||
+      watchlistId ===
+        activeWatchlistId
+    ) {
+      setWatchlistMenuOpen(false);
+      return;
+    }
+
+    setLoading(true);
+    setItems([]);
+    setActiveWatchlistId(
+      watchlistId,
+    );
+
+    storeActiveWatchlistId(
+      user?.id,
+      watchlistId,
+    );
+
+    setWatchlistMenuOpen(false);
+  }
+
+  async function createWatchlist(
+    event,
+  ) {
+    event.preventDefault();
+
+    const name =
+      newWatchlistName.trim();
+
+    if (
+      !user?.id ||
+      !name ||
+      watchlistSaving
+    ) {
+      return;
+    }
+
+    setWatchlistSaving(true);
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("watchlists")
+        .insert({
+          user_id: user.id,
+          name,
+          is_default: false,
+        })
+        .select("*")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setWatchlists(
+        (current) => [
+          ...current,
+          data,
+        ],
+      );
+
+      setNewWatchlistName("");
+      setItems([]);
+      setLoading(true);
+      setActiveWatchlistId(
+        data.id,
+      );
+
+      storeActiveWatchlistId(
+        user.id,
+        data.id,
+      );
+
+      setWatchlistMenuOpen(false);
+
+      setToast(
+        `${data.name} created`,
+      );
+    } catch (error) {
+      setToast(
+        error?.code === "23505"
+          ? "A watchlist with that name already exists."
+          : error?.message ||
+              "Unable to create watchlist.",
+      );
+    } finally {
+      setWatchlistSaving(false);
+    }
+  }
+
+  async function deleteWatchlist(
+    watchlist,
+  ) {
+    if (
+      !user?.id ||
+      !watchlist?.id ||
+      watchlist.is_default ||
+      watchlistSaving
+    ) {
+      return;
+    }
+
+    setWatchlistSaving(true);
+
+    try {
+      const { error } =
+        await supabase
+          .from("watchlists")
+          .delete()
+          .eq(
+            "id",
+            watchlist.id,
+          )
+          .eq(
+            "user_id",
+            user.id,
+          );
+
+      if (error) {
+        throw error;
+      }
+
+      const remaining =
+        watchlists.filter(
+          (list) =>
+            list.id !==
+            watchlist.id,
+        );
+
+      setWatchlists(
+        remaining,
+      );
+
+      if (
+        activeWatchlistId ===
+        watchlist.id
+      ) {
+        const next =
+          remaining.find(
+            (list) =>
+              list.is_default,
+          ) ||
+          remaining[0] ||
+          null;
+
+        setItems([]);
+        setLoading(
+          Boolean(next),
+        );
+
+        setActiveWatchlistId(
+          next?.id || null,
+        );
+
+        if (next?.id) {
+          storeActiveWatchlistId(
+            user.id,
+            next.id,
+          );
+        }
+      }
+
+      setToast(
+        `${watchlist.name} deleted`,
+      );
+    } catch (error) {
+      setToast(
+        error?.message ||
+          "Unable to delete watchlist.",
+      );
+    } finally {
+      setWatchlistSaving(false);
+    }
+  }
 
   async function addTicker(
     symbol,
@@ -1587,6 +2028,7 @@ export default function Watchlist() {
     if (
       !normalized ||
       !user?.id ||
+      !activeWatchlistId ||
       adding
     ) {
       return false;
@@ -1635,6 +2077,8 @@ export default function Watchlist() {
         .from("watchlist_items")
         .insert({
           user_id: user.id,
+          watchlist_id:
+            activeWatchlistId,
           ticker: normalized,
           exchange: resolvedExchange,
           company_name:
@@ -1780,16 +2224,92 @@ export default function Watchlist() {
   const sortedItems = useMemo(
     () =>
       [...items].sort(
-        (a, b) =>
-          (quotes[
-            b.ticker.toUpperCase()
-          ]?.dp ?? -Infinity) -
-          (quotes[
-            a.ticker.toUpperCase()
-          ]?.dp ?? -Infinity),
+        (a, b) => {
+          const aTicker =
+            a.ticker.toUpperCase();
+
+          const bTicker =
+            b.ticker.toUpperCase();
+
+          const aStock =
+            stocks.find(
+              (stock) =>
+                stock.ticker.toUpperCase() ===
+                aTicker,
+            );
+
+          const bStock =
+            stocks.find(
+              (stock) =>
+                stock.ticker.toUpperCase() ===
+                bTicker,
+            );
+
+          const aValue =
+            sortMode === "price"
+              ? Number(
+                  quotes[aTicker]?.c ??
+                    aStock?.current_price,
+                )
+              : Number(
+                  quotes[aTicker]?.dp,
+                );
+
+          const bValue =
+            sortMode === "price"
+              ? Number(
+                  quotes[bTicker]?.c ??
+                    bStock?.current_price,
+                )
+              : Number(
+                  quotes[bTicker]?.dp,
+                );
+
+          const normalizedA =
+            Number.isFinite(aValue)
+              ? aValue
+              : -Infinity;
+
+          const normalizedB =
+            Number.isFinite(bValue)
+              ? bValue
+              : -Infinity;
+
+          if (
+            normalizedA !==
+            normalizedB
+          ) {
+            return (
+              normalizedB -
+              normalizedA
+            );
+          }
+
+          return aTicker.localeCompare(
+            bTicker,
+          );
+        },
       ),
-    [items, quotes],
+    [
+      items,
+      quotes,
+      stocks,
+      sortMode,
+    ],
   );
+
+  const activeWatchlist =
+    watchlists.find(
+      (list) =>
+        list.id ===
+        activeWatchlistId,
+    ) ||
+    watchlists.find(
+      (list) =>
+        list.is_default,
+    ) ||
+    watchlists[0] ||
+    null;
 
   return (
     <div className="flex min-h-full flex-col bg-gray-50">
@@ -1803,6 +2323,183 @@ export default function Watchlist() {
           />
         )}
       </AnimatePresence>
+
+      <Dialog
+        open={watchlistMenuOpen}
+        onOpenChange={
+          setWatchlistMenuOpen
+        }
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl">
+              Watchlist Settings
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 pt-1">
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Sort by
+              </p>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    changeSortMode(
+                      "percentage",
+                    )
+                  }
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                    sortMode ===
+                    "percentage"
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  Percentage
+
+                  {sortMode ===
+                    "percentage" && (
+                    <Check className="h-4 w-4" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    changeSortMode(
+                      "price",
+                    )
+                  }
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                    sortMode ===
+                    "price"
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  Price
+
+                  {sortMode ===
+                    "price" && (
+                    <Check className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </section>
+
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                Switch Watchlist
+              </p>
+
+              <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-gray-100 p-1">
+                {watchlists.map(
+                  (watchlist) => {
+                    const active =
+                      watchlist.id ===
+                      activeWatchlistId;
+
+                    return (
+                      <div
+                        key={
+                          watchlist.id
+                        }
+                        className={`flex items-center gap-2 rounded-lg ${
+                          active
+                            ? "bg-gray-100"
+                            : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            switchWatchlist(
+                              watchlist.id,
+                            )
+                          }
+                          className="flex min-h-[44px] min-w-0 flex-1 items-center justify-between px-3 text-left text-sm font-semibold text-gray-900"
+                        >
+                          <span className="truncate">
+                            {
+                              watchlist.name
+                            }
+                          </span>
+
+                          {active && (
+                            <Check className="h-4 w-4 shrink-0" />
+                          )}
+                        </button>
+
+                        {!watchlist.is_default && (
+                          <button
+                            type="button"
+                            aria-label={`Delete ${watchlist.name}`}
+                            disabled={
+                              watchlistSaving
+                            }
+                            onClick={() =>
+                              void deleteWatchlist(
+                                watchlist,
+                              )
+                            }
+                            className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            </section>
+
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                New Watchlist
+              </p>
+
+              <form
+                onSubmit={
+                  createWatchlist
+                }
+                className="flex gap-2"
+              >
+                <Input
+                  value={
+                    newWatchlistName
+                  }
+                  maxLength={40}
+                  placeholder="e.g. Growth Stocks"
+                  onChange={(event) =>
+                    setNewWatchlistName(
+                      event.target.value,
+                    )
+                  }
+                />
+
+                <Button
+                  type="submit"
+                  disabled={
+                    watchlistSaving ||
+                    !newWatchlistName.trim()
+                  }
+                  className="shrink-0"
+                >
+                  {watchlistSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Create"
+                  )}
+                </Button>
+              </form>
+            </section>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AddTickerDialog
         open={addDialogOpen}
@@ -1888,14 +2585,33 @@ export default function Watchlist() {
       )}
 
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center justify-center px-4 py-4 sm:px-6">
-          <div className="flex items-center justify-center gap-1">
+        <div className="mx-auto grid max-w-5xl grid-cols-[44px_1fr_44px] items-center px-4 py-4 sm:px-6">
+          <button
+            type="button"
+            aria-label="Open watchlist settings"
+            onClick={() =>
+              setWatchlistMenuOpen(
+                true,
+              )
+            }
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-gray-900 transition-colors hover:bg-gray-100 active:scale-95"
+          >
+            <Menu
+              className="h-6 w-6"
+              strokeWidth={1.8}
+            />
+          </button>
+
+          <div className="flex min-w-0 items-center justify-center gap-1">
             <Star className="h-9 w-9 shrink-0 fill-amber-400 text-amber-400" />
 
-            <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
-              Watchlist
+            <h1 className="truncate font-heading text-2xl font-bold leading-none text-gray-900">
+              {activeWatchlist?.name ||
+                "Watchlist"}
             </h1>
           </div>
+
+          <div aria-hidden="true" />
         </div>
       </header>
 
@@ -1912,7 +2628,13 @@ export default function Watchlist() {
         <Plus className="h-6 w-6 text-gray-800" />
       </button>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-6 pt-2 sm:px-6 sm:pt-3">
+      <main
+        className="mx-auto w-full max-w-5xl flex-1 px-4 pt-2 sm:px-6 sm:pt-3"
+        style={{
+          paddingBottom:
+            "calc(env(safe-area-inset-bottom) + 9rem)",
+        }}
+      >
         {loading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
@@ -1922,7 +2644,7 @@ export default function Watchlist() {
             <Star className="mx-auto h-8 w-8 fill-amber-400 text-amber-400" />
 
             <h2 className="mt-3 font-semibold text-gray-900">
-              Nothing here yet
+              Nothing in this watchlist yet
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
