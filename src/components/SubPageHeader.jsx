@@ -1,38 +1,60 @@
 import React from "react";
-import { ChevronLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 /**
- * Unified sub-page header with centered title and native-feeling back button.
- * @param {string} title - Page title (centered)
- * @param {string} [backPath] - If provided, navigate here on back tap; otherwise goes back in history
+ * Shared sub-page header with a centered title and
+ * the same minimal back button used on Stock Detail.
+ *
+ * @param {string} title - Page title shown in the center.
+ * @param {string} [backPath] - Optional route to navigate to.
  */
-export default function SubPageHeader({ title, backPath }) {
+export default function SubPageHeader({
+  title,
+  backPath,
+}) {
   const navigate = useNavigate();
-  const handleBack = () => (backPath ? navigate(backPath) : navigate(-1));
+
+  const handleBack = () => {
+    if (backPath) {
+      navigate(backPath);
+      return;
+    }
+
+    navigate(-1);
+  };
 
   return (
     <header
-      className="bg-white border-b border-gray-100 sticky top-0 z-10"
-      style={{ paddingTop: "env(safe-area-inset-top)" }}
+      className="sticky top-0 z-10 border-b border-gray-100 bg-white"
+      style={{
+        paddingTop:
+          "env(safe-area-inset-top)",
+      }}
     >
-      <div className="max-w-4xl mx-auto px-2 sm:px-4 py-3 flex items-center">
-        {/* Back button — fixed-width left slot */}
+      <div className="mx-auto flex max-w-4xl items-center px-2 py-3 sm:px-4">
         <button
+          type="button"
           onClick={handleBack}
-          className="flex items-center gap-0.5 text-sm font-medium text-gray-900 hover:text-gray-500 transition-colors min-w-[64px] min-h-[44px] px-2 -ml-1"
+          aria-label="Go back"
+          className="inline-flex min-h-[36px] min-w-[64px] items-center gap-1.5 px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
         >
-          <ChevronLeft className="w-5 h-5 shrink-0" />
+          <ArrowLeft
+            className="h-4 w-4 shrink-0"
+            strokeWidth={2}
+          />
+
           Back
         </button>
 
-        {/* Centered title */}
-        <h1 className="flex-1 text-center font-heading text-base font-semibold tracking-tight truncate px-2">
+        <h1 className="flex-1 truncate px-2 text-center font-heading text-base font-semibold tracking-tight">
           {title}
         </h1>
 
-        {/* Right spacer — mirrors left button width so title stays truly centred */}
-        <div className="min-w-[64px]" />
+        <div
+          className="min-w-[64px]"
+          aria-hidden="true"
+        />
       </div>
     </header>
   );
