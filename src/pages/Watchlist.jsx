@@ -1783,8 +1783,8 @@ export default function Watchlist() {
         <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
           <div aria-hidden="true" />
 
-          <div className="flex items-center justify-center gap-3">
-            <Star className="h-12 w-12 shrink-0 fill-amber-400 text-amber-400" />
+          <div className="flex items-center justify-center gap-1">
+            <Star className="h-9 w-9 shrink-0 fill-amber-400 text-amber-400" />
 
             <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
               Watchlist
