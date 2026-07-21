@@ -5,6 +5,7 @@ import React, {
   useState,
 } from "react";
 import {
+  useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
@@ -28,6 +29,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
+import { useMarketData } from "@/lib/MarketDataContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -100,6 +102,60 @@ const PERIOD_CONFIG = {
 };
 
 const TOOLTIP_HIDE_DELAY = 2500;
+
+function normalizePrefetchedQuote(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const currentPrice = Number(
+    value.c ??
+      value.currentPrice ??
+      value.current_price ??
+      value.price,
+  );
+
+  const previousClose = Number(
+    value.pc ??
+      value.previousClose ??
+      value.previous_close,
+  );
+
+  const dailyPercent = Number(
+    value.dp ??
+      value.dailyGain ??
+      value.dailyPercent ??
+      value.changePercent ??
+      value.change_percent,
+  );
+
+  const dailyChange = Number(
+    value.d ??
+      value.dailyChange ??
+      value.change,
+  );
+
+  const normalized = {
+    c: Number.isFinite(currentPrice)
+      ? currentPrice
+      : null,
+    pc: Number.isFinite(previousClose)
+      ? previousClose
+      : null,
+    dp: Number.isFinite(dailyPercent)
+      ? dailyPercent
+      : null,
+    d: Number.isFinite(dailyChange)
+      ? dailyChange
+      : null,
+  };
+
+  return Object.values(
+    normalized,
+  ).some(Number.isFinite)
+    ? normalized
+    : null;
+}
 
 async function finnhubProxy(body, signal) {
   const response = await fetch("/api/finnhub", {
@@ -490,6 +546,8 @@ function StockChart({
   activePeriod,
   onPeriodChange,
   onPeriodReturnChange,
+  onDailyReturnChange,
+  initialDailyReturn,
 }) {
   const [compareTicker, setCompareTicker] =
     useState("");
@@ -510,7 +568,14 @@ function StockChart({
     useState("");
 
   const [primaryReturn, setPrimaryReturn] =
-    useState(null);
+    useState(
+      activePeriod === "1D" &&
+        Number.isFinite(
+          initialDailyReturn,
+        )
+        ? initialDailyReturn
+        : null,
+    );
 
   const [tooltipVisible, setTooltipVisible] =
     useState(false);
@@ -552,6 +617,19 @@ function StockChart({
   useEffect(() => {
     hideTooltip();
 
+    const fallbackReturn =
+      activePeriod === "1D" &&
+      Number.isFinite(
+        initialDailyReturn,
+      )
+        ? initialDailyReturn
+        : null;
+
+    setPrimaryReturn(fallbackReturn);
+    onPeriodReturnChange(
+      fallbackReturn,
+    );
+
     const controller =
       new AbortController();
 
@@ -574,6 +652,15 @@ function StockChart({
         onPeriodReturnChange(
           nextReturn,
         );
+
+        if (
+          activePeriod === "1D" &&
+          Number.isFinite(nextReturn)
+        ) {
+          onDailyReturnChange(
+            nextReturn,
+          );
+        }
 
         if (compareTicker) {
           const comparison =
@@ -621,8 +708,21 @@ function StockChart({
         );
 
         setChartData([]);
-        setPrimaryReturn(null);
-        onPeriodReturnChange(null);
+        setPrimaryReturn(
+          fallbackReturn,
+        );
+        onPeriodReturnChange(
+          fallbackReturn,
+        );
+
+        if (
+          activePeriod === "1D" &&
+          !Number.isFinite(
+            initialDailyReturn,
+          )
+        ) {
+          onDailyReturnChange(null);
+        }
 
         setChartError(
           error?.message ||
@@ -646,6 +746,8 @@ function StockChart({
     activePeriod,
     compareTicker,
     onPeriodReturnChange,
+    onDailyReturnChange,
+    initialDailyReturn,
   ]);
 
   const periodStartPrice =
@@ -703,16 +805,46 @@ function StockChart({
 
   function selectPeriod(period) {
     hideTooltip();
-    onPeriodReturnChange(null);
+
+    const fallbackReturn =
+      period === "1D" &&
+      Number.isFinite(
+        initialDailyReturn,
+      )
+        ? initialDailyReturn
+        : null;
+
+    setPrimaryReturn(fallbackReturn);
+    onPeriodReturnChange(
+      fallbackReturn,
+    );
     onPeriodChange(period);
   }
 
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h2 className="mr-2 text-base font-semibold text-gray-900">
+        <h2 className="text-base font-semibold text-gray-900">
           Price Chart
         </h2>
+
+        <span
+          className={`text-sm font-semibold ${
+            Number.isFinite(primaryReturn)
+              ? primaryReturn >= 0
+                ? "text-emerald-600"
+                : "text-red-600"
+              : "text-gray-400"
+          }`}
+        >
+          {Number.isFinite(primaryReturn)
+            ? `${
+                primaryReturn >= 0
+                  ? "+"
+                  : ""
+              }${primaryReturn.toFixed(2)}%`
+            : "—"}
+        </span>
 
         {compareTicker && (
           <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-600">
@@ -1374,7 +1506,13 @@ export default function StockDetail() {
     useParams();
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+
+  const {
+    quotes = {},
+    fetchQuotes,
+  } = useMarketData();
 
   const [stock, setStock] =
     useState(null);
@@ -1398,9 +1536,12 @@ export default function StockDetail() {
     useState(false);
 
   const [activePeriod, setActivePeriod] =
-    useState("1M");
+    useState("1D");
 
   const [periodReturn, setPeriodReturn] =
+    useState(null);
+
+  const [dailyReturn, setDailyReturn] =
     useState(null);
 
   const isTickerRoute =
@@ -1418,6 +1559,28 @@ export default function StockDetail() {
   const stockId = isTickerRoute
     ? null
     : routeValue;
+
+  const routeStateQuote =
+    normalizePrefetchedQuote(
+      location.state?.quote ??
+        location.state?.cachedQuote ??
+        location.state?.marketQuote ??
+        location.state?.marketData ??
+        location.state,
+    );
+
+  const routeStateTicker = String(
+    location.state?.ticker ||
+      location.state?.symbol ||
+      "",
+  )
+    .trim()
+    .toUpperCase();
+
+  const routeStateCompanyName =
+    location.state?.companyName ||
+    location.state?.company_name ||
+    "";
 
   function handleBack() {
     const hasPreviousAppPage =
@@ -1448,8 +1611,59 @@ export default function StockDetail() {
     async function loadStock() {
       setLoading(true);
       setPageError("");
-      setActivePeriod("1M");
+      setActivePeriod("1D");
       setPeriodReturn(null);
+
+      const cachedTicker =
+        tickerFromRoute ||
+        routeStateTicker;
+
+      const cachedQuote =
+        routeStateQuote ||
+        normalizePrefetchedQuote(
+          quotes[cachedTicker],
+        );
+
+      if (
+        Number.isFinite(
+          cachedQuote?.dp,
+        )
+      ) {
+        setDailyReturn(
+          cachedQuote.dp,
+        );
+      } else {
+        setDailyReturn(null);
+      }
+
+      if (
+        isTickerRoute &&
+        Number.isFinite(
+          cachedQuote?.c,
+        ) &&
+        cachedQuote.c > 0
+      ) {
+        setStock({
+          ticker: tickerFromRoute,
+          company_name:
+            routeStateCompanyName ||
+            tickerFromRoute,
+          sector: "",
+          logo_url: "",
+          current_price:
+            cachedQuote.c,
+          purchase_price:
+            Number.isFinite(
+              cachedQuote.pc,
+            )
+              ? cachedQuote.pc
+              : cachedQuote.c,
+          quantity: 0,
+          _watchlistOnly: true,
+        });
+
+        setLoading(false);
+      }
 
       try {
         if (isTickerRoute) {
@@ -1473,6 +1687,22 @@ export default function StockDetail() {
               ),
             ]);
 
+          const resolvedQuote =
+            normalizePrefetchedQuote(
+              quote,
+            ) ||
+            cachedQuote;
+
+          if (
+            Number.isFinite(
+              resolvedQuote?.dp,
+            )
+          ) {
+            setDailyReturn(
+              resolvedQuote.dp,
+            );
+          }
+
           setStock({
             ticker: tickerFromRoute,
             company_name:
@@ -1484,10 +1714,13 @@ export default function StockDetail() {
             logo_url:
               profile?.logo || "",
             current_price:
-              Number(quote?.c) || 0,
+              Number(
+                resolvedQuote?.c,
+              ) || 0,
             purchase_price:
               Number(
-                quote?.pc || quote?.c,
+                resolvedQuote?.pc ||
+                  resolvedQuote?.c,
               ) || 0,
             quantity: 0,
             _watchlistOnly: true,
@@ -1504,15 +1737,48 @@ export default function StockDetail() {
             throw error;
           }
 
-          setStock(
-            data
-              ? {
-                  ...data,
-                  _watchlistOnly:
-                    false,
-                }
-              : null,
-          );
+          if (data) {
+            const normalizedTicker =
+              String(
+                data.ticker || "",
+              )
+                .trim()
+                .toUpperCase();
+
+            const cachedPortfolioQuote =
+              routeStateQuote ||
+              normalizePrefetchedQuote(
+                quotes[
+                  normalizedTicker
+                ],
+              );
+
+            if (
+              Number.isFinite(
+                cachedPortfolioQuote?.dp,
+              )
+            ) {
+              setDailyReturn(
+                cachedPortfolioQuote.dp,
+              );
+            }
+
+            setStock({
+              ...data,
+              current_price:
+                Number.isFinite(
+                  cachedPortfolioQuote?.c,
+                ) &&
+                cachedPortfolioQuote.c >
+                  0
+                  ? cachedPortfolioQuote.c
+                  : data.current_price,
+              _watchlistOnly:
+                false,
+            });
+          } else {
+            setStock(null);
+          }
         }
       } catch (error) {
         if (
@@ -1550,6 +1816,112 @@ export default function StockDetail() {
     isTickerRoute,
     stockId,
     tickerFromRoute,
+  ]);
+
+
+  useEffect(() => {
+    const normalizedTicker =
+      String(stock?.ticker || "")
+        .trim()
+        .toUpperCase();
+
+    if (!normalizedTicker) {
+      return undefined;
+    }
+
+    let active = true;
+
+    function applyQuote(value) {
+      if (!active) {
+        return;
+      }
+
+      const quote =
+        normalizePrefetchedQuote(
+          value,
+        );
+
+      if (!quote) {
+        return;
+      }
+
+      if (
+        Number.isFinite(quote.dp)
+      ) {
+        setDailyReturn(quote.dp);
+      }
+
+      if (
+        Number.isFinite(quote.c) &&
+        quote.c > 0
+      ) {
+        setStock((previous) => {
+          if (
+            !previous ||
+            previous.ticker
+              ?.toUpperCase() !==
+              normalizedTicker
+          ) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            current_price: quote.c,
+            purchase_price:
+              previous._watchlistOnly &&
+              Number.isFinite(
+                quote.pc,
+              )
+                ? quote.pc
+                : previous.purchase_price,
+          };
+        });
+      }
+    }
+
+    const stateQuoteMatches =
+      !routeStateTicker ||
+      routeStateTicker ===
+        normalizedTicker;
+
+    if (
+      stateQuoteMatches &&
+      routeStateQuote
+    ) {
+      applyQuote(routeStateQuote);
+    }
+
+    applyQuote(
+      quotes[normalizedTicker],
+    );
+
+    fetchQuotes([
+      normalizedTicker,
+    ])
+      .then((result) => {
+        applyQuote(
+          result?.[
+            normalizedTicker
+          ] ||
+            quotes[
+              normalizedTicker
+            ],
+        );
+      })
+      .catch((error) => {
+        console.warn(
+          "Stock detail quote prefetch failed:",
+          error,
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    stock?.ticker,
+    fetchQuotes,
   ]);
 
   useEffect(() => {
@@ -1915,16 +2287,16 @@ export default function StockDetail() {
 
   const gain = totalValue - totalCost;
 
-  const hasPeriodReturn =
-    Number.isFinite(periodReturn);
+  const hasDailyReturn =
+    Number.isFinite(dailyReturn);
 
   const displayReturn =
-    hasPeriodReturn
-      ? periodReturn
+    hasDailyReturn
+      ? dailyReturn
       : null;
 
   const displayPositive =
-    hasPeriodReturn
+    hasDailyReturn
       ? displayReturn >= 0
       : gain >= 0;
 
@@ -1940,32 +2312,51 @@ export default function StockDetail() {
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 pb-10 sm:px-6">
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              {stock.sector && (
-                <span>{stock.sector}</span>
-              )}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2.5">
+                {stock.logo_url && (
+                  <img
+                    src={stock.logo_url}
+                    alt=""
+                    className="h-9 w-9 shrink-0 rounded-lg border border-gray-100 object-contain"
+                  />
+                )}
 
-              <span>#{stock.ticker}</span>
+                <h1 className="min-w-0 truncate text-xl font-bold leading-tight text-gray-900 sm:text-2xl">
+                  {stock.company_name}
+                </h1>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              {stock.logo_url && (
-                <img
-                  src={stock.logo_url}
-                  alt=""
-                  className="h-10 w-10 rounded-lg border border-gray-100 object-contain"
-                />
-              )}
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                type="button"
+                onClick={() =>
+                  setBuyOpen(true)
+                }
+                className="h-8 min-w-[58px] rounded-md bg-black px-3 text-[11px] font-semibold text-white hover:bg-gray-800 sm:min-w-[64px] sm:text-xs"
+              >
+                Buy
+              </Button>
 
-              <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-                {stock.company_name}
-              </h1>
+              {!stock._watchlistOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setSellOpen(true)
+                  }
+                  className="h-8 min-w-[58px] rounded-md px-3 text-[11px] font-semibold sm:min-w-[64px] sm:text-xs"
+                >
+                  Sell
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-end gap-3">
-            <p className="text-4xl font-bold tracking-tight text-gray-900">
+          <div className="mt-4 flex flex-wrap items-end gap-2.5">
+            <p className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2rem]">
               {currentPrice > 0
                 ? `$${currentPrice.toFixed(
                     2,
@@ -1974,35 +2365,31 @@ export default function StockDetail() {
             </p>
 
             <div
-              className={`mb-1 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
+              className={`mb-0.5 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
                 displayPositive
                   ? "bg-emerald-50 text-emerald-600"
                   : "bg-red-50 text-red-600"
               }`}
             >
-              {hasPeriodReturn &&
+              {hasDailyReturn &&
                 (displayPositive ? (
                   <TrendingUp className="h-4 w-4" />
                 ) : (
                   <TrendingDown className="h-4 w-4" />
                 ))}
 
-              {hasPeriodReturn
+              {hasDailyReturn
                 ? `${
                     displayPositive
                       ? "+"
                       : ""
                   }${displayReturn.toFixed(2)}%`
                 : "—"}
-
-              <span className="ml-1 text-[10px] font-bold uppercase opacity-70">
-                {activePeriod}
-              </span>
             </div>
           </div>
 
           {!stock._watchlistOnly && (
-            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">
               {[
                 {
                   label: "Shares",
@@ -2054,38 +2441,17 @@ export default function StockDetail() {
               ))}
             </div>
           )}
-
-          <div className="mt-5 flex justify-end gap-2">
-            <Button
-              type="button"
-              onClick={() =>
-                setBuyOpen(true)
-              }
-              className="h-9 min-w-[72px] rounded-md bg-black px-4 text-xs font-semibold text-white hover:bg-gray-800"
-            >
-              Buy
-            </Button>
-
-            {!stock._watchlistOnly && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setSellOpen(true)
-                }
-                className="h-9 min-w-[72px] rounded-md px-4 text-xs font-semibold"
-              >
-                Sell
-              </Button>
-            )}
-          </div>
         </section>
 
         <StockChart
           ticker={stock.ticker}
           currentPrice={currentPrice}
           fallbackPositive={
-            gain >= 0
+            Number.isFinite(
+              dailyReturn,
+            )
+              ? dailyReturn >= 0
+              : gain >= 0
           }
           activePeriod={activePeriod}
           onPeriodChange={
@@ -2093,6 +2459,12 @@ export default function StockDetail() {
           }
           onPeriodReturnChange={
             setPeriodReturn
+          }
+          onDailyReturnChange={
+            setDailyReturn
+          }
+          initialDailyReturn={
+            dailyReturn
           }
         />
 
