@@ -1235,7 +1235,7 @@ export default function PortfolioGrowthChart({
               className={`min-w-[38px] shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
                 period ===
                 periodOption
-                  ? "bg-gray-900 text-white"
+                  ? "bg-black text-white"
                   : "text-gray-500 hover:bg-gray-100"
               }`}
             >
