@@ -14,6 +14,7 @@ type DeliveryKind = "scheduled" | "manual";
 type DeliveryStatus =
   | "pending"
   | "processing"
+  | "ready"
   | "sent"
   | "failed"
   | "skipped";
@@ -177,6 +178,65 @@ function requireEnvironment(): void {
       `Missing Edge Function secrets: ${missing.join(", ")}`,
     );
   }
+}
+
+function getErrorMessage(
+  error: unknown,
+  fallback = "Monthly report function failed",
+): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (
+    error &&
+    typeof error === "object"
+  ) {
+    const record =
+      error as Record<string, unknown>;
+
+    const parts = [
+      record.message,
+      record.details,
+      record.hint,
+      record.code,
+    ]
+      .filter(
+        (value) =>
+          typeof value === "string" &&
+          value.trim(),
+      )
+      .map((value) =>
+        String(value).trim()
+      );
+
+    if (parts.length) {
+      return [...new Set(parts)].join(" — ");
+    }
+
+    try {
+      const serialized =
+        JSON.stringify(error);
+
+      if (
+        serialized &&
+        serialized !== "{}"
+      ) {
+        return serialized;
+      }
+    } catch {
+      // Use the fallback below.
+    }
+  }
+
+  if (
+    typeof error === "string" &&
+    error.trim()
+  ) {
+    return error.trim();
+  }
+
+  return fallback;
 }
 
 function numberOrZero(value: unknown): number {
@@ -593,12 +653,22 @@ async function loadReportData(
     delivery.report_month,
   );
 
-  const [profileResult, stocksResult, transactions] = await Promise.all([
+  const [
+    profileResult,
+    authUserResult,
+    stocksResult,
+    transactions,
+  ] = await Promise.all([
     service
       .from("profiles")
       .select("id,email,full_name")
       .eq("id", delivery.user_id)
-      .single(),
+      .maybeSingle(),
+
+    service.auth.admin.getUserById(
+      delivery.user_id,
+    ),
+
     service
       .from("stocks")
       .select(
@@ -606,6 +676,7 @@ async function loadReportData(
       )
       .eq("user_id", delivery.user_id)
       .order("ticker", { ascending: true }),
+
     fetchAllTransactions(
       service,
       delivery.user_id,
@@ -615,14 +686,69 @@ async function loadReportData(
   ]);
 
   if (profileResult.error) {
-    throw profileResult.error;
+    throw new Error(
+      getErrorMessage(
+        profileResult.error,
+        "Unable to load the report profile.",
+      ),
+    );
+  }
+
+  if (
+    authUserResult.error &&
+    !profileResult.data
+  ) {
+    throw new Error(
+      getErrorMessage(
+        authUserResult.error,
+        "Unable to load the authenticated user.",
+      ),
+    );
   }
 
   if (stocksResult.error) {
-    throw stocksResult.error;
+    throw new Error(
+      getErrorMessage(
+        stocksResult.error,
+        "Unable to load portfolio holdings.",
+      ),
+    );
   }
 
-  const profile = profileResult.data as ProfileRow;
+  const authUser =
+    authUserResult.data?.user;
+
+  const metadata =
+    authUser?.user_metadata &&
+    typeof authUser.user_metadata === "object"
+      ? authUser.user_metadata as Record<string, unknown>
+      : {};
+
+  const profile: ProfileRow = {
+    id: delivery.user_id,
+
+    email:
+      profileResult.data?.email ||
+      authUser?.email ||
+      (
+        delivery.recipient_email !== "in-app"
+          ? delivery.recipient_email
+          : null
+      ),
+
+    full_name:
+      profileResult.data?.full_name ||
+      (
+        typeof metadata.full_name === "string"
+          ? metadata.full_name
+          : null
+      ) ||
+      (
+        typeof metadata.name === "string"
+          ? metadata.name
+          : null
+      ),
+  };
   const stocks = (stocksResult.data || []) as StockRow[];
   const quotes = await fetchQuotesInBatches(stocks);
   const holdings = buildHoldingSummaries(stocks, quotes);
@@ -1563,7 +1689,10 @@ async function markDeliveryFailed(
   error: unknown,
 ): Promise<void> {
   const message =
-    error instanceof Error ? error.message : "Unknown report generation error";
+    getErrorMessage(
+      error,
+      "Unknown report generation error",
+    );
   const delayMinutes = Math.min(
     360,
     Math.max(15, Math.pow(Math.max(1, delivery.attempt_count), 2) * 15),
@@ -1934,13 +2063,18 @@ export default {
 
       return jsonResponse({ error: "Unknown action" }, 400);
     } catch (error) {
-      console.error("Monthly report function failed:", error);
+      const message =
+        getErrorMessage(error);
+
+      console.error(
+        "Monthly report function failed:",
+        message,
+        error,
+      );
+
       return jsonResponse(
         {
-          error:
-            error instanceof Error
-              ? error.message
-              : "Monthly report function failed",
+          error: message,
         },
         500,
       );
