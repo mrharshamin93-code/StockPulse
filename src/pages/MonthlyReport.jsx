@@ -174,6 +174,52 @@ function reportTone(status) {
   };
 }
 
+
+async function getFunctionErrorMessage(
+  functionError,
+  fallbackMessage,
+) {
+  try {
+    const response =
+      functionError?.context;
+
+    if (
+      response &&
+      typeof response.clone === "function"
+    ) {
+      const payload =
+        await response
+          .clone()
+          .json()
+          .catch(() => null);
+
+      if (
+        payload?.error &&
+        typeof payload.error === "string"
+      ) {
+        return payload.error;
+      }
+
+      if (
+        payload?.message &&
+        typeof payload.message === "string"
+      ) {
+        return payload.message;
+      }
+    }
+  } catch (parseError) {
+    console.warn(
+      "Could not parse Edge Function error response:",
+      parseError,
+    );
+  }
+
+  return (
+    functionError?.message ||
+    fallbackMessage
+  );
+}
+
 async function createReportSignedUrl(storagePath) {
   const { data, error } = await supabase.storage
     .from(REPORT_BUCKET)
@@ -356,7 +402,12 @@ export default function MonthlyReport() {
         );
 
       if (functionError) {
-        throw functionError;
+        throw new Error(
+          await getFunctionErrorMessage(
+            functionError,
+            "The report could not be generated.",
+          ),
+        );
       }
 
       if (!data?.ok) {
@@ -487,7 +538,12 @@ export default function MonthlyReport() {
         );
 
       if (functionError) {
-        throw functionError;
+        throw new Error(
+          await getFunctionErrorMessage(
+            functionError,
+            "The report could not be deleted.",
+          ),
+        );
       }
 
       if (!data?.ok) {
