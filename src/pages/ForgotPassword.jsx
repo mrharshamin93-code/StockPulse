@@ -9,7 +9,9 @@ import {
   MailCheck,
 } from "lucide-react";
 
-import { supabase } from "@/lib/supabase";
+import {
+  passwordRecoverySupabase,
+} from "@/lib/passwordRecoverySupabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,26 +23,43 @@ function getResetRedirectUrl() {
   ).toString();
 }
 
-function getFriendlyErrorMessage(error) {
-  const message = String(
-    error?.message || "",
-  ).toLowerCase();
+function getFriendlyErrorMessage(
+  error,
+) {
+  const message =
+    String(
+      error?.message || "",
+    ).toLowerCase();
 
   if (
-    message.includes("rate limit") ||
-    message.includes("too many")
+    message.includes(
+      "rate limit",
+    ) ||
+    message.includes(
+      "too many",
+    )
   ) {
-    return "Too many reset requests were made. Please wait a few minutes and try again.";
+    return (
+      "Too many reset requests were made. " +
+      "Please wait a few minutes and try again."
+    );
   }
 
   if (
-    message.includes("email") &&
-    message.includes("invalid")
+    message.includes(
+      "email",
+    ) &&
+    message.includes(
+      "invalid",
+    )
   ) {
     return "Enter a valid email address.";
   }
 
-  return "We could not send the reset email. Please try again.";
+  return (
+    "We could not send the reset email. " +
+    "Please try again."
+  );
 }
 
 export default function ForgotPassword() {
@@ -70,7 +89,9 @@ export default function ForgotPassword() {
     event.preventDefault();
 
     const normalizedEmail =
-      email.trim().toLowerCase();
+      email
+        .trim()
+        .toLowerCase();
 
     if (
       !normalizedEmail ||
@@ -84,26 +105,31 @@ export default function ForgotPassword() {
 
     try {
       const {
-        error: resetError,
+        error:
+          resetError,
       } =
-        await supabase.auth.resetPasswordForEmail(
-          normalizedEmail,
-          {
-            redirectTo:
-              getResetRedirectUrl(),
-          },
-        );
+        await passwordRecoverySupabase
+          .auth
+          .resetPasswordForEmail(
+            normalizedEmail,
+            {
+              redirectTo:
+                getResetRedirectUrl(),
+            },
+          );
 
       if (resetError) {
         throw resetError;
       }
 
       /*
-       * Keep this message generic so the page does not
-       * reveal whether an email address is registered.
+       * Keep the response generic so the page does not
+       * reveal whether the email address is registered.
        */
       setSent(true);
-    } catch (resetError) {
+    } catch (
+      resetError
+    ) {
       console.error(
         "Password reset email failed:",
         resetError,
@@ -119,10 +145,11 @@ export default function ForgotPassword() {
     }
   };
 
-  const resetForm = () => {
-    setSent(false);
-    setError("");
-  };
+  const resetForm =
+    () => {
+      setSent(false);
+      setError("");
+    };
 
   return (
     <div
@@ -130,6 +157,7 @@ export default function ForgotPassword() {
       style={{
         paddingTop:
           "env(safe-area-inset-top)",
+
         paddingBottom:
           "env(safe-area-inset-bottom)",
       }}
@@ -176,7 +204,9 @@ export default function ForgotPassword() {
                 type="button"
                 variant="outline"
                 className="mt-5 w-full"
-                onClick={resetForm}
+                onClick={
+                  resetForm
+                }
               >
                 Send another link
               </Button>
@@ -194,6 +224,7 @@ export default function ForgotPassword() {
                   className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm leading-5 text-red-700"
                 >
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+
                   <span>
                     {error}
                   </span>
@@ -211,10 +242,16 @@ export default function ForgotPassword() {
                   inputMode="email"
                   autoComplete="email"
                   placeholder="you@example.com"
-                  value={email}
-                  onChange={(event) => {
+                  value={
+                    email
+                  }
+                  onChange={(
+                    event,
+                  ) => {
                     setEmail(
-                      event.target.value,
+                      event
+                        .target
+                        .value,
                     );
 
                     if (error) {
