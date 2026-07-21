@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   AnimatePresence,
   motion,
@@ -837,7 +837,9 @@ function WatchlistCard({
   index,
   onRemove,
   onStarToggle,
+  onRequestPortfolioRemoval,
 }) {
+  const navigate = useNavigate();
   const hasStock = Boolean(stock);
 
   const companyName = getCompanyName(
@@ -1047,6 +1049,12 @@ function WatchlistCard({
       return;
     }
 
+    if (hasStock) {
+      closeSwipe();
+      onRequestPortfolioRemoval(item, stock);
+      return;
+    }
+
     setDeleting(true);
     setDragX(-420);
 
@@ -1064,7 +1072,7 @@ function WatchlistCard({
     }
   }
 
-  function handleLinkClick(event) {
+  function handleCardClick(event) {
     if (
       swiped ||
       suppressClick.current ||
@@ -1072,6 +1080,23 @@ function WatchlistCard({
     ) {
       event.preventDefault();
       closeSwipe();
+      return;
+    }
+
+    navigate(linkTo, {
+      state: {
+        from: "/watchlist",
+      },
+    });
+  }
+
+  function handleCardKeyDown(event) {
+    if (
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      handleCardClick(event);
     }
   }
 
@@ -1118,13 +1143,12 @@ function WatchlistCard({
         />
       </div>
 
-      <Link
-        to={linkTo}
-        state={{
-          from: "/watchlist",
-        }}
-        onClick={handleLinkClick}
-        className="block"
+      <div
+        role="link"
+        tabIndex={0}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
+        className="block cursor-pointer"
       >
         <div
           className="flex h-[78px] items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3 py-2 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
@@ -1151,9 +1175,22 @@ function WatchlistCard({
                 ? `Remove ${item.ticker} from portfolio`
                 : `Add ${item.ticker} to portfolio`
             }
-            onClick={(event) => {
-              event.preventDefault();
+            onTouchStart={(event) => {
               event.stopPropagation();
+            }}
+            onTouchEnd={(event) => {
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+
+              if (hasStock) {
+                onRequestPortfolioRemoval(
+                  item,
+                  stock,
+                );
+                return;
+              }
 
               onStarToggle(item, stock);
             }}
@@ -1222,7 +1259,7 @@ function WatchlistCard({
             </div>
           </div>
         </div>
-      </Link>
+      </div>
     </motion.div>
   );
 }
@@ -1263,6 +1300,9 @@ export default function Watchlist() {
     useState(null);
 
   const [dialogItem, setDialogItem] =
+    useState(null);
+
+  const [portfolioRemoval, setPortfolioRemoval] =
     useState(null);
 
   const searchTimer = useRef(null);
@@ -1663,37 +1703,57 @@ export default function Watchlist() {
     return true;
   }
 
-  async function togglePortfolio(
+  function requestPortfolioRemoval(
+    item,
+    stock,
+  ) {
+    if (!item || !stock) {
+      return;
+    }
+
+    setPortfolioRemoval({ item, stock });
+  }
+
+  async function confirmPortfolioRemoval() {
+    if (!portfolioRemoval || !user?.id) {
+      return;
+    }
+
+    const { item, stock } = portfolioRemoval;
+    const previous = stocks;
+
+    setPortfolioRemoval(null);
+    setStocks((value) =>
+      value.filter(
+        (entry) => entry.id !== stock.id,
+      ),
+    );
+
+    const { error } = await supabase
+      .from("stocks")
+      .delete()
+      .eq("id", stock.id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setStocks(previous);
+      setToast(
+        "Failed to update portfolio.",
+      );
+      return;
+    }
+
+    setToast(
+      `${item.ticker} removed from portfolio`,
+    );
+  }
+
+  function togglePortfolio(
     item,
     stock,
   ) {
     if (stock) {
-      const previous = stocks;
-
-      setStocks((value) =>
-        value.filter(
-          (entry) =>
-            entry.id !== stock.id,
-        ),
-      );
-
-      const { error } = await supabase
-        .from("stocks")
-        .delete()
-        .eq("id", stock.id)
-        .eq("user_id", user.id);
-
-      if (error) {
-        setStocks(previous);
-        setToast(
-          "Failed to update portfolio.",
-        );
-      } else {
-        setToast(
-          `${item.ticker} removed from portfolio`,
-        );
-      }
-
+      requestPortfolioRemoval(item, stock);
       return;
     }
 
@@ -1757,6 +1817,49 @@ export default function Watchlist() {
         onAdd={addTicker}
       />
 
+      <Dialog
+        open={Boolean(portfolioRemoval)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPortfolioRemoval(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader className="sr-only">
+            <DialogTitle>
+              Confirm portfolio removal
+            </DialogTitle>
+          </DialogHeader>
+
+          <p className="pt-1 text-center text-base font-medium text-gray-900">
+            Remove {portfolioRemoval?.item?.ticker} from your portfolio?
+          </p>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setPortfolioRemoval(null)
+              }
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() =>
+                void confirmPortfolioRemoval()
+              }
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {dialogItem && (
         <AddToPortfolioDialog
           open
@@ -1785,31 +1888,29 @@ export default function Watchlist() {
       )}
 
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 backdrop-blur-xl">
-  <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
-    <div aria-hidden="true" />
+        <div className="mx-auto flex max-w-5xl items-center justify-center px-4 py-4 sm:px-6">
+          <div className="flex items-center justify-center gap-1">
+            <Star className="h-9 w-9 shrink-0 fill-amber-400 text-amber-400" />
 
-    <div className="flex items-center justify-center gap-1">
-      <Star className="h-9 w-9 shrink-0 fill-amber-400 text-amber-400" />
+            <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
+              Watchlist
+            </h1>
+          </div>
+        </div>
+      </header>
 
-      <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
-        Watchlist
-      </h1>
-    </div>
-
-    <button
-      type="button"
-      aria-label="Add stock to watchlist"
-      onClick={() => setAddDialogOpen(true)}
-      className="flex h-10 w-10 translate-x-2 items-center justify-center justify-self-center rounded-xl border-[2px] border-black bg-white transition-colors hover:bg-gray-50 active:scale-95"
-    >
-      <Plus
-        size={26}
-        strokeWidth={2}
-        className="text-black"
-      />
-    </button>
-  </div>
-</header>
+      <button
+        type="button"
+        aria-label="Add stock to watchlist"
+        onClick={() => setAddDialogOpen(true)}
+        className="fixed left-1/2 z-50 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border border-white/60 bg-white/80 shadow-lg backdrop-blur-md transition-transform active:scale-95"
+        style={{
+          bottom:
+            "calc(env(safe-area-inset-bottom) + 68px)",
+        }}
+      >
+        <Plus className="h-6 w-6 text-gray-800" />
+      </button>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-6 pt-2 sm:px-6 sm:pt-3">
         {loading ? (
@@ -1825,7 +1926,7 @@ export default function Watchlist() {
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Tap the + button to add your first stock.
+              Tap the + button below to add your first stock.
             </p>
           </div>
         ) : (
@@ -1854,6 +1955,9 @@ export default function Watchlist() {
                     onRemove={removeTicker}
                     onStarToggle={
                       togglePortfolio
+                    }
+                    onRequestPortfolioRemoval={
+                      requestPortfolioRemoval
                     }
                   />
                 ),
