@@ -1292,7 +1292,7 @@ function WatchlistCard({
 
               {dailyGain !== null ? (
                 <div
-                  className={`mt-1.5 inline-flex min-w-[64px] items-center justify-center rounded-lg px-2.5 py-1 text-sm font-semibold leading-none text-white ${
+                  className={`mt-0.5 inline-flex min-w-[64px] items-center justify-center rounded-lg px-2.5 py-1 text-sm font-semibold leading-none text-white ${
                     positive
                       ? "bg-emerald-500"
                       : "bg-red-500"
@@ -1302,7 +1302,7 @@ function WatchlistCard({
                   {dailyGain.toFixed(2)}%
                 </div>
               ) : (
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-0.5 text-xs text-gray-400">
                   —
                 </p>
               )}
