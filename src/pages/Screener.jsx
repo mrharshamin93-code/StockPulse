@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  ArrowLeft,
   Loader2,
   Save,
   Search,
@@ -75,307 +76,6 @@ const POPULAR_SCREENS = [
     },
   },
 ];
-
-function readSessionObject(key, fallback) {
-  try {
-    const storedValue =
-      window.sessionStorage.getItem(key);
-
-    if (!storedValue) {
-      return fallback;
-    }
-
-    return JSON.parse(storedValue);
-  } catch {
-    return fallback;
-  }
-}
-
-function removeUndefinedValues(object) {
-  return Object.fromEntries(
-    Object.entries(object || {}).filter(
-      ([, value]) =>
-        value !== undefined &&
-        value !== null &&
-        value !== "",
-    ),
-  );
-}
-
-function normalizeFilters(rawFilters = {}) {
-  const next =
-    removeUndefinedValues(rawFilters);
-
-  /*
-   * Convert older saved screens:
-   *
-   * sector: "Technology"
-   *
-   * Into:
-   *
-   * sectors: ["Technology"]
-   */
-  if (Array.isArray(next.sectors)) {
-    const validSectors = [
-      ...new Set(next.sectors),
-    ]
-      .map((sector) =>
-        String(sector).trim(),
-      )
-      .filter((sector) =>
-        SECTORS.includes(sector),
-      );
-
-    if (validSectors.length > 0) {
-      next.sectors = validSectors;
-    } else {
-      delete next.sectors;
-    }
-  } else if (
-    typeof next.sector === "string" &&
-    SECTORS.includes(next.sector)
-  ) {
-    next.sectors = [next.sector];
-  }
-
-  delete next.sector;
-
-  return next;
-}
-
-function getSelectedSectors(filters) {
-  if (!Array.isArray(filters?.sectors)) {
-    return [];
-  }
-
-  return filters.sectors.filter((sector) =>
-    SECTORS.includes(sector),
-  );
-}
-
-function FilterChip({
-  label,
-  active,
-  onClick,
-  tooltip,
-}) {
-  const [showTip, setShowTip] =
-    useState(false);
-
-  const [tipStyle, setTipStyle] =
-    useState({});
-
-  const buttonRef =
-    useRef(null);
-
-  const pressTimerRef =
-    useRef(null);
-
-  const hideTimerRef =
-    useRef(null);
-
-  const longPressTriggeredRef =
-    useRef(false);
-
-  const clearPressTimer =
-    useCallback(() => {
-      window.clearTimeout(
-        pressTimerRef.current,
-      );
-
-      pressTimerRef.current = null;
-    }, []);
-
-  const closeTooltip =
-    useCallback(() => {
-      window.clearTimeout(
-        hideTimerRef.current,
-      );
-
-      hideTimerRef.current = null;
-
-      setShowTip(false);
-    }, []);
-
-  const openTooltip =
-    useCallback(() => {
-      if (
-        !tooltip ||
-        !buttonRef.current
-      ) {
-        return;
-      }
-
-      const rect =
-        buttonRef.current.getBoundingClientRect();
-
-      const tooltipWidth =
-        Math.min(
-          280,
-          window.innerWidth - 24,
-        );
-
-      const left =
-        Math.max(
-          12,
-          Math.min(
-            rect.left,
-            window.innerWidth -
-              tooltipWidth -
-              12,
-          ),
-        );
-
-      const displayBelow =
-        rect.top < 110;
-
-      setTipStyle({
-        position: "fixed",
-        top: displayBelow
-          ? rect.bottom + 8
-          : rect.top - 8,
-        transform: displayBelow
-          ? "none"
-          : "translateY(-100%)",
-        left,
-        width: tooltipWidth,
-        zIndex: 10001,
-      });
-
-      setShowTip(true);
-
-      window.clearTimeout(
-        hideTimerRef.current,
-      );
-
-      hideTimerRef.current =
-        window.setTimeout(() => {
-          setShowTip(false);
-
-          hideTimerRef.current =
-            null;
-        }, TOOLTIP_VISIBLE_MS);
-    }, [tooltip]);
-
-  useEffect(() => {
-    return () => {
-      clearPressTimer();
-
-      window.clearTimeout(
-        hideTimerRef.current,
-      );
-    };
-  }, [clearPressTimer]);
-
-  const handlePointerDown = (event) => {
-    if (!tooltip) {
-      return;
-    }
-
-    if (
-      event.pointerType === "mouse" &&
-      event.button !== 0
-    ) {
-      return;
-    }
-
-    longPressTriggeredRef.current =
-      false;
-
-    clearPressTimer();
-
-    pressTimerRef.current =
-      window.setTimeout(() => {
-        longPressTriggeredRef.current =
-          true;
-
-        openTooltip();
-      }, LONG_PRESS_MS);
-  };
-
-  const handlePointerEnd = () => {
-    clearPressTimer();
-  };
-
-  const handleClick = (event) => {
-    /*
-     * Long press opens the description without
-     * selecting or deselecting the metric.
-     */
-    if (
-      longPressTriggeredRef.current
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-
-      longPressTriggeredRef.current =
-        false;
-
-      return;
-    }
-
-    onClick?.(event);
-  };
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={handleClick}
-        onPointerDown={
-          handlePointerDown
-        }
-        onPointerUp={
-          handlePointerEnd
-        }
-        onPointerCancel={
-          handlePointerEnd
-        }
-        onPointerLeave={
-          handlePointerEnd
-        }
-        onContextMenu={(event) => {
-          if (tooltip) {
-            event.preventDefault();
-          }
-        }}
-        aria-expanded={
-          tooltip
-            ? showTip
-            : undefined
-        }
-        className={`touch-manipulation select-none whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-          active
-            ? "border-gray-900 bg-gray-900 text-white"
-            : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
-        }`}
-      >
-        {label}
-      </button>
-
-      {showTip && tooltip && (
-        <>
-          <button
-            type="button"
-            aria-label="Close metric description"
-            tabIndex={-1}
-            onClick={closeTooltip}
-            className="fixed inset-0 z-[10000] cursor-default bg-transparent"
-          />
-
-          <div
-            role="tooltip"
-            className="pointer-events-none whitespace-normal break-words rounded-lg bg-gray-900 px-3 py-2.5 text-[11px] leading-relaxed text-white shadow-xl"
-            style={tipStyle}
-          >
-            {tooltip}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 const METRIC_GROUPS = [
   {
@@ -805,6 +505,367 @@ const ALL_METRIC_DEFS =
     (group) => group.metrics,
   );
 
+function readSessionObject(
+  key,
+  fallback,
+) {
+  try {
+    const storedValue =
+      window.sessionStorage.getItem(
+        key,
+      );
+
+    if (!storedValue) {
+      return fallback;
+    }
+
+    return JSON.parse(
+      storedValue,
+    );
+  } catch {
+    return fallback;
+  }
+}
+
+function removeUndefinedValues(
+  object,
+) {
+  return Object.fromEntries(
+    Object.entries(
+      object || {},
+    ).filter(
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== "",
+    ),
+  );
+}
+
+function normalizeFilters(
+  rawFilters = {},
+) {
+  const next =
+    removeUndefinedValues(
+      rawFilters,
+    );
+
+  if (
+    Array.isArray(
+      next.sectors,
+    )
+  ) {
+    const validSectors = [
+      ...new Set(
+        next.sectors,
+      ),
+    ]
+      .map((sector) =>
+        String(
+          sector,
+        ).trim(),
+      )
+      .filter((sector) =>
+        SECTORS.includes(
+          sector,
+        ),
+      );
+
+    if (
+      validSectors.length >
+      0
+    ) {
+      next.sectors =
+        validSectors;
+    } else {
+      delete next.sectors;
+    }
+  } else if (
+    typeof next.sector ===
+      "string" &&
+    SECTORS.includes(
+      next.sector,
+    )
+  ) {
+    next.sectors = [
+      next.sector,
+    ];
+  }
+
+  delete next.sector;
+
+  return next;
+}
+
+function getSelectedSectors(
+  filters,
+) {
+  if (
+    !Array.isArray(
+      filters?.sectors,
+    )
+  ) {
+    return [];
+  }
+
+  return filters.sectors.filter(
+    (sector) =>
+      SECTORS.includes(
+        sector,
+      ),
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+  tooltip,
+}) {
+  const [
+    showTip,
+    setShowTip,
+  ] = useState(false);
+
+  const [
+    tipStyle,
+    setTipStyle,
+  ] = useState({});
+
+  const buttonRef =
+    useRef(null);
+
+  const pressTimerRef =
+    useRef(null);
+
+  const hideTimerRef =
+    useRef(null);
+
+  const longPressTriggeredRef =
+    useRef(false);
+
+  const clearPressTimer =
+    useCallback(() => {
+      window.clearTimeout(
+        pressTimerRef.current,
+      );
+
+      pressTimerRef.current =
+        null;
+    }, []);
+
+  const closeTooltip =
+    useCallback(() => {
+      window.clearTimeout(
+        hideTimerRef.current,
+      );
+
+      hideTimerRef.current =
+        null;
+
+      setShowTip(false);
+    }, []);
+
+  const openTooltip =
+    useCallback(() => {
+      if (
+        !tooltip ||
+        !buttonRef.current
+      ) {
+        return;
+      }
+
+      const rect =
+        buttonRef.current.getBoundingClientRect();
+
+      const tooltipWidth =
+        Math.min(
+          280,
+          window.innerWidth -
+            24,
+        );
+
+      const left =
+        Math.max(
+          12,
+          Math.min(
+            rect.left,
+            window.innerWidth -
+              tooltipWidth -
+              12,
+          ),
+        );
+
+      const displayBelow =
+        rect.top < 110;
+
+      setTipStyle({
+        position: "fixed",
+        top: displayBelow
+          ? rect.bottom + 8
+          : rect.top - 8,
+        transform:
+          displayBelow
+            ? "none"
+            : "translateY(-100%)",
+        left,
+        width:
+          tooltipWidth,
+        zIndex: 10001,
+      });
+
+      setShowTip(true);
+
+      window.clearTimeout(
+        hideTimerRef.current,
+      );
+
+      hideTimerRef.current =
+        window.setTimeout(
+          () => {
+            setShowTip(false);
+
+            hideTimerRef.current =
+              null;
+          },
+          TOOLTIP_VISIBLE_MS,
+        );
+    }, [tooltip]);
+
+  useEffect(() => {
+    return () => {
+      clearPressTimer();
+
+      window.clearTimeout(
+        hideTimerRef.current,
+      );
+    };
+  }, [clearPressTimer]);
+
+  const handlePointerDown = (
+    event,
+  ) => {
+    if (!tooltip) {
+      return;
+    }
+
+    if (
+      event.pointerType ===
+        "mouse" &&
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    longPressTriggeredRef.current =
+      false;
+
+    clearPressTimer();
+
+    pressTimerRef.current =
+      window.setTimeout(
+        () => {
+          longPressTriggeredRef.current =
+            true;
+
+          openTooltip();
+        },
+        LONG_PRESS_MS,
+      );
+  };
+
+  const handlePointerEnd =
+    () => {
+      clearPressTimer();
+    };
+
+  const handleClick = (
+    event,
+  ) => {
+    if (
+      longPressTriggeredRef.current
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      longPressTriggeredRef.current =
+        false;
+
+      return;
+    }
+
+    onClick?.(event);
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={
+          handleClick
+        }
+        onPointerDown={
+          handlePointerDown
+        }
+        onPointerUp={
+          handlePointerEnd
+        }
+        onPointerCancel={
+          handlePointerEnd
+        }
+        onPointerLeave={
+          handlePointerEnd
+        }
+        onContextMenu={(
+          event,
+        ) => {
+          if (tooltip) {
+            event.preventDefault();
+          }
+        }}
+        aria-expanded={
+          tooltip
+            ? showTip
+            : undefined
+        }
+        className={`touch-manipulation select-none whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+          active
+            ? "border-gray-900 bg-gray-900 text-white"
+            : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
+        }`}
+      >
+        {label}
+      </button>
+
+      {showTip &&
+        tooltip && (
+          <>
+            <button
+              type="button"
+              aria-label="Close metric description"
+              tabIndex={-1}
+              onClick={
+                closeTooltip
+              }
+              className="fixed inset-0 z-[10000] cursor-default bg-transparent"
+            />
+
+            <div
+              role="tooltip"
+              className="pointer-events-none whitespace-normal break-words rounded-lg bg-gray-900 px-3 py-2.5 text-[11px] leading-relaxed text-white shadow-xl"
+              style={
+                tipStyle
+              }
+            >
+              {tooltip}
+            </div>
+          </>
+        )}
+    </div>
+  );
+}
+
 export default function Screener() {
   const { user } =
     useAuth();
@@ -812,15 +873,43 @@ export default function Screener() {
   const navigate =
     useNavigate();
 
-  const [filters, setFilters] =
-    useState(() =>
-      normalizeFilters(
-        readSessionObject(
-          "screener_filters",
-          {},
-        ),
+  const handleBack =
+    useCallback(() => {
+      const historyIndex =
+        Number(
+          window.history.state
+            ?.idx,
+        );
+
+      if (
+        Number.isFinite(
+          historyIndex,
+        ) &&
+        historyIndex > 0
+      ) {
+        navigate(-1);
+        return;
+      }
+
+      navigate(
+        "/watchlist",
+        {
+          replace: true,
+        },
+      );
+    }, [navigate]);
+
+  const [
+    filters,
+    setFilters,
+  ] = useState(() =>
+    normalizeFilters(
+      readSessionObject(
+        "screener_filters",
+        {},
       ),
-    );
+    ),
+  );
 
   const [
     activeMetrics,
@@ -882,10 +971,6 @@ export default function Screener() {
       [filters],
     );
 
-  /*
-   * Automatically use a landscape-shaped viewport
-   * for the Screener page on portrait mobile devices.
-   */
   useEffect(() => {
     document.body.classList.add(
       "screener-force-landscape",
@@ -930,8 +1015,9 @@ export default function Screener() {
     useCallback(
       async () => {
         if (!user?.id) {
-          setSavedScreens([]);
-
+          setSavedScreens(
+            [],
+          );
           return;
         }
 
@@ -950,7 +1036,8 @@ export default function Screener() {
           .order(
             "created_at",
             {
-              ascending: false,
+              ascending:
+                false,
             },
           );
 
@@ -959,7 +1046,6 @@ export default function Screener() {
             "Failed to load saved screens:",
             error,
           );
-
           return;
         }
 
@@ -1000,14 +1086,20 @@ export default function Screener() {
     }
   }, [activeMetrics]);
 
-  const toggleMetric = (key) => {
+  const toggleMetric = (
+    key,
+  ) => {
     const currentlyActive =
-      activeMetrics.has(key);
+      activeMetrics.has(
+        key,
+      );
 
     setActiveMetrics(
       (previous) => {
         const next =
-          new Set(previous);
+          new Set(
+            previous,
+          );
 
         if (next.has(key)) {
           next.delete(key);
@@ -1050,24 +1142,27 @@ export default function Screener() {
     setActivePreset(null);
   };
 
-  const clearSectors = () => {
-    setFilters(
-      (previous) => {
-        const next = {
-          ...previous,
-        };
+  const clearSectors =
+    () => {
+      setFilters(
+        (previous) => {
+          const next = {
+            ...previous,
+          };
 
-        delete next.sectors;
-        delete next.sector;
+          delete next.sectors;
+          delete next.sector;
 
-        return next;
-      },
-    );
+          return next;
+        },
+      );
 
-    setActivePreset(null);
-  };
+      setActivePreset(null);
+    };
 
-  const toggleSector = (sector) => {
+  const toggleSector = (
+    sector,
+  ) => {
     setFilters(
       (previous) => {
         const current =
@@ -1081,7 +1176,8 @@ export default function Screener() {
           )
             ? current.filter(
                 (item) =>
-                  item !== sector,
+                  item !==
+                  sector,
               )
             : [
                 ...current,
@@ -1095,7 +1191,8 @@ export default function Screener() {
         delete next.sector;
 
         if (
-          nextSectors.length > 0
+          nextSectors.length >
+          0
         ) {
           next.sectors =
             nextSectors;
@@ -1110,90 +1207,36 @@ export default function Screener() {
     setActivePreset(null);
   };
 
-  const runScreen = async (
-    overrideFilters,
-  ) => {
-    if (
-      !user?.id ||
-      loading
-    ) {
-      if (!user?.id) {
-        showToast(
-          "Please sign in to run a screen.",
-        );
+  const runScreen =
+    async (
+      overrideFilters,
+    ) => {
+      if (
+        !user?.id ||
+        loading
+      ) {
+        if (!user?.id) {
+          showToast(
+            "Please sign in to run a screen.",
+          );
+        }
+
+        return;
       }
 
-      return;
-    }
-
-    const selectedFilters =
-      normalizeFilters(
-        overrideFilters ??
-          filters,
-      );
-
-    setLoading(true);
-
-    try {
-      window.sessionStorage.setItem(
-        "screener_filters",
-        JSON.stringify(
-          selectedFilters,
-        ),
-      );
-    } catch {
-      // Session storage is optional.
-    }
-
-    navigate(
-      "/screener/results",
-      {
-        state: {
-          loading: true,
-          results: [],
-          filters:
-            selectedFilters,
-        },
-      },
-    );
-
-    try {
-      const {
-        data,
-        error,
-      } =
-        await supabase.functions.invoke(
-          "stock-screener",
-          {
-            body: {
-              filters:
-                selectedFilters,
-            },
-          },
+      const selectedFilters =
+        normalizeFilters(
+          overrideFilters ??
+            filters,
         );
 
-      if (error) {
-        throw error;
-      }
-
-      if (data?.error) {
-        throw new Error(
-          data.error,
-        );
-      }
-
-      const results =
-        Array.isArray(
-          data?.stocks,
-        )
-          ? data.stocks
-          : [];
+      setLoading(true);
 
       try {
         window.sessionStorage.setItem(
-          "screener_last_results",
+          "screener_filters",
           JSON.stringify(
-            results,
+            selectedFilters,
           ),
         );
       } catch {
@@ -1203,41 +1246,98 @@ export default function Screener() {
       navigate(
         "/screener/results",
         {
-          replace: true,
           state: {
-            loading: false,
-            results,
-            filters:
-              selectedFilters,
-            error: "",
-          },
-        },
-      );
-    } catch (error) {
-      console.error(
-        "Stock screener failed:",
-        error,
-      );
-
-      navigate(
-        "/screener/results",
-        {
-          replace: true,
-          state: {
-            loading: false,
+            loading: true,
             results: [],
             filters:
               selectedFilters,
-            error:
-              error?.message ||
-              "Unable to run the stock screen.",
           },
         },
       );
-    } finally {
-      setLoading(false);
-    }
-  };
+
+      try {
+        const {
+          data,
+          error,
+        } =
+          await supabase.functions.invoke(
+            "stock-screener",
+            {
+              body: {
+                filters:
+                  selectedFilters,
+              },
+            },
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        if (data?.error) {
+          throw new Error(
+            data.error,
+          );
+        }
+
+        const results =
+          Array.isArray(
+            data?.stocks,
+          )
+            ? data.stocks
+            : [];
+
+        try {
+          window.sessionStorage.setItem(
+            "screener_last_results",
+            JSON.stringify(
+              results,
+            ),
+          );
+        } catch {
+          // Session storage is optional.
+        }
+
+        navigate(
+          "/screener/results",
+          {
+            replace: true,
+            state: {
+              loading:
+                false,
+              results,
+              filters:
+                selectedFilters,
+              error: "",
+            },
+          },
+        );
+      } catch (error) {
+        console.error(
+          "Stock screener failed:",
+          error,
+        );
+
+        navigate(
+          "/screener/results",
+          {
+            replace: true,
+            state: {
+              loading:
+                false,
+              results: [],
+              filters:
+                selectedFilters,
+              error:
+                error?.message ||
+                "Unable to run the stock screen.",
+            },
+          },
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
 
   const applyPreset = (
     preset,
@@ -1248,8 +1348,13 @@ export default function Screener() {
         preset.filters,
       );
 
-    setActivePreset(index);
-    setFilters(presetFilters);
+    setActivePreset(
+      index,
+    );
+
+    setFilters(
+      presetFilters,
+    );
 
     const metricKeys =
       new Set();
@@ -1258,10 +1363,12 @@ export default function Screener() {
       (definition) => {
         if (
           presetFilters[
-            definition.minKey
+            definition
+              .minKey
           ] !== undefined ||
           presetFilters[
-            definition.maxKey
+            definition
+              .maxKey
           ] !== undefined
         ) {
           metricKeys.add(
@@ -1280,78 +1387,79 @@ export default function Screener() {
     );
   };
 
-  const saveScreen = async () => {
-    const trimmedName =
-      saveName.trim();
+  const saveScreen =
+    async () => {
+      const trimmedName =
+        saveName.trim();
 
-    if (
-      !trimmedName ||
-      !user?.id ||
-      saving
-    ) {
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from(
-          "saved_screens",
-        )
-        .insert({
-          user_id:
-            user.id,
-          name:
-            trimmedName,
-          filters:
-            normalizeFilters(
-              filters,
-            ),
-          active_metrics: [
-            ...activeMetrics,
-          ],
-        })
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
+      if (
+        !trimmedName ||
+        !user?.id ||
+        saving
+      ) {
+        return;
       }
 
-      setSavedScreens(
-        (previous) => [
+      setSaving(true);
+
+      try {
+        const {
           data,
-          ...previous,
-        ],
-      );
+          error,
+        } = await supabase
+          .from(
+            "saved_screens",
+          )
+          .insert({
+            user_id:
+              user.id,
+            name:
+              trimmedName,
+            filters:
+              normalizeFilters(
+                filters,
+              ),
+            active_metrics: [
+              ...activeMetrics,
+            ],
+          })
+          .select()
+          .single();
 
-      setSaveDialogOpen(
-        false,
-      );
+        if (error) {
+          throw error;
+        }
 
-      setSaveName("");
+        setSavedScreens(
+          (previous) => [
+            data,
+            ...previous,
+          ],
+        );
 
-      showToast(
-        "Screen saved!",
-      );
-    } catch (error) {
-      console.error(
-        "Failed to save screen:",
-        error,
-      );
+        setSaveDialogOpen(
+          false,
+        );
 
-      showToast(
-        error?.message ||
-          "Failed to save screen.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+        setSaveName("");
+
+        showToast(
+          "Screen saved!",
+        );
+      } catch (error) {
+        console.error(
+          "Failed to save screen:",
+          error,
+        );
+
+        showToast(
+          error?.message ||
+            "Failed to save screen.",
+        );
+      } finally {
+        setSaving(false);
+      }
+    };
 
   const loadSavedScreen = (
     screen,
@@ -1364,8 +1472,10 @@ export default function Screener() {
 
     const savedMetrics =
       new Set(
-        screen?.active_metrics ||
-          screen?.activeMetrics ||
+        screen
+          ?.active_metrics ||
+          screen
+            ?.activeMetrics ||
           [],
       );
 
@@ -1402,25 +1512,22 @@ export default function Screener() {
         (current) =>
           current.filter(
             (screen) =>
-              screen.id !== id,
+              screen.id !==
+              id,
           ),
       );
 
-      const {
-        error,
-      } = await supabase
-        .from(
-          "saved_screens",
-        )
-        .delete()
-        .eq(
-          "id",
-          id,
-        )
-        .eq(
-          "user_id",
-          user.id,
-        );
+      const { error } =
+        await supabase
+          .from(
+            "saved_screens",
+          )
+          .delete()
+          .eq("id", id)
+          .eq(
+            "user_id",
+            user.id,
+          );
 
       if (error) {
         console.error(
@@ -1448,11 +1555,15 @@ export default function Screener() {
           ...previous,
         };
 
-        if (rawValue === "") {
+        if (
+          rawValue === ""
+        ) {
           delete next[key];
         } else {
           const value =
-            Number(rawValue);
+            Number(
+              rawValue,
+            );
 
           if (
             Number.isFinite(
@@ -1526,8 +1637,26 @@ export default function Screener() {
             "hsl(var(--background))",
         }}
       >
-        <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-1.5">
+        <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={
+              handleBack
+            }
+            aria-label="Go back"
+            className="inline-flex min-h-[36px] items-center gap-1.5 justify-self-start px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
+          >
+            <ArrowLeft
+              className="h-4 w-4 shrink-0"
+              strokeWidth={
+                2
+              }
+            />
+
+            Back
+          </button>
+
+          <div className="flex items-center justify-center gap-1.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
               <SlidersHorizontal className="h-5 w-5 text-white" />
             </div>
@@ -1542,6 +1671,10 @@ export default function Screener() {
               </p>
             </div>
           </div>
+
+          <div
+            aria-hidden="true"
+          />
         </div>
       </header>
 
@@ -1862,7 +1995,9 @@ export default function Screener() {
                 loading
               }
               onClick={() => {
-                setSaveName("");
+                setSaveName(
+                  "",
+                );
 
                 setSaveDialogOpen(
                   true,
