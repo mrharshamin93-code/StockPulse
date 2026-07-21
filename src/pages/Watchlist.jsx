@@ -763,7 +763,7 @@ function AnimatedPrice({ value }) {
 
   return (
     <span
-      className="text-sm font-semibold transition-colors duration-500"
+      className="text-lg font-semibold tracking-tight transition-colors duration-500"
       style={{
         color:
           flash === "up"
@@ -1122,7 +1122,7 @@ function WatchlistCard({
         className="block"
       >
         <div
-          className="flex h-[92px] items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
+          className="flex h-[78px] items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3 py-2 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
           style={{
             backgroundColor:
               "hsl(var(--card))",
@@ -1191,7 +1191,7 @@ function WatchlistCard({
               />
             </div>
 
-            <div className="min-w-[62px] shrink-0 text-right">
+            <div className="min-w-[76px] shrink-0 text-right">
               <p className="leading-none">
                 <AnimatedPrice
                   value={displayPrice}
@@ -1200,7 +1200,7 @@ function WatchlistCard({
 
               {dailyGain !== null ? (
                 <div
-                  className={`mt-1 inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white ${
+                  className={`mt-1.5 inline-flex min-w-[64px] items-center justify-center rounded-lg px-2.5 py-1 text-sm font-semibold leading-none text-white ${
                     positive
                       ? "bg-emerald-500"
                       : "bg-red-500"
@@ -1795,11 +1795,12 @@ export default function Watchlist() {
       type="button"
       aria-label="Add stock to watchlist"
       onClick={() => setAddDialogOpen(true)}
-      className="flex h-10 w-10 translate-x-2 items-center justify-center justify-self-center rounded-md border-2 border-gray-700 bg-white shadow-sm transition-all hover:bg-gray-50 active:scale-95"
+      className="flex h-10 w-10 translate-x-2 items-center justify-center justify-self-center rounded-xl border-[2px] border-black bg-white transition-colors hover:bg-gray-50 active:scale-95"
     >
       <Plus
-        className="h-7 w-7 text-gray-500"
+        size={26}
         strokeWidth={2}
+        className="text-black"
       />
     </button>
   </div>
