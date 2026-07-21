@@ -18,6 +18,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  ArrowLeft,
   Loader2,
   Newspaper,
   Plus,
@@ -1343,164 +1344,6 @@ function SellDetailDialog({
   );
 }
 
-function getStockMetrics(
-  ticker,
-  price,
-) {
-  const seed = ticker
-    .split("")
-    .reduce(
-      (total, character) =>
-        total +
-        character.charCodeAt(0),
-      0,
-    );
-
-  const current = price || 100;
-
-  const high52 = +(
-    current *
-    (1.05 + (seed % 40) / 100)
-  ).toFixed(2);
-
-  const low52 = +(
-    current *
-    (0.6 + (seed % 30) / 100)
-  ).toFixed(2);
-
-  const pe = +(
-    12 +
-    (seed % 60) +
-    ((seed * 3) % 10) / 10
-  ).toFixed(1);
-
-  const eps = +(current / pe).toFixed(
-    2,
-  );
-
-  const marketCapB = +(
-    (current *
-      (5 + (seed % 2000))) /
-    1000
-  ).toFixed(1);
-
-  const volume =
-    (((seed * 137) % 90) + 5) *
-    1_000_000;
-
-  const averageVolume =
-    (((seed * 91) % 70) + 8) *
-    1_000_000;
-
-  const dividendYield =
-    seed % 4 === 0
-      ? 0
-      : +(
-          (seed % 400) / 100
-        ).toFixed(2);
-
-  const beta = +(
-    0.5 + (seed % 150) / 100
-  ).toFixed(2);
-
-  const priceToSales = +(
-    (marketCapB * 1e9) /
-    (current *
-      (10 + (seed % 500)) *
-      1e6)
-  ).toFixed(2);
-
-  const profitMargin = +(
-    (5 + (seed % 60)) / 100
-  ).toFixed(3);
-
-  const debtToEquity = +(
-    0.1 + (seed % 300) / 100
-  ).toFixed(2);
-
-  const formatMoney = (value) =>
-    value >= 1e12
-      ? `$${(value / 1e12).toFixed(
-          2,
-        )}T`
-      : value >= 1e9
-        ? `$${(value / 1e9).toFixed(
-            1,
-          )}B`
-        : `$${(value / 1e6).toFixed(
-            0,
-          )}M`;
-
-  const formatVolume = (value) =>
-    value >= 1e6
-      ? `${(value / 1e6).toFixed(
-          1,
-        )}M`
-      : `${(value / 1e3).toFixed(
-          0,
-        )}K`;
-
-  return [
-    {
-      label: "Mkt Cap",
-      value: formatMoney(
-        marketCapB * 1e9,
-      ),
-    },
-    {
-      label: "P/E",
-      value: pe,
-    },
-    {
-      label: "P/S",
-      value: priceToSales,
-    },
-    {
-      label: "EPS",
-      value: `$${eps}`,
-    },
-    {
-      label: "Beta",
-      value: beta,
-    },
-    {
-      label: "Volume",
-      value: formatVolume(volume),
-    },
-    {
-      label: "Avg Vol",
-      value: formatVolume(
-        averageVolume,
-      ),
-    },
-    {
-      label: "52W Low",
-      value: `$${low52}`,
-    },
-    {
-      label: "D/E",
-      value: debtToEquity,
-    },
-    {
-      label: "Yield",
-      value:
-        dividendYield > 0
-          ? `${dividendYield}%`
-          : "—",
-    },
-    {
-      label: "Net Margin",
-      value: `${(
-        profitMargin * 100
-      ).toFixed(1)}%`,
-    },
-    {
-      label: "52W High",
-      value: `$${high52}`,
-    },
-  ];
-}
-
 export default function StockDetail() {
   const { ticker: routeValue } =
     useParams();
@@ -2305,8 +2148,13 @@ export default function StockDetail() {
       <button
         type="button"
         onClick={handleBack}
-        className="m-3 flex min-h-[36px] items-center gap-0.5 rounded-full border border-gray-200 bg-white/80 px-3 py-1.5 text-sm font-semibold text-gray-900 shadow-sm backdrop-blur-md transition-all active:scale-95"
+        aria-label="Go back"
+        className="m-3 inline-flex min-h-[36px] items-center gap-1.5 px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
       >
+        <ArrowLeft
+          className="h-4 w-4"
+          strokeWidth={2}
+        />
         Back
       </button>
 
@@ -2467,30 +2315,6 @@ export default function StockDetail() {
             dailyReturn
           }
         />
-
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">
-            Key Metrics
-          </h2>
-
-          <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
-            {getStockMetrics(
-              stock.ticker,
-              currentPrice ||
-                purchasePrice,
-            ).map((metric) => (
-              <div key={metric.label}>
-                <p className="text-xs font-medium text-gray-400">
-                  {metric.label}
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-gray-900">
-                  {metric.value}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
 
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-4 flex items-center justify-between">
