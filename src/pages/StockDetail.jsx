@@ -2355,8 +2355,8 @@ export default function StockDetail() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-end gap-2.5">
-            <p className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2rem]">
+          <div className="mt-4 flex flex-col items-start gap-1.5">
+            <p className="text-[1.7rem] font-bold leading-none tracking-tight text-gray-900 sm:text-3xl">
               {currentPrice > 0
                 ? `$${currentPrice.toFixed(
                     2,
@@ -2365,7 +2365,7 @@ export default function StockDetail() {
             </p>
 
             <div
-              className={`mb-0.5 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
+              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
                 displayPositive
                   ? "bg-emerald-50 text-emerald-600"
                   : "bg-red-50 text-red-600"
