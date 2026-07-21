@@ -44,8 +44,6 @@ type StockRow = {
   quantity: number | string | null;
   purchase_price: number | string | null;
   current_price: number | string | null;
-  created_at: string | null;
-  updated_at: string | null;
 };
 
 type TransactionRow = {
@@ -604,7 +602,7 @@ async function loadReportData(
     service
       .from("stocks")
       .select(
-        "id,ticker,company_name,quantity,purchase_price,current_price,created_at,updated_at",
+        "id,ticker,company_name,quantity,purchase_price,current_price",
       )
       .eq("user_id", delivery.user_id)
       .order("ticker", { ascending: true }),
