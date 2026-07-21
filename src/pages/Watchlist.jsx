@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   AnimatePresence,
   motion,
@@ -832,9 +832,7 @@ function WatchlistCard({
   index,
   onRemove,
   onStarToggle,
-  onRequestPortfolioRemoval,
 }) {
-  const navigate = useNavigate();
   const hasStock = Boolean(stock);
 
   const companyName = getCompanyName(
@@ -1044,12 +1042,6 @@ function WatchlistCard({
       return;
     }
 
-    if (hasStock) {
-      closeSwipe();
-      onRequestPortfolioRemoval(item, stock);
-      return;
-    }
-
     setDeleting(true);
     setDragX(-420);
 
@@ -1067,7 +1059,7 @@ function WatchlistCard({
     }
   }
 
-  function handleCardClick(event) {
+  function handleLinkClick(event) {
     if (
       swiped ||
       suppressClick.current ||
@@ -1075,23 +1067,6 @@ function WatchlistCard({
     ) {
       event.preventDefault();
       closeSwipe();
-      return;
-    }
-
-    navigate(linkTo, {
-      state: {
-        from: "/watchlist",
-      },
-    });
-  }
-
-  function handleCardKeyDown(event) {
-    if (
-      event.key === "Enter" ||
-      event.key === " "
-    ) {
-      event.preventDefault();
-      handleCardClick(event);
     }
   }
 
@@ -1138,12 +1113,13 @@ function WatchlistCard({
         />
       </div>
 
-      <div
-        role="link"
-        tabIndex={0}
-        onClick={handleCardClick}
-        onKeyDown={handleCardKeyDown}
-        className="block cursor-pointer"
+      <Link
+        to={linkTo}
+        state={{
+          from: "/watchlist",
+        }}
+        onClick={handleLinkClick}
+        className="block"
       >
         <div
           className="flex h-[78px] items-center gap-2.5 rounded-2xl border border-gray-100 bg-white px-3 py-2 shadow-[0_4px_15px_rgba(15,23,42,0.045)] transition-[box-shadow,border-color] hover:border-gray-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.07)]"
@@ -1170,22 +1146,9 @@ function WatchlistCard({
                 ? `Remove ${item.ticker} from portfolio`
                 : `Add ${item.ticker} to portfolio`
             }
-            onTouchStart={(event) => {
-              event.stopPropagation();
-            }}
-            onTouchEnd={(event) => {
-              event.stopPropagation();
-            }}
             onClick={(event) => {
+              event.preventDefault();
               event.stopPropagation();
-
-              if (hasStock) {
-                onRequestPortfolioRemoval(
-                  item,
-                  stock,
-                );
-                return;
-              }
 
               onStarToggle(item, stock);
             }}
@@ -1254,7 +1217,7 @@ function WatchlistCard({
             </div>
           </div>
         </div>
-      </div>
+      </Link>
     </motion.div>
   );
 }
@@ -1295,9 +1258,6 @@ export default function Watchlist() {
     useState(null);
 
   const [dialogItem, setDialogItem] =
-    useState(null);
-
-  const [portfolioRemoval, setPortfolioRemoval] =
     useState(null);
 
   const searchTimer = useRef(null);
@@ -1698,57 +1658,37 @@ export default function Watchlist() {
     return true;
   }
 
-  function requestPortfolioRemoval(
-    item,
-    stock,
-  ) {
-    if (!item || !stock) {
-      return;
-    }
-
-    setPortfolioRemoval({ item, stock });
-  }
-
-  async function confirmPortfolioRemoval() {
-    if (!portfolioRemoval || !user?.id) {
-      return;
-    }
-
-    const { item, stock } = portfolioRemoval;
-    const previous = stocks;
-
-    setPortfolioRemoval(null);
-    setStocks((value) =>
-      value.filter(
-        (entry) => entry.id !== stock.id,
-      ),
-    );
-
-    const { error } = await supabase
-      .from("stocks")
-      .delete()
-      .eq("id", stock.id)
-      .eq("user_id", user.id);
-
-    if (error) {
-      setStocks(previous);
-      setToast(
-        "Failed to update portfolio.",
-      );
-      return;
-    }
-
-    setToast(
-      `${item.ticker} removed from portfolio`,
-    );
-  }
-
-  function togglePortfolio(
+  async function togglePortfolio(
     item,
     stock,
   ) {
     if (stock) {
-      requestPortfolioRemoval(item, stock);
+      const previous = stocks;
+
+      setStocks((value) =>
+        value.filter(
+          (entry) =>
+            entry.id !== stock.id,
+        ),
+      );
+
+      const { error } = await supabase
+        .from("stocks")
+        .delete()
+        .eq("id", stock.id)
+        .eq("user_id", user.id);
+
+      if (error) {
+        setStocks(previous);
+        setToast(
+          "Failed to update portfolio.",
+        );
+      } else {
+        setToast(
+          `${item.ticker} removed from portfolio`,
+        );
+      }
+
       return;
     }
 
@@ -1811,49 +1751,6 @@ export default function Watchlist() {
         stocks={stocks}
         onAdd={addTicker}
       />
-
-      <Dialog
-        open={Boolean(portfolioRemoval)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPortfolioRemoval(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader className="sr-only">
-            <DialogTitle>
-              Confirm portfolio removal
-            </DialogTitle>
-          </DialogHeader>
-
-          <p className="pt-1 text-center text-base font-medium text-gray-900">
-            Remove {portfolioRemoval?.item?.ticker} from your portfolio?
-          </p>
-
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                setPortfolioRemoval(null)
-              }
-            >
-              Cancel
-            </Button>
-
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() =>
-                void confirmPortfolioRemoval()
-              }
-            >
-              Remove
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {dialogItem && (
         <AddToPortfolioDialog
@@ -1952,9 +1849,6 @@ export default function Watchlist() {
                     onRemove={removeTicker}
                     onStarToggle={
                       togglePortfolio
-                    }
-                    onRequestPortfolioRemoval={
-                      requestPortfolioRemoval
                     }
                   />
                 ),
