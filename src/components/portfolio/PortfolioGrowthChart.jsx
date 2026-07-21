@@ -1167,7 +1167,7 @@ export default function PortfolioGrowthChart({
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
       <div>
-        <p className="mb-1 text-xs font-medium uppercase tracking-wider text-gray-500">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wider text-black">
           Portfolio Growth
         </p>
 
@@ -1215,7 +1215,7 @@ export default function PortfolioGrowthChart({
           )}
       </div>
 
-      <p className="mt-3 text-[11px] leading-4 text-gray-400">
+      <p className="mt-3 text-[11px] leading-4 text-black">
         Based on your entered purchase
         prices and dates, combined with
         real historical market prices.
@@ -1236,7 +1236,7 @@ export default function PortfolioGrowthChart({
                 period ===
                 periodOption
                   ? "bg-black text-white"
-                  : "text-gray-500 hover:bg-gray-100"
+                  : "text-black hover:bg-gray-100"
               }`}
             >
               {periodOption}
