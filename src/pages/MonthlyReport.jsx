@@ -266,7 +266,7 @@ export default function MonthlyReport() {
             "monthly_report_opt_in,report_timezone,report_currency,monthly_report_last_generated_at",
           )
           .eq("id", user.id)
-          .single(),
+          .maybeSingle(),
 
         supabase
           .from("monthly_report_deliveries")
@@ -288,7 +288,8 @@ export default function MonthlyReport() {
         throw reportsResult.error;
       }
 
-      const profile = profileResult.data;
+      const profile =
+        profileResult.data || null;
 
       setAutoReport(
         Boolean(profile?.monthly_report_opt_in),
@@ -340,14 +341,39 @@ export default function MonthlyReport() {
     setMessage("");
 
     try {
+      const authMetadata =
+        user?.user_metadata &&
+        typeof user.user_metadata === "object"
+          ? user.user_metadata
+          : {};
+
+      const fullName =
+        user?.full_name ||
+        authMetadata?.full_name ||
+        authMetadata?.name ||
+        null;
+
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({
-          monthly_report_opt_in: enabled,
-          report_timezone: localTimezone,
-          report_currency: currency,
-        })
-        .eq("id", user.id);
+        .upsert(
+          {
+            id: user.id,
+            email:
+              user?.email ||
+              null,
+            full_name:
+              fullName,
+            monthly_report_opt_in:
+              enabled,
+            report_timezone:
+              localTimezone,
+            report_currency:
+              currency,
+          },
+          {
+            onConflict: "id",
+          },
+        );
 
       if (updateError) {
         throw updateError;
