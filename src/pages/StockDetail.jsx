@@ -490,6 +490,7 @@ function StockChart({
   activePeriod,
   onPeriodChange,
   onPeriodReturnChange,
+  onDailyReturnChange,
 }) {
   const [compareTicker, setCompareTicker] =
     useState("");
@@ -575,6 +576,12 @@ function StockChart({
           nextReturn,
         );
 
+        if (activePeriod === "1D") {
+          onDailyReturnChange(
+            nextReturn,
+          );
+        }
+
         if (compareTicker) {
           const comparison =
             await fetchChartData(
@@ -624,6 +631,10 @@ function StockChart({
         setPrimaryReturn(null);
         onPeriodReturnChange(null);
 
+        if (activePeriod === "1D") {
+          onDailyReturnChange(null);
+        }
+
         setChartError(
           error?.message ||
             "Unable to load chart data",
@@ -646,6 +657,7 @@ function StockChart({
     activePeriod,
     compareTicker,
     onPeriodReturnChange,
+    onDailyReturnChange,
   ]);
 
   const periodStartPrice =
@@ -710,9 +722,27 @@ function StockChart({
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h2 className="mr-2 text-base font-semibold text-gray-900">
+        <h2 className="text-base font-semibold text-gray-900">
           Price Chart
         </h2>
+
+        <span
+          className={`text-sm font-semibold ${
+            Number.isFinite(primaryReturn)
+              ? primaryReturn >= 0
+                ? "text-emerald-600"
+                : "text-red-600"
+              : "text-gray-400"
+          }`}
+        >
+          {Number.isFinite(primaryReturn)
+            ? `${
+                primaryReturn >= 0
+                  ? "+"
+                  : ""
+              }${primaryReturn.toFixed(2)}%`
+            : "—"}
+        </span>
 
         {compareTicker && (
           <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-600">
@@ -1398,9 +1428,12 @@ export default function StockDetail() {
     useState(false);
 
   const [activePeriod, setActivePeriod] =
-    useState("1M");
+    useState("1D");
 
   const [periodReturn, setPeriodReturn] =
+    useState(null);
+
+  const [dailyReturn, setDailyReturn] =
     useState(null);
 
   const isTickerRoute =
@@ -1915,16 +1948,16 @@ export default function StockDetail() {
 
   const gain = totalValue - totalCost;
 
-  const hasPeriodReturn =
-    Number.isFinite(periodReturn);
+  const hasDailyReturn =
+    Number.isFinite(dailyReturn);
 
   const displayReturn =
-    hasPeriodReturn
-      ? periodReturn
+    hasDailyReturn
+      ? dailyReturn
       : null;
 
   const displayPositive =
-    hasPeriodReturn
+    hasDailyReturn
       ? displayReturn >= 0
       : gain >= 0;
 
@@ -1940,32 +1973,51 @@ export default function StockDetail() {
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 pb-10 sm:px-6">
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              {stock.sector && (
-                <span>{stock.sector}</span>
-              )}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2.5">
+                {stock.logo_url && (
+                  <img
+                    src={stock.logo_url}
+                    alt=""
+                    className="h-9 w-9 shrink-0 rounded-lg border border-gray-100 object-contain"
+                  />
+                )}
 
-              <span>#{stock.ticker}</span>
+                <h1 className="min-w-0 truncate text-xl font-bold leading-tight text-gray-900 sm:text-2xl">
+                  {stock.company_name}
+                </h1>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              {stock.logo_url && (
-                <img
-                  src={stock.logo_url}
-                  alt=""
-                  className="h-10 w-10 rounded-lg border border-gray-100 object-contain"
-                />
-              )}
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                type="button"
+                onClick={() =>
+                  setBuyOpen(true)
+                }
+                className="h-8 min-w-[58px] rounded-md bg-black px-3 text-[11px] font-semibold text-white hover:bg-gray-800 sm:min-w-[64px] sm:text-xs"
+              >
+                Buy
+              </Button>
 
-              <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-                {stock.company_name}
-              </h1>
+              {!stock._watchlistOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setSellOpen(true)
+                  }
+                  className="h-8 min-w-[58px] rounded-md px-3 text-[11px] font-semibold sm:min-w-[64px] sm:text-xs"
+                >
+                  Sell
+                </Button>
+              )}
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-end gap-3">
-            <p className="text-4xl font-bold tracking-tight text-gray-900">
+          <div className="mt-4 flex flex-wrap items-end gap-2.5">
+            <p className="text-3xl font-bold tracking-tight text-gray-900 sm:text-[2rem]">
               {currentPrice > 0
                 ? `$${currentPrice.toFixed(
                     2,
@@ -1974,35 +2026,31 @@ export default function StockDetail() {
             </p>
 
             <div
-              className={`mb-1 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
+              className={`mb-0.5 inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
                 displayPositive
                   ? "bg-emerald-50 text-emerald-600"
                   : "bg-red-50 text-red-600"
               }`}
             >
-              {hasPeriodReturn &&
+              {hasDailyReturn &&
                 (displayPositive ? (
                   <TrendingUp className="h-4 w-4" />
                 ) : (
                   <TrendingDown className="h-4 w-4" />
                 ))}
 
-              {hasPeriodReturn
+              {hasDailyReturn
                 ? `${
                     displayPositive
                       ? "+"
                       : ""
                   }${displayReturn.toFixed(2)}%`
                 : "—"}
-
-              <span className="ml-1 text-[10px] font-bold uppercase opacity-70">
-                {activePeriod}
-              </span>
             </div>
           </div>
 
           {!stock._watchlistOnly && (
-            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-gray-100 pt-5 sm:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">
               {[
                 {
                   label: "Shares",
@@ -2054,31 +2102,6 @@ export default function StockDetail() {
               ))}
             </div>
           )}
-
-          <div className="mt-5 flex justify-end gap-2">
-            <Button
-              type="button"
-              onClick={() =>
-                setBuyOpen(true)
-              }
-              className="h-9 min-w-[72px] rounded-md bg-black px-4 text-xs font-semibold text-white hover:bg-gray-800"
-            >
-              Buy
-            </Button>
-
-            {!stock._watchlistOnly && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setSellOpen(true)
-                }
-                className="h-9 min-w-[72px] rounded-md px-4 text-xs font-semibold"
-              >
-                Sell
-              </Button>
-            )}
-          </div>
         </section>
 
         <StockChart
@@ -2093,6 +2116,9 @@ export default function StockDetail() {
           }
           onPeriodReturnChange={
             setPeriodReturn
+          }
+          onDailyReturnChange={
+            setDailyReturn
           }
         />
 
