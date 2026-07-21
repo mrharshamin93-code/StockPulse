@@ -1780,33 +1780,36 @@ export default function Watchlist() {
       )}
 
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 backdrop-blur-xl">
-        <div className="relative mx-auto flex max-w-5xl items-center justify-center px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-1">
-            <Star className="h-7 w-7 fill-amber-400 text-amber-400" />
+  <div className="mx-auto grid max-w-5xl grid-cols-3 items-center px-4 py-4 sm:px-6">
+    {/* Left column balances the header */}
+    <div aria-hidden="true" />
 
-            <div>
-              <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
-                Watchlist
-              </h1>
+    {/* Center column */}
+    <div className="flex items-center justify-center gap-1">
+      <Star className="h-7 w-7 fill-amber-400 text-amber-400" />
 
-              <p className="mt-0.5 text-xs text-gray-500">
-                Stocks you&apos;re watching
-              </p>
-            </div>
-          </div>
+      <div>
+        <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
+          Watchlist
+        </h1>
 
-          <button
-            type="button"
-            aria-label="Add stock to watchlist"
-            onClick={() =>
-              setAddDialogOpen(true)
-            }
-            className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-gray-900 text-white shadow-sm transition-colors hover:bg-gray-800 active:scale-95 sm:right-6"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-        </div>
-      </header>
+        <p className="mt-0.5 text-xs text-gray-500">
+          Stocks you&apos;re watching
+        </p>
+      </div>
+    </div>
+
+    {/* Exact center of the right column */}
+    <button
+      type="button"
+      aria-label="Add stock to watchlist"
+      onClick={() => setAddDialogOpen(true)}
+      className="flex h-10 w-10 items-center justify-center justify-self-center rounded-full bg-gray-900 text-white shadow-sm transition-colors hover:bg-gray-800 active:scale-95"
+    >
+      <Plus className="h-5 w-5" />
+    </button>
+  </div>
+</header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-6 pt-2 sm:px-6 sm:pt-3">
         {loading ? (
