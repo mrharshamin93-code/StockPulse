@@ -1781,30 +1781,24 @@ export default function Watchlist() {
 
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 backdrop-blur-xl">
   <div className="mx-auto grid max-w-5xl grid-cols-3 items-center px-4 py-4 sm:px-6">
-    {/* Left column balances the header */}
+    {/* Empty left column keeps the title centered */}
     <div aria-hidden="true" />
 
     {/* Center column */}
-    <div className="flex items-center justify-center gap-1">
-      <Star className="h-7 w-7 fill-amber-400 text-amber-400" />
+    <div className="flex items-center justify-center gap-2">
+      <Star className="h-9 w-9 fill-amber-400 text-amber-400" />
 
-      <div>
-        <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
-          Watchlist
-        </h1>
-
-        <p className="mt-0.5 text-xs text-gray-500">
-          Stocks you&apos;re watching
-        </p>
-      </div>
+      <h1 className="font-heading text-2xl font-bold leading-none text-gray-900">
+        Watchlist
+      </h1>
     </div>
 
-    {/* Exact center of the right column */}
+    {/* Center of the right column */}
     <button
       type="button"
       aria-label="Add stock to watchlist"
       onClick={() => setAddDialogOpen(true)}
-      className="flex h-10 w-10 items-center justify-center justify-self-center rounded-full bg-gray-900 text-white shadow-sm transition-colors hover:bg-gray-800 active:scale-95"
+      className="flex h-10 w-10 items-center justify-center justify-self-center rounded-full bg-gray-900 text-white shadow-sm transition-transform hover:bg-gray-800 active:scale-95"
     >
       <Plus className="h-5 w-5" />
     </button>
