@@ -1,6 +1,22 @@
 import React, { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Banknote,
+  Bell,
+  ChevronRight,
+  FileText,
+  Loader2,
+  LogOut,
+  Mail,
+  MessageSquare,
+  Palette,
+  Shield,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+
 import { useAuth } from "@/lib/AuthContext";
+import { supabase } from "@/lib/supabase";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,21 +28,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  LogOut,
-  Trash2,
-  Bell,
-  ChevronRight,
-  Loader2,
-  Palette,
-  Banknote,
-  Shield,
-  FileText,
-  Mail,
-  Sparkles,
-  MessageSquare,
-} from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
 
 const getDefaultCurrency = () => {
   try {
@@ -331,7 +332,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-amber-100/75 flex items-center justify-center">
                   <Bell className="w-4 h-4 text-amber-500" />
                 </div>
 
@@ -348,7 +349,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-blue-100/75 flex items-center justify-center">
                   <Mail className="w-4 h-4 text-blue-500" />
                 </div>
 
@@ -365,7 +366,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-green-100/75 flex items-center justify-center">
                   <Banknote className="w-4 h-4 text-green-600" />
                 </div>
 
@@ -402,7 +403,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-violet-100/75 flex items-center justify-center">
                   <Palette className="w-4 h-4 text-violet-500" />
                 </div>
 
@@ -433,7 +434,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-teal-100/75 flex items-center justify-center">
                   <MessageSquare className="w-4 h-4 text-teal-500" />
                 </div>
 
@@ -464,7 +465,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-blue-100/75 flex items-center justify-center">
                   <Shield className="w-4 h-4 text-blue-500" />
                 </div>
 
@@ -481,7 +482,7 @@ export default function Settings() {
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-blue-100/75 flex items-center justify-center">
                   <FileText className="w-4 h-4 text-blue-500" />
                 </div>
 
@@ -562,7 +563,7 @@ export default function Settings() {
                   className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-red-50 transition-colors text-left disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-xl bg-red-100/75 flex items-center justify-center">
                       <Trash2 className="w-4 h-4 text-red-600" />
                     </div>
 
