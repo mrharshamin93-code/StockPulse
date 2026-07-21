@@ -13,6 +13,7 @@ import {
   Eye,
   FileText,
   Loader2,
+  Mail,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -534,6 +535,120 @@ export default function MonthlyReport() {
     }
   }
 
+  async function handleEmail(report) {
+    if (
+      !report?.storage_path ||
+      busyReportId
+    ) {
+      return;
+    }
+
+    setBusyReportId(report.id);
+    setError("");
+    setMessage("");
+
+    try {
+      if (
+        typeof navigator === "undefined" ||
+        typeof navigator.share !== "function"
+      ) {
+        throw new Error(
+          "Email sharing is not supported in this browser. Open StockPulse in Safari on your iPhone and try again.",
+        );
+      }
+
+      const signedUrl =
+        await createReportSignedUrl(
+          report.storage_path,
+        );
+
+      const response =
+        await fetch(signedUrl);
+
+      if (!response.ok) {
+        throw new Error(
+          "The report could not be prepared for email.",
+        );
+      }
+
+      const blob =
+        await response.blob();
+
+      const fileName =
+        report.file_name ||
+        `StockPulse-${report.report_month.slice(0, 7)}-Portfolio-Report.pdf`;
+
+      const pdfBlob =
+        blob.type === "application/pdf"
+          ? blob
+          : blob.slice(
+              0,
+              blob.size,
+              "application/pdf",
+            );
+
+      const file =
+        new File(
+          [pdfBlob],
+          fileName,
+          {
+            type:
+              "application/pdf",
+          },
+        );
+
+      if (
+        typeof navigator.canShare === "function" &&
+        !navigator.canShare({
+          files: [file],
+        })
+      ) {
+        throw new Error(
+          "This browser cannot attach the PDF to an email. Open StockPulse in Safari on your iPhone and try again.",
+        );
+      }
+
+      const reportMonth =
+        formatMonth(
+          report.report_month,
+        );
+
+      await navigator.share({
+        title:
+          `StockPulse ${reportMonth} Portfolio Report`,
+
+        text:
+          `Attached is my StockPulse portfolio report for ${reportMonth}.`,
+
+        files: [file],
+      });
+
+      setMessage(
+        "Report shared successfully.",
+      );
+    } catch (shareError) {
+      if (
+        shareError?.name ===
+        "AbortError"
+      ) {
+        return;
+      }
+
+      console.error(
+        "Report email share failed:",
+        shareError,
+      );
+
+      setError(
+        shareError?.message ||
+          "The report could not be shared by email.",
+      );
+    } finally {
+      setBusyReportId("");
+    }
+  }
+
+
   async function handleDelete(report) {
     if (!report?.id || busyReportId) {
       return;
@@ -909,6 +1024,18 @@ export default function MonthlyReport() {
                             >
                               <Download className="h-3.5 w-3.5" />
                               Download
+                            </Button>
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleEmail(report)}
+                              disabled={Boolean(busyReportId)}
+                              className="h-8 gap-1.5 text-xs"
+                            >
+                              <Mail className="h-3.5 w-3.5" />
+                              Email
                             </Button>
 
                             <Button
