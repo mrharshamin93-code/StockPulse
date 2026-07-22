@@ -10,9 +10,11 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  Filter,
   Loader2,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react";
 
 import {
@@ -531,6 +533,26 @@ export default function ScreenerResults() {
   );
 
   const [
+    sortKey,
+    setSortKey,
+  ] = useState("marketCapB");
+
+  const [
+    filtersOpen,
+    setFiltersOpen,
+  ] = useState(false);
+
+  const [
+    selectedSector,
+    setSelectedSector,
+  ] = useState("All");
+
+  const [
+    positiveOnly,
+    setPositiveOnly,
+  ] = useState(false);
+
+  const [
     currentPage,
     setCurrentPage,
   ] = useState(
@@ -605,11 +627,140 @@ export default function ScreenerResults() {
       [state],
     );
 
+  const availableSectors =
+    useMemo(
+      () => [
+        "All",
+        ...[
+          ...new Set(
+            allResults
+              .map((stock) =>
+                String(
+                  stock?.sector ||
+                    "",
+                ).trim(),
+              )
+              .filter(Boolean),
+          ),
+        ].sort(),
+      ],
+      [allResults],
+    );
+
+  const filteredResults =
+    useMemo(() => {
+      const next =
+        allResults.filter(
+          (stock) => {
+            const sectorMatches =
+              selectedSector ===
+                "All" ||
+              String(
+                stock?.sector ||
+                  "",
+              ) ===
+                selectedSector;
+
+            const change =
+              finiteNumber(
+                stock
+                  ?.changePercent,
+              );
+
+            const directionMatches =
+              !positiveOnly ||
+              (change !== null &&
+                change > 0);
+
+            return (
+              sectorMatches &&
+              directionMatches
+            );
+          },
+        );
+
+      const numericSort = (
+        key,
+        direction = "desc",
+      ) =>
+        [...next].sort(
+          (a, b) => {
+            const left =
+              finiteNumber(
+                a?.[key],
+              );
+            const right =
+              finiteNumber(
+                b?.[key],
+              );
+
+            if (
+              left === null &&
+              right === null
+            ) {
+              return 0;
+            }
+
+            if (left === null) {
+              return 1;
+            }
+
+            if (right === null) {
+              return -1;
+            }
+
+            return direction ===
+              "asc"
+              ? left - right
+              : right - left;
+          },
+        );
+
+      switch (sortKey) {
+        case "changePercent":
+          return numericSort(
+            "changePercent",
+          );
+
+        case "week52Change":
+          return numericSort(
+            "week52Change",
+          );
+
+        case "pe":
+          return numericSort(
+            "pe",
+            "asc",
+          );
+
+        case "dividendYield":
+          return numericSort(
+            "dividendYield",
+          );
+
+        case "roe":
+          return numericSort(
+            "roe",
+          );
+
+        case "marketCapB":
+        default:
+          return numericSort(
+            "marketCapB",
+          );
+      }
+    }, [
+      allResults,
+      selectedSector,
+      positiveOnly,
+      sortKey,
+    ]);
+
   const totalPages =
     Math.max(
       1,
       Math.ceil(
-        allResults.length /
+        filteredResults.length /
           PAGE_SIZE,
       ),
     );
@@ -630,13 +781,13 @@ export default function ScreenerResults() {
           1) *
         PAGE_SIZE;
 
-      return allResults.slice(
+      return filteredResults.slice(
         start,
         start +
           PAGE_SIZE,
       );
     }, [
-      allResults,
+      filteredResults,
       safeCurrentPage,
     ]);
 
@@ -676,6 +827,14 @@ export default function ScreenerResults() {
       );
     };
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    sortKey,
+    selectedSector,
+    positiveOnly,
+  ]);
 
   useEffect(() => {
     /*
@@ -980,12 +1139,173 @@ export default function ScreenerResults() {
         title={
           loading
             ? ""
-            : `Results · ${allResults.length} found`
+            : `Results · ${filteredResults.length} found`
         }
         backPath="/screener"
       />
 
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-3 px-4 py-6 sm:px-6">
+        {!loading &&
+          !error &&
+          allResults.length >
+            0 && (
+            <>
+              <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+                <label className="min-w-0 flex-1">
+                  <span className="sr-only">
+                    Sort results
+                  </span>
+
+                  <select
+                    value={sortKey}
+                    onChange={(event) =>
+                      setSortKey(
+                        event.target
+                          .value,
+                      )
+                    }
+                    className="h-10 w-full rounded-xl border-0 bg-gray-50 px-3 text-xs font-semibold text-gray-700 outline-none"
+                  >
+                    <option value="marketCapB">
+                      Sort: Market Cap
+                    </option>
+                    <option value="changePercent">
+                      Sort: Daily Change
+                    </option>
+                    <option value="week52Change">
+                      Sort: 52W Change
+                    </option>
+                    <option value="pe">
+                      Sort: Lowest P/E
+                    </option>
+                    <option value="dividendYield">
+                      Sort: Dividend Yield
+                    </option>
+                    <option value="roe">
+                      Sort: ROE
+                    </option>
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFiltersOpen(
+                      (value) =>
+                        !value,
+                    )
+                  }
+                  className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-colors ${
+                    filtersOpen ||
+                    selectedSector !==
+                      "All" ||
+                    positiveOnly
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <Filter className="h-4 w-4" />
+                  Filters
+                </button>
+              </div>
+
+              {filtersOpen && (
+                <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-gray-950">
+                        Filter results
+                      </p>
+
+                      <p className="text-[11px] text-gray-400">
+                        Refine the stocks already returned
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFiltersOpen(
+                          false,
+                        )
+                      }
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <p className="mb-2 text-xs font-semibold text-gray-700">
+                    Sector
+                  </p>
+
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {availableSectors.map(
+                      (sector) => (
+                        <button
+                          type="button"
+                          key={sector}
+                          onClick={() =>
+                            setSelectedSector(
+                              sector,
+                            )
+                          }
+                          className={`min-h-9 rounded-full border px-3 text-xs font-medium ${
+                            selectedSector ===
+                            sector
+                              ? "border-gray-900 bg-gray-900 text-white"
+                              : "border-gray-200 bg-white text-gray-600"
+                          }`}
+                        >
+                          {sector}
+                        </button>
+                      ),
+                    )}
+                  </div>
+
+                  <label className="flex min-h-11 items-center justify-between rounded-xl bg-gray-50 px-3">
+                    <span className="text-xs font-semibold text-gray-700">
+                      Daily gainers only
+                    </span>
+
+                    <input
+                      type="checkbox"
+                      checked={
+                        positiveOnly
+                      }
+                      onChange={(event) =>
+                        setPositiveOnly(
+                          event.target
+                            .checked,
+                        )
+                      }
+                      className="h-4 w-4 accent-gray-900"
+                    />
+                  </label>
+
+                  {(selectedSector !==
+                    "All" ||
+                    positiveOnly) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSector(
+                          "All",
+                        );
+                        setPositiveOnly(
+                          false,
+                        );
+                      }}
+                      className="mt-3 w-full min-h-10 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+                    >
+                      Clear result filters
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
         {loading && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <Loader2 className="mb-4 h-7 w-7 animate-spin text-muted-foreground" />
@@ -1015,10 +1335,10 @@ export default function ScreenerResults() {
 
         {!loading &&
           !error &&
-          allResults.length ===
+          filteredResults.length ===
             0 && (
             <div className="py-24 text-center text-sm text-muted-foreground">
-              No results found. Try adjusting your filters.
+              No results match the selected result filters.
             </div>
           )}
 
@@ -1055,7 +1375,7 @@ export default function ScreenerResults() {
 
         {!loading &&
           !error &&
-          allResults.length >
+          filteredResults.length >
             PAGE_SIZE && (
             <nav
               aria-label="Screener result pages"
