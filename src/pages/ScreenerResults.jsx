@@ -1457,7 +1457,7 @@ export default function ScreenerResults() {
         }
 
         navigate(
-          `/stock/${encodeURIComponent(
+          `/stock/ticker-${encodeURIComponent(
             normalized,
           )}`,
         );
