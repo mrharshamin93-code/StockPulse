@@ -366,8 +366,6 @@ Deno.serve(
           quoteErrors: 0,
           notificationErrors: 0,
           triggerUpdateErrors: 0,
-          firstNotificationError: null,
-          diagnostics: [],
         });
       }
 
@@ -425,19 +423,6 @@ Deno.serve(
       let quoteErrors = 0;
       let notificationErrors = 0;
       let triggerUpdateErrors = 0;
-      let firstNotificationError:
-        string | null = null;
-
-      const diagnostics: Array<{
-        alertId: string;
-        ticker: string;
-        rawCondition: string;
-        normalizedCondition: "above" | "below" | null;
-        targetPrice: number | null;
-        currentPrice: number | null;
-        reached: boolean;
-        quoteError: string | null;
-      }> = [];
 
       for (
         const alert
@@ -465,18 +450,6 @@ Deno.serve(
         ) {
           quoteErrors += 1;
 
-          if (diagnostics.length < 20) {
-            diagnostics.push({
-              alertId: alert.id,
-              ticker,
-              rawCondition: String(alert.condition || ""),
-              normalizedCondition: normalizeCondition(alert.condition),
-              targetPrice: numberOrNull(alert.target_price),
-              currentPrice: quote.price,
-              reached: false,
-              quoteError: quote.error,
-            });
-          }
 
           const {
             error: updateError,
@@ -514,18 +487,6 @@ Deno.serve(
             quote.price,
           );
 
-        if (diagnostics.length < 20) {
-          diagnostics.push({
-            alertId: alert.id,
-            ticker,
-            rawCondition: String(alert.condition || ""),
-            normalizedCondition: normalizeCondition(alert.condition),
-            targetPrice: numberOrNull(alert.target_price),
-            currentPrice: quote.price,
-            reached,
-            quoteError: null,
-          });
-        }
 
         const checkedAt =
           new Date().toISOString();
@@ -688,10 +649,6 @@ Deno.serve(
               notificationError,
             );
 
-          if (!firstNotificationError) {
-            firstNotificationError =
-              notificationMessage;
-          }
 
           console.error(
             `Could not create notification for alert ${alert.id}:`,
@@ -776,8 +733,6 @@ Deno.serve(
         quoteErrors,
         notificationErrors,
         triggerUpdateErrors,
-        firstNotificationError,
-        diagnostics,
       });
     } catch (error) {
       const message =
