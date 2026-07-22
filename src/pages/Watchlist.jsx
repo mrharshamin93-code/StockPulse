@@ -11,6 +11,7 @@ import {
   motion,
 } from "framer-motion";
 import {
+  Bell,
   Check,
   Loader2,
   Menu,
@@ -846,6 +847,9 @@ function SwipeAction({
   const deleteAction =
     type === "delete";
 
+  const alertAction =
+    type === "alert";
+
   const visible = smoothstep(progress);
 
   return (
@@ -857,14 +861,18 @@ function SwipeAction({
       className={`flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-full border text-white outline-none transition-colors ${
         deleteAction
           ? "border-red-400 bg-red-500 hover:bg-red-600"
-          : "border-sky-400 bg-sky-500 hover:bg-sky-600"
+          : alertAction
+            ? "border-amber-400 bg-amber-500 hover:bg-amber-600"
+            : "border-sky-400 bg-sky-500 hover:bg-sky-600"
       }`}
       style={{
         opacity: visible,
         transform: `translateX(${(1 - visible) * 22}px) scale(${0.55 + visible * 0.45})`,
         boxShadow: deleteAction
           ? "0 7px 18px rgba(239,68,68,.28)"
-          : "0 7px 18px rgba(14,165,233,.28)",
+          : alertAction
+            ? "0 7px 18px rgba(245,158,11,.28)"
+            : "0 7px 18px rgba(14,165,233,.28)",
         pointerEvents:
           disabled || visible < 0.76
             ? "none"
@@ -913,19 +921,24 @@ function WatchlistCard({
   const dragging = useRef(false);
   const suppressClick = useRef(false);
 
-  const revealWidth = 112;
+  const revealWidth = 164;
 
   const revealProgress = clamp(
     Math.abs(dragX) / revealWidth,
   );
 
   const deleteProgress = clamp(
-    revealProgress / 0.55,
+    revealProgress / 0.42,
+  );
+
+  const alertProgress = clamp(
+    (revealProgress - 0.18) /
+      0.52,
   );
 
   const shareProgress = clamp(
-    (revealProgress - 0.34) /
-      0.66,
+    (revealProgress - 0.42) /
+      0.58,
   );
 
   const livePrice =
@@ -1015,7 +1028,7 @@ function WatchlistCard({
     setDragX(
       clamp(
         startDragX.current + dx,
-        -126,
+        -180,
         0,
       ),
     );
@@ -1089,6 +1102,29 @@ function WatchlistCard({
     } finally {
       closeSwipe();
     }
+  }
+
+  function openPriceAlert(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const selectedTicker =
+      String(item.ticker || "")
+        .trim()
+        .toUpperCase();
+
+    closeSwipe();
+
+    navigate(
+      "/price-alerts",
+      {
+        state: {
+          openAddAlert: true,
+          ticker:
+            selectedTicker,
+        },
+      },
+    );
   }
 
   async function remove(event) {
@@ -1181,6 +1217,15 @@ function WatchlistCard({
           progress={shareProgress}
           disabled={deleting}
           onClick={share}
+        />
+
+        <SwipeAction
+          type="alert"
+          label="Alert"
+          icon={Bell}
+          progress={alertProgress}
+          disabled={deleting}
+          onClick={openPriceAlert}
         />
 
         <SwipeAction
