@@ -859,8 +859,8 @@ function FilterChip({
         }
         className={`touch-manipulation select-none whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
           active
-            ? "border-gray-900 bg-gray-900 text-white"
-            : "border-gray-200 bg-white text-gray-900 hover:border-gray-400"
+            ? "!border-black !bg-black !text-white"
+            : "!border-gray-200 !bg-white !text-black hover:!border-black"
         }`}
       >
         {label}
@@ -971,15 +971,15 @@ function MetricSelectionRow({
       }
       className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
         selected
-          ? "border-gray-900 bg-gray-50 shadow-sm"
-          : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/60"
+          ? "!border-black !bg-white shadow-sm"
+          : "!border-gray-100 !bg-white hover:!border-gray-300"
       }`}
     >
       <span
         className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
           selected
-            ? "border-gray-900 bg-gray-900 text-white"
-            : "border-gray-300 bg-white text-transparent"
+            ? "!border-black !bg-black !text-white"
+            : "!border-gray-300 !bg-white !text-transparent"
         }`}
         aria-hidden="true"
       >
@@ -2042,8 +2042,8 @@ export default function Screener() {
                         selectedSectors.includes(
                           sector,
                         )
-                          ? "border-gray-900 bg-gray-900 text-white"
-                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
+                          ? "!border-black !bg-black !text-white"
+                          : "!border-gray-200 !bg-white !text-black hover:!border-black"
                       }`}
                     >
                       <Icon className="h-3.5 w-3.5" />
