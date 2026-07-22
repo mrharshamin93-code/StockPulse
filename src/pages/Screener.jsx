@@ -901,35 +901,35 @@ const QUICK_SCREEN_UI = [
     description:
       "Top technology companies by market cap",
     iconClass:
-      "bg-blue-50 text-blue-600",
+      "bg-gray-100 text-gray-900",
   },
   {
     icon: CircleDollarSign,
     description:
       "Stocks with dividend yield above 3%",
     iconClass:
-      "bg-emerald-50 text-emerald-600",
+      "bg-gray-100 text-gray-900",
   },
   {
     icon: BarChart3,
     description:
       "Stocks trading at oversold RSI levels",
     iconClass:
-      "bg-violet-50 text-violet-600",
+      "bg-gray-100 text-gray-900",
   },
   {
     icon: TrendingUp,
     description:
       "Stocks showing strong recent momentum",
     iconClass:
-      "bg-orange-50 text-orange-600",
+      "bg-gray-100 text-gray-900",
   },
   {
     icon: BadgeDollarSign,
     description:
       "Stocks priced below five dollars",
     iconClass:
-      "bg-amber-50 text-amber-600",
+      "bg-gray-100 text-gray-900",
   },
 ];
 
@@ -1816,7 +1816,7 @@ export default function Screener() {
 
   return (
     <div
-      className="flex min-h-screen flex-col bg-white"
+      className="flex min-h-screen flex-col bg-gradient-to-b from-violet-50 via-white to-blue-50"
       style={{
         paddingBottom:
           "calc(env(safe-area-inset-bottom) + 110px)",
@@ -1829,7 +1829,7 @@ export default function Screener() {
       )}
 
       <header
-        className="sticky top-0 z-30 border-b border-gray-100 bg-white/95 backdrop-blur-xl"
+        className="sticky top-0 z-30 border-b border-black/5 bg-white/80 backdrop-blur-xl"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
@@ -1852,17 +1852,21 @@ export default function Screener() {
             </div>
 
             <div>
-              <h1 className="font-heading text-2xl font-bold tracking-tight">
+              <h1 className="bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text font-heading text-2xl font-bold tracking-tight text-transparent">
                 Screener
               </h1>
 
-              <p className="text-xs text-gray-500">
+              <p className="bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-xs font-medium text-transparent">
                 Filter stocks by criteria
               </p>
             </div>
           </div>
 
-          <div aria-hidden="true" />
+          <div className="justify-self-end">
+            <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-sm">
+              {activeMetrics.size} selected
+            </span>
+          </div>
         </div>
       </header>
 
@@ -1965,7 +1969,7 @@ export default function Screener() {
                           event,
                         )
                       }
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-900"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1988,27 +1992,21 @@ export default function Screener() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
-                {activeMetrics.size} selected
-              </span>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setFilters({});
-                  setActiveMetrics(
-                    new Set(),
-                  );
-                  setActivePreset(
-                    null,
-                  );
-                }}
-                className="min-h-9 rounded-lg px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
-              >
-                Clear All
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFilters({});
+                setActiveMetrics(
+                  new Set(),
+                );
+                setActivePreset(
+                  null,
+                );
+              }}
+              className="min-h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Clear All
+            </button>
           </div>
 
           <div className="mb-6">
