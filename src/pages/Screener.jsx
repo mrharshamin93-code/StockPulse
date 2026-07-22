@@ -1015,54 +1015,52 @@ function ActiveMetricFilterRow({
 }) {
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm">
-      <div className="flex items-center gap-3">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
-          {definition.label}
-        </p>
+      <p className="break-words text-sm font-semibold leading-5 text-gray-900">
+        {definition.label}
+      </p>
 
-        <div className="grid w-[150px] shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-1.5 sm:w-[190px]">
-          <input
-            type="number"
-            step="any"
-            aria-label={`${definition.label} minimum`}
-            placeholder="Min"
-            value={
-              filters[
-                definition.minKey
-              ] ?? ""
-            }
-            onChange={(event) =>
-              onChange(
-                definition.minKey,
-                event.target.value,
-              )
-            }
-            className="h-9 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400 focus:bg-white"
-          />
+      <div className="mt-2 grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <input
+          type="number"
+          step="any"
+          aria-label={`${definition.label} minimum`}
+          placeholder="Min"
+          value={
+            filters[
+              definition.minKey
+            ] ?? ""
+          }
+          onChange={(event) =>
+            onChange(
+              definition.minKey,
+              event.target.value,
+            )
+          }
+          className="h-9 min-w-0 rounded-xl border border-gray-200 bg-white px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400"
+        />
 
-          <span className="text-xs text-gray-300">
-            –
-          </span>
+        <span className="text-xs text-gray-300">
+          –
+        </span>
 
-          <input
-            type="number"
-            step="any"
-            aria-label={`${definition.label} maximum`}
-            placeholder="Max"
-            value={
-              filters[
-                definition.maxKey
-              ] ?? ""
-            }
-            onChange={(event) =>
-              onChange(
-                definition.maxKey,
-                event.target.value,
-              )
-            }
-            className="h-9 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400 focus:bg-white"
-          />
-        </div>
+        <input
+          type="number"
+          step="any"
+          aria-label={`${definition.label} maximum`}
+          placeholder="Max"
+          value={
+            filters[
+              definition.maxKey
+            ] ?? ""
+          }
+          onChange={(event) =>
+            onChange(
+              definition.maxKey,
+              event.target.value,
+            )
+          }
+          className="h-9 min-w-0 rounded-xl border border-gray-200 bg-white px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400"
+        />
       </div>
     </div>
   );
@@ -1816,7 +1814,7 @@ export default function Screener() {
 
   return (
     <div
-      className="flex min-h-screen flex-col bg-gradient-to-b from-violet-50 via-white to-blue-50"
+      className="flex min-h-screen flex-col bg-background"
       style={{
         paddingBottom:
           "calc(env(safe-area-inset-bottom) + 110px)",
@@ -1829,7 +1827,7 @@ export default function Screener() {
       )}
 
       <header
-        className="sticky top-0 z-30 border-b border-black/5 bg-white/80 backdrop-blur-xl"
+        className="sticky top-0 z-30 border-b border-black/5 bg-background/95 backdrop-blur-xl"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
@@ -1852,18 +1850,18 @@ export default function Screener() {
             </div>
 
             <div>
-              <h1 className="bg-gradient-to-r from-violet-600 to-blue-600 bg-clip-text font-heading text-2xl font-bold tracking-tight text-transparent">
+              <h1 className="font-heading text-2xl font-bold tracking-tight text-black">
                 Screener
               </h1>
 
-              <p className="bg-gradient-to-r from-violet-500 to-blue-500 bg-clip-text text-xs font-medium text-transparent">
+              <p className="text-xs font-medium text-black">
                 Filter stocks by criteria
               </p>
             </div>
           </div>
 
-          <div className="justify-self-end">
-            <span className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-sm">
+          <div className="justify-self-end text-right">
+            <span className="text-[11px] font-semibold text-black">
               {activeMetrics.size} selected
             </span>
           </div>
@@ -1891,7 +1889,7 @@ export default function Screener() {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             {POPULAR_SCREENS.slice(0, 4).map(
               (preset, index) => {
                 const ui =
@@ -1909,19 +1907,19 @@ export default function Screener() {
                         index,
                       )
                     }
-                    className="group min-h-[144px] rounded-3xl border border-gray-100 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99]"
+                    className="group min-h-[112px] rounded-2xl border border-gray-100 bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99]"
                   >
                     <span
-                      className={`mb-4 flex h-10 w-10 items-center justify-center rounded-2xl ${ui.iconClass}`}
+                      className={`mb-2.5 flex h-8 w-8 items-center justify-center rounded-xl ${ui.iconClass}`}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-4 w-4" />
                     </span>
 
-                    <span className="block text-sm font-bold text-gray-950">
+                    <span className="block text-[13px] font-bold leading-4 text-gray-950">
                       {preset.label}
                     </span>
 
-                    <span className="mt-1.5 block text-xs leading-5 text-gray-500">
+                    <span className="mt-1 block text-[11px] leading-4 text-gray-500">
                       {ui.description}
                     </span>
                   </button>
