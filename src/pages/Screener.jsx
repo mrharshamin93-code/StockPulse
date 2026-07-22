@@ -33,7 +33,6 @@ import {
   Trash2,
   TrendingUp,
   WalletCards,
-  X,
   Zap,
 } from "lucide-react";
 
@@ -962,11 +961,6 @@ function MetricSelectionRow({
   selected,
   onToggle,
 }) {
-  const GroupIcon =
-    GROUP_ICON_MAP[
-      definition.group
-    ] || SlidersHorizontal;
-
   return (
     <button
       type="button"
@@ -992,19 +986,18 @@ function MetricSelectionRow({
         <Check className="h-3.5 w-3.5" />
       </span>
 
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-700">
-        <GroupIcon className="h-4 w-4" />
-      </span>
-
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="text-sm font-semibold text-gray-900">
             {definition.label}
           </span>
 
-          <span className="text-[10px] font-medium text-gray-400">
-            {definition.unit}
-          </span>
+          {definition.unit &&
+            definition.unit.toLowerCase() !== "x" && (
+              <span className="text-[10px] font-medium text-gray-400">
+                {definition.unit}
+              </span>
+            )}
         </span>
 
         <span className="mt-1 block text-xs leading-5 text-gray-500">
@@ -1019,29 +1012,22 @@ function ActiveMetricFilterRow({
   definition,
   filters,
   onChange,
-  onRemove,
 }) {
-  const GroupIcon =
-    GROUP_ICON_MAP[
-      definition.group
-    ] || SlidersHorizontal;
-
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-700">
-          <GroupIcon className="h-4 w-4" />
-        </div>
-
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p className="truncate text-sm font-semibold text-gray-900">
               {definition.label}
             </p>
 
-            <span className="text-[10px] text-gray-400">
-              {definition.unit}
-            </span>
+            {definition.unit &&
+              definition.unit.toLowerCase() !== "x" && (
+                <span className="text-[10px] text-gray-400">
+                  {definition.unit}
+                </span>
+              )}
           </div>
 
           <p className="truncate text-[10px] text-gray-400">
@@ -1092,19 +1078,6 @@ function ActiveMetricFilterRow({
             className="h-9 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400 focus:bg-white"
           />
         </div>
-
-        <button
-          type="button"
-          aria-label={`Remove ${definition.label}`}
-          onClick={() =>
-            onRemove(
-              definition.key,
-            )
-          }
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
     </div>
   );
@@ -2182,9 +2155,6 @@ export default function Screener() {
                       filters={filters}
                       onChange={
                         updateNumberFilter
-                      }
-                      onRemove={
-                        removeMetric
                       }
                     />
                   ),
