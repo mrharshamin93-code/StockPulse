@@ -1171,6 +1171,69 @@ export default function Screener() {
       [filters],
     );
 
+  useEffect(() => {
+    const selectors = [
+      "[data-bottom-navigation]",
+      "[data-testid='bottom-navigation']",
+      "nav.fixed.inset-x-0.bottom-0",
+      "footer.fixed.inset-x-0.bottom-0",
+    ];
+
+    const hiddenElements = [];
+
+    selectors.forEach((selector) => {
+      document
+        .querySelectorAll(selector)
+        .forEach((element) => {
+          if (
+            element.closest(
+              "[data-screener-action-bar]",
+            )
+          ) {
+            return;
+          }
+
+          hiddenElements.push({
+            element,
+            display:
+              element.style.display,
+          });
+
+          element.style.setProperty(
+            "display",
+            "none",
+            "important",
+          );
+        });
+    });
+
+    document.body.classList.add(
+      "screener-page-active",
+    );
+
+    return () => {
+      hiddenElements.forEach(
+        ({
+          element,
+          display,
+        }) => {
+          if (display) {
+            element.style.display =
+              display;
+          } else {
+            element.style.removeProperty(
+              "display",
+            );
+          }
+        },
+      );
+
+      document.body.classList.remove(
+        "screener-page-active",
+      );
+    };
+  }, []);
+
 
   const showToast =
     useCallback(
@@ -1817,7 +1880,7 @@ export default function Screener() {
       className="flex min-h-screen flex-col bg-background"
       style={{
         paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 174px)",
+          "calc(env(safe-area-inset-bottom) + 96px)",
       }}
     >
       {toast && (
@@ -2001,7 +2064,7 @@ export default function Screener() {
                   null,
                 );
               }}
-              className="min-h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-black transition-colors hover:bg-gray-50"
+              className="min-h-9 px-1 text-xs font-semibold text-black underline-offset-4 transition-opacity hover:underline hover:opacity-70"
             >
               Clear All
             </button>
@@ -2147,7 +2210,7 @@ export default function Screener() {
       </main>
 
       <div
-        className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-40 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-xl"
+        data-screener-action-bar className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-100 bg-white/95 px-4 pt-3 backdrop-blur-xl" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
       >
         <div className="mx-auto flex w-full max-w-xl gap-2">
           <Button
