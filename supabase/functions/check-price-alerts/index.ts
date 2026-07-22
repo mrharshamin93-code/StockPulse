@@ -102,6 +102,33 @@ function numberOrNull(
     : null;
 }
 
+function normalizeCondition(
+  value: unknown,
+): "above" | "below" | null {
+  const normalized =
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ");
+
+  if (
+    normalized === "above" ||
+    normalized === "price above"
+  ) {
+    return "above";
+  }
+
+  if (
+    normalized === "below" ||
+    normalized === "price below"
+  ) {
+    return "below";
+  }
+
+  return null;
+}
+
 function alertWasReached(
   alert: AlertRow,
   currentPrice: number,
@@ -109,22 +136,24 @@ function alertWasReached(
   const targetPrice =
     numberOrNull(alert.target_price);
 
+  const condition =
+    normalizeCondition(
+      alert.condition,
+    );
+
   if (
     targetPrice === null ||
-    targetPrice <= 0
+    targetPrice <= 0 ||
+    !condition
   ) {
     return false;
   }
 
-  if (alert.condition === "above") {
+  if (condition === "above") {
     return currentPrice >= targetPrice;
   }
 
-  if (alert.condition === "below") {
-    return currentPrice <= targetPrice;
-  }
-
-  return false;
+  return currentPrice <= targetPrice;
 }
 
 function notificationCopy(
@@ -141,7 +170,9 @@ function notificationCopy(
     Number(alert.target_price);
 
   const direction =
-    alert.condition === "below"
+    normalizeCondition(
+      alert.condition,
+    ) === "below"
       ? "below"
       : "above";
 
@@ -329,9 +360,14 @@ Deno.serve(
         return jsonResponse({
           ok: true,
           alertsChecked: 0,
+          alertsReached: 0,
           tickersChecked: 0,
           alertsTriggered: 0,
           quoteErrors: 0,
+          notificationErrors: 0,
+          triggerUpdateErrors: 0,
+          firstNotificationError: null,
+          diagnostics: [],
         });
       }
 
@@ -384,8 +420,24 @@ Deno.serve(
       }
 
       let alertsChecked = 0;
+      let alertsReached = 0;
       let alertsTriggered = 0;
       let quoteErrors = 0;
+      let notificationErrors = 0;
+      let triggerUpdateErrors = 0;
+      let firstNotificationError:
+        string | null = null;
+
+      const diagnostics: Array<{
+        alertId: string;
+        ticker: string;
+        rawCondition: string;
+        normalizedCondition: "above" | "below" | null;
+        targetPrice: number | null;
+        currentPrice: number | null;
+        reached: boolean;
+        quoteError: string | null;
+      }> = [];
 
       for (
         const alert
@@ -412,6 +464,19 @@ Deno.serve(
           quote.price === null
         ) {
           quoteErrors += 1;
+
+          if (diagnostics.length < 20) {
+            diagnostics.push({
+              alertId: alert.id,
+              ticker,
+              rawCondition: String(alert.condition || ""),
+              normalizedCondition: normalizeCondition(alert.condition),
+              targetPrice: numberOrNull(alert.target_price),
+              currentPrice: quote.price,
+              reached: false,
+              quoteError: quote.error,
+            });
+          }
 
           const {
             error: updateError,
@@ -449,6 +514,19 @@ Deno.serve(
             quote.price,
           );
 
+        if (diagnostics.length < 20) {
+          diagnostics.push({
+            alertId: alert.id,
+            ticker,
+            rawCondition: String(alert.condition || ""),
+            normalizedCondition: normalizeCondition(alert.condition),
+            targetPrice: numberOrNull(alert.target_price),
+            currentPrice: quote.price,
+            reached,
+            quoteError: null,
+          });
+        }
+
         const checkedAt =
           new Date().toISOString();
 
@@ -483,66 +561,141 @@ Deno.serve(
           continue;
         }
 
+        alertsReached += 1;
+
         const copy =
           notificationCopy(
             alert,
             quote.price,
           );
 
+        const notificationPayload = {
+          user_id:
+            alert.user_id,
+
+          type:
+            "price_alert",
+
+          title:
+            copy.title,
+
+          body:
+            copy.body,
+
+          ticker,
+
+          route:
+            `/stock/ticker-${ticker}`,
+
+          source_type:
+            "stock_alert",
+
+          source_id:
+            alert.id,
+
+          metadata: {
+            condition:
+              alert.condition,
+
+            target_price:
+              Number(
+                alert.target_price,
+              ),
+
+            current_price:
+              quote.price,
+          },
+        };
+
         const {
-          error: notificationError,
+          data: existingNotification,
+          error: existingNotificationError,
         } =
           await admin
             .from(
               "app_notifications",
             )
-            .upsert(
-              {
-                user_id:
-                  alert.user_id,
+            .select("id")
+            .eq(
+              "user_id",
+              alert.user_id,
+            )
+            .eq(
+              "source_type",
+              "stock_alert",
+            )
+            .eq(
+              "source_id",
+              alert.id,
+            )
+            .maybeSingle();
 
-                type:
-                  "price_alert",
+        let notificationError:
+          unknown = null;
 
-                title:
-                  copy.title,
+        if (
+          existingNotificationError
+        ) {
+          notificationError =
+            existingNotificationError;
+        } else if (
+          existingNotification?.id
+        ) {
+          const {
+            error: updateNotificationError,
+          } =
+            await admin
+              .from(
+                "app_notifications",
+              )
+              .update({
+                ...notificationPayload,
 
-                body:
-                  copy.body,
+                read_at:
+                  null,
 
-                ticker,
+                created_at:
+                  checkedAt,
+              })
+              .eq(
+                "id",
+                existingNotification.id,
+              );
 
-                route:
-                  `/stock/ticker-${ticker}`,
+          notificationError =
+            updateNotificationError;
+        } else {
+          const {
+            error: insertNotificationError,
+          } =
+            await admin
+              .from(
+                "app_notifications",
+              )
+              .insert(
+                notificationPayload,
+              );
 
-                source_type:
-                  "stock_alert",
-
-                source_id:
-                  alert.id,
-
-                metadata: {
-                  condition:
-                    alert.condition,
-
-                  target_price:
-                    Number(
-                      alert.target_price,
-                    ),
-
-                  current_price:
-                    quote.price,
-                },
-              },
-              {
-                onConflict:
-                  "user_id,source_type,source_id",
-              },
-            );
+          notificationError =
+            insertNotificationError;
+        }
 
         if (notificationError) {
+          notificationErrors += 1;
+
+          const notificationMessage =
+            getErrorMessage(
+              notificationError,
+            );
+
+          if (!firstNotificationError) {
+            firstNotificationError =
+              notificationMessage;
+          }
+
           console.error(
             `Could not create notification for alert ${alert.id}:`,
+            notificationMessage,
             notificationError,
           );
 
@@ -556,9 +709,7 @@ Deno.serve(
                 checkedAt,
 
               notification_error:
-                getErrorMessage(
-                  notificationError,
-                ),
+                notificationMessage,
             })
             .eq(
               "id",
@@ -602,6 +753,8 @@ Deno.serve(
             );
 
         if (triggerError) {
+          triggerUpdateErrors += 1;
+
           console.error(
             `Could not mark alert ${alert.id} triggered:`,
             triggerError,
@@ -616,10 +769,15 @@ Deno.serve(
       return jsonResponse({
         ok: true,
         alertsChecked,
+        alertsReached,
         tickersChecked:
           uniqueTickers.length,
         alertsTriggered,
         quoteErrors,
+        notificationErrors,
+        triggerUpdateErrors,
+        firstNotificationError,
+        diagnostics,
       });
     } catch (error) {
       const message =
