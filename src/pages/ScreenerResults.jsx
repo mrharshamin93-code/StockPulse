@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import {
   useLocation,
+  useNavigate,
 } from "react-router-dom";
 import {
   ChevronLeft,
@@ -408,6 +409,7 @@ function Metric({
 function ResultRow({
   stock,
   onAdd,
+  onOpen,
   adding,
   added,
 }) {
@@ -464,7 +466,26 @@ function ResultRow({
     );
 
   return (
-    <div className="space-y-3 rounded-2xl border border-gray-100 bg-white px-4 py-3">
+    <article
+      role="link"
+      tabIndex={0}
+      aria-label={`Open ${ticker} stock details`}
+      onClick={() =>
+        onOpen(ticker)
+      }
+      onKeyDown={(event) => {
+        if (
+          event.key ===
+            "Enter" ||
+          event.key ===
+            " "
+        ) {
+          event.preventDefault();
+          onOpen(ticker);
+        }
+      }}
+      className="cursor-pointer space-y-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 transition-colors hover:border-gray-200 hover:bg-gray-50/70 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+    >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -537,8 +558,12 @@ function ResultRow({
             added ||
             !ticker
           }
-          onClick={() =>
-            onAdd(stock)
+          onClick={(event) => {
+            event.stopPropagation();
+            onAdd(stock);
+          }}
+          onKeyDown={(event) =>
+            event.stopPropagation()
           }
           className="min-h-[36px] shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -639,13 +664,16 @@ function ResultRow({
           }
         />
       </div>
-    </div>
+    </article>
   );
 }
 
 export default function ScreenerResults() {
   const { state } =
     useLocation();
+
+  const navigate =
+    useNavigate();
 
   const { user } =
     useAuth();
@@ -1416,6 +1444,27 @@ export default function ScreenerResults() {
       ],
     );
 
+  const openStockDetail =
+    useCallback(
+      (ticker) => {
+        const normalized =
+          normalizeTicker(
+            ticker,
+          );
+
+        if (!normalized) {
+          return;
+        }
+
+        navigate(
+          `/stock/${encodeURIComponent(
+            normalized,
+          )}`,
+        );
+      },
+      [navigate],
+    );
+
   const addToWatchlist =
     async (stock) => {
       const ticker =
@@ -1853,6 +1902,9 @@ export default function ScreenerResults() {
                   }
                   onAdd={
                     addToWatchlist
+                  }
+                  onOpen={
+                    openStockDetail
                   }
                   adding={
                     addingTicker ===
