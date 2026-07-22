@@ -1817,7 +1817,7 @@ export default function Screener() {
       className="flex min-h-screen flex-col bg-background"
       style={{
         paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 182px)",
+          "calc(env(safe-area-inset-bottom) + 174px)",
       }}
     >
       {toast && (
@@ -2147,7 +2147,7 @@ export default function Screener() {
       </main>
 
       <div
-        className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-40 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-xl"
+        className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-40 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-xl"
       >
         <div className="mx-auto flex w-full max-w-xl gap-2">
           <Button
