@@ -578,7 +578,10 @@ export default function ScreenerResults() {
     useRef(null);
 
   const pageRequestRef =
-    useRef(false);
+    useRef(null);
+
+  const pendingActivationRef =
+    useRef(null);
 
   const results =
     useMemo(
@@ -591,6 +594,25 @@ export default function ScreenerResults() {
         session.pages,
         session.currentPage,
       ],
+    );
+
+  const totalResults =
+    useMemo(
+      () =>
+        session.pages.reduce(
+          (
+            total,
+            page,
+          ) =>
+            total +
+            (Array.isArray(
+              page,
+            )
+              ? page.length
+              : 0),
+          0,
+        ),
+      [session.pages],
     );
 
   const pageNumbers =
@@ -738,16 +760,19 @@ export default function ScreenerResults() {
   const loadPage =
     async (
       pageNumber,
+      options = {},
     ) => {
+      const prefetch =
+        Boolean(
+          options.prefetch,
+        );
       if (
         !Number.isInteger(
           pageNumber,
         ) ||
         pageNumber < 1 ||
         pageNumber >
-          MAX_PAGES ||
-        pageLoading ||
-        pageRequestRef.current
+          MAX_PAGES
       ) {
         return;
       }
@@ -762,19 +787,37 @@ export default function ScreenerResults() {
           cached,
         )
       ) {
-        setSession(
-          (previous) => ({
-            ...previous,
-            currentPage:
-              pageNumber,
-          }),
-        );
+        if (!prefetch) {
+          setSession(
+            (previous) => ({
+              ...previous,
+              currentPage:
+                pageNumber,
+            }),
+          );
 
-        setPageError(
-          "",
-        );
+          setPageError(
+            "",
+          );
 
-        scrollToResults();
+          scrollToResults();
+        }
+
+        return;
+      }
+
+      if (
+        pageRequestRef.current !==
+        null
+      ) {
+        if (
+          pageRequestRef.current ===
+            pageNumber &&
+          !prefetch
+        ) {
+          pendingActivationRef.current =
+            pageNumber;
+        }
 
         return;
       }
@@ -789,7 +832,7 @@ export default function ScreenerResults() {
       }
 
       pageRequestRef.current =
-        true;
+        pageNumber;
 
       setPageLoading(
         true,
@@ -905,12 +948,23 @@ export default function ScreenerResults() {
             }),
           );
 
-          showToast(
-            "No more matching stocks were found.",
-          );
+          if (
+            !prefetch ||
+            pendingActivationRef.current ===
+              pageNumber
+          ) {
+            showToast(
+              "No more matching stocks were found.",
+            );
+          }
 
           return;
         }
+
+        const activatePage =
+          !prefetch ||
+          pendingActivationRef.current ===
+            pageNumber;
 
         setSession(
           (previous) => ({
@@ -920,7 +974,9 @@ export default function ScreenerResults() {
               nextResults,
             ],
             currentPage:
-              pageNumber,
+              activatePage
+                ? pageNumber
+                : previous.currentPage,
             hasMore:
               pageNumber <
                 MAX_PAGES &&
@@ -933,7 +989,9 @@ export default function ScreenerResults() {
           }),
         );
 
-        scrollToResults();
+        if (activatePage) {
+          scrollToResults();
+        }
       } catch (
         pageLoadError
       ) {
@@ -946,18 +1004,32 @@ export default function ScreenerResults() {
           pageLoadError?.message ||
           "Unable to load this results page.";
 
-        setPageError(
-          message,
-        );
+        if (
+          !prefetch ||
+          pendingActivationRef.current ===
+            pageNumber
+        ) {
+          setPageError(
+            message,
+          );
 
-        showToast(
-          "Unable to load page " +
-            pageNumber +
-            ".",
-        );
+          showToast(
+            "Unable to load page " +
+              pageNumber +
+              ".",
+          );
+        }
       } finally {
+        if (
+          pendingActivationRef.current ===
+          pageNumber
+        ) {
+          pendingActivationRef.current =
+            null;
+        }
+
         pageRequestRef.current =
-          false;
+          null;
 
         setPageLoading(
           false,
@@ -968,6 +1040,49 @@ export default function ScreenerResults() {
         );
       }
     };
+
+  useEffect(() => {
+    if (
+      loading ||
+      error ||
+      pageLoading ||
+      pageRequestRef.current !==
+        null ||
+      session.pages.length ===
+        0 ||
+      !session.hasMore ||
+      session.pages.length >=
+        MAX_PAGES
+    ) {
+      return undefined;
+    }
+
+    const timer =
+      window.setTimeout(
+        () => {
+          void loadPage(
+            session.pages.length +
+              1,
+            {
+              prefetch: true,
+            },
+          );
+        },
+        400,
+      );
+
+    return () => {
+      window.clearTimeout(
+        timer,
+      );
+    };
+  }, [
+    loading,
+    error,
+    pageLoading,
+    session.pages.length,
+    session.hasMore,
+  ]);
 
   const addToWatchlist =
     async (stock) => {
@@ -1118,8 +1233,9 @@ export default function ScreenerResults() {
         title={
           loading
             ? ""
-            : "Results · Page " +
-              session.currentPage
+            : "Results · " +
+              totalResults +
+              " found"
         }
         backPath="/screener"
       />
@@ -1269,7 +1385,15 @@ export default function ScreenerResults() {
                             : undefined
                         }
                         disabled={
-                          pageLoading
+                          pageLoading &&
+                          requestedPage !==
+                            pageNumber &&
+                          !Array.isArray(
+                            session.pages[
+                              pageNumber -
+                                1
+                            ],
+                          )
                         }
                         onClick={() =>
                           void loadPage(
@@ -1298,7 +1422,17 @@ export default function ScreenerResults() {
                 aria-label="Next page"
                 disabled={
                   !canGoNext ||
-                  pageLoading
+                  (
+                    pageLoading &&
+                    !Array.isArray(
+                      session.pages[
+                        session.currentPage
+                      ],
+                    ) &&
+                    requestedPage !==
+                      session.currentPage +
+                        1
+                  )
                 }
                 onClick={() =>
                   void loadPage(
