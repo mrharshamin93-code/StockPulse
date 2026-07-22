@@ -32,45 +32,12 @@ const stockProperties = {
   week52Change: nullableNumber,
 
   pe: nullableNumber,
-  forwardPe: nullableNumber,
-  peg: nullableNumber,
-  pb: nullableNumber,
-  ps: nullableNumber,
-  evEbitda: nullableNumber,
-  pcf: nullableNumber,
-  pfcf: nullableNumber,
-
-  grossMargin: nullableNumber,
-  operatingMargin: nullableNumber,
-  netMargin: nullableNumber,
-  roe: nullableNumber,
-  roa: nullableNumber,
-  roic: nullableNumber,
-
-  revenueGrowth: nullableNumber,
-  epsGrowth: nullableNumber,
-  ebitdaGrowth: nullableNumber,
-  fcfGrowth: nullableNumber,
-
-  deRatio: nullableNumber,
-  currentRatio: nullableNumber,
-  quickRatio: nullableNumber,
-  interestCoverage: nullableNumber,
-  debtEbitda: nullableNumber,
-
-  assetTurnover: nullableNumber,
-  inventoryTurnover: nullableNumber,
-  receivablesTurnover: nullableNumber,
-  dso: nullableNumber,
-
-  dividendYield: nullableNumber,
-  payoutRatio: nullableNumber,
-  dividendGrowth: nullableNumber,
-
-  marketCapB: nullableNumber,
   eps: nullableNumber,
-  bookValuePerShare: nullableNumber,
-  fcfPerShare: nullableNumber,
+  deRatio: nullableNumber,
+  marketCapB: nullableNumber,
+  dividendYield: nullableNumber,
+  pb: nullableNumber,
+  roe: nullableNumber,
 };
 
 const screenerSchema = {
@@ -466,7 +433,7 @@ Deno.serve(async (request) => {
 
           store: false,
 
-          max_output_tokens: 10000,
+          max_output_tokens: 6000,
 
           input: [
             {
@@ -494,7 +461,7 @@ Deno.serve(async (request) => {
                 PAGE_SIZE +
                 " eligible matches remain. Return fewer only when the eligible universe is exhausted. Do not stop early.\n\n" +
                 filtersText +
-                "\n\nReturn every required field for every stock. " +
+                "\n\nReturn every required field for every stock and no additional fields or commentary. " +
                 "Use NASDAQ, NYSE, or AMEX for exchange. " +
                 "Do not include ETFs, funds, preferred shares, warrants, OTC securities, " +
                 "cryptocurrencies, private companies, or duplicate tickers." +
