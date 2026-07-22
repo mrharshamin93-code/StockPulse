@@ -1308,8 +1308,7 @@ export default function Screener() {
           hasMore:
             Boolean(
               data?.hasMore ??
-                results.length ===
-                  PAGE_SIZE,
+                results.length > 0,
             ),
           generatedAt:
             Date.now(),
