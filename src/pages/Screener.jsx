@@ -7,12 +7,32 @@ import React, {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Activity,
   ArrowLeft,
+  BadgeDollarSign,
+  Banknote,
+  BarChart3,
+  Building2,
+  ChevronRight,
+  CircleDollarSign,
+  Cpu,
+  Factory,
+  Gauge,
+  HeartPulse,
+  Landmark,
+  LineChart,
   Loader2,
+  Percent,
+  Radio,
   Save,
   Search,
+  ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
+  TrendingUp,
+  WalletCards,
+  Zap,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -29,8 +49,6 @@ import { Input } from "@/components/ui/input";
 
 const LONG_PRESS_MS = 600;
 const TOOLTIP_VISIBLE_MS = 5000;
-const SCREENER_SESSION_KEY =
-  "screener_paginated_results_v2";
 
 const SECTORS = [
   "Technology",
@@ -504,41 +522,15 @@ const METRIC_GROUPS = [
 
 const ALL_METRIC_DEFS =
   METRIC_GROUPS.flatMap(
-    (group) => group.metrics,
+    (group) =>
+      group.metrics.map(
+        (metric) => ({
+          ...metric,
+          group:
+            group.group,
+        }),
+      ),
   );
-
-const WIZARD_STEPS = [
-  {
-    key: "sector",
-    label: "Sector",
-  },
-  ...METRIC_GROUPS.map(
-    (group) => ({
-      key: group.group
-        .toLowerCase()
-        .replace(
-          /[^a-z0-9]+/g,
-          "-",
-        )
-        .replace(
-          /^-|-$/g,
-          "",
-        ),
-      label: group.group,
-    }),
-  ),
-];
-
-const CUSTOM_FILTER_KEYS =
-  new Set([
-    "sectors",
-    ...ALL_METRIC_DEFS.flatMap(
-      (definition) => [
-        definition.minKey,
-        definition.maxKey,
-      ],
-    ),
-  ]);
 
 function readSessionObject(
   key,
@@ -901,6 +893,149 @@ function FilterChip({
   );
 }
 
+
+const QUICK_SCREEN_UI = [
+  {
+    icon: Cpu,
+    description:
+      "Top technology companies by market cap",
+    iconClass:
+      "bg-blue-50 text-blue-600",
+  },
+  {
+    icon: CircleDollarSign,
+    description:
+      "Stocks with dividend yield above 3%",
+    iconClass:
+      "bg-emerald-50 text-emerald-600",
+  },
+  {
+    icon: BarChart3,
+    description:
+      "Stocks trading at oversold RSI levels",
+    iconClass:
+      "bg-violet-50 text-violet-600",
+  },
+  {
+    icon: TrendingUp,
+    description:
+      "Stocks showing strong recent momentum",
+    iconClass:
+      "bg-orange-50 text-orange-600",
+  },
+  {
+    icon: BadgeDollarSign,
+    description:
+      "Stocks priced below five dollars",
+    iconClass:
+      "bg-amber-50 text-amber-600",
+  },
+];
+
+const GROUP_ICON_MAP = {
+  Valuation: BadgeDollarSign,
+  Profitability: CircleDollarSign,
+  Growth: TrendingUp,
+  "Financial Health": ShieldCheck,
+  Efficiency: Gauge,
+  Dividends: Percent,
+  "Market Data": LineChart,
+};
+
+const SECTOR_ICON_MAP = {
+  Technology: Cpu,
+  Healthcare: HeartPulse,
+  Finance: Landmark,
+  Energy: Zap,
+  "Consumer Cyclical": WalletCards,
+  Industrials: Factory,
+  "Real Estate": Building2,
+  Utilities: Activity,
+  Materials: Sparkles,
+  "Communication Services": Radio,
+};
+
+function MetricFilterRow({
+  definition,
+  filters,
+  onChange,
+}) {
+  const GroupIcon =
+    GROUP_ICON_MAP[
+      definition.group
+    ] || SlidersHorizontal;
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-700">
+          <GroupIcon className="h-4 w-4" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="truncate text-sm font-semibold text-gray-900">
+              {definition.label}
+            </p>
+
+            <span className="text-[10px] text-gray-400">
+              {definition.unit}
+            </span>
+          </div>
+
+          <p className="truncate text-[10px] text-gray-400">
+            {definition.desc}
+          </p>
+        </div>
+
+        <div className="grid w-[150px] shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-1.5 sm:w-[190px]">
+          <input
+            type="number"
+            step="any"
+            aria-label={`${definition.label} minimum`}
+            placeholder="Min"
+            value={
+              filters[
+                definition.minKey
+              ] ?? ""
+            }
+            onChange={(event) =>
+              onChange(
+                definition.minKey,
+                event.target.value,
+              )
+            }
+            className="h-9 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400 focus:bg-white"
+          />
+
+          <span className="text-xs text-gray-300">
+            –
+          </span>
+
+          <input
+            type="number"
+            step="any"
+            aria-label={`${definition.label} maximum`}
+            placeholder="Max"
+            value={
+              filters[
+                definition.maxKey
+              ] ?? ""
+            }
+            onChange={(event) =>
+              onChange(
+                definition.maxKey,
+                event.target.value,
+              )
+            }
+            className="h-9 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400 focus:bg-white"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Screener() {
   const { user } =
     useAuth();
@@ -994,16 +1129,6 @@ export default function Screener() {
     setSaving,
   ] = useState(false);
 
-  const [
-    screenView,
-    setScreenView,
-  ] = useState("landing");
-
-  const [
-    wizardStep,
-    setWizardStep,
-  ] = useState(0);
-
   const toastTimerRef =
     useRef(null);
 
@@ -1016,21 +1141,6 @@ export default function Screener() {
       [filters],
     );
 
-  const activeWizardStep =
-    WIZARD_STEPS[
-      wizardStep
-    ];
-
-  const activeMetricGroup =
-    wizardStep === 0
-      ? null
-      : METRIC_GROUPS[
-          wizardStep - 1
-        ];
-
-  const selectedFilterCount =
-    selectedSectors.length +
-    activeMetrics.size;
 
   const showToast =
     useCallback(
@@ -1282,10 +1392,6 @@ export default function Screener() {
       setLoading(true);
 
       try {
-        window.sessionStorage.removeItem(
-          SCREENER_SESSION_KEY,
-        );
-
         window.sessionStorage.setItem(
           "screener_filters",
           JSON.stringify(
@@ -1319,9 +1425,6 @@ export default function Screener() {
               body: {
                 filters:
                   selectedFilters,
-                page: 1,
-                excludedTickers:
-                  [],
               },
             },
           );
@@ -1343,35 +1446,11 @@ export default function Screener() {
             ? data.stocks
             : [];
 
-        const resultSession = {
-          version: 2,
-          filters:
-            selectedFilters,
-          pages: [
-            results,
-          ],
-          currentPage: 1,
-          hasMore:
-            Boolean(
-              data?.hasMore ??
-                results.length > 0,
-            ),
-          generatedAt:
-            Date.now(),
-        };
-
         try {
           window.sessionStorage.setItem(
             "screener_last_results",
             JSON.stringify(
               results,
-            ),
-          );
-
-          window.sessionStorage.setItem(
-            SCREENER_SESSION_KEY,
-            JSON.stringify(
-              resultSession,
             ),
           );
         } catch {
@@ -1388,8 +1467,6 @@ export default function Screener() {
               results,
               filters:
                 selectedFilters,
-              screenerSession:
-                resultSession,
               error: "",
             },
           },
@@ -1664,107 +1741,12 @@ export default function Screener() {
     setActivePreset(null);
   };
 
-  const handleHeaderBack =
-    () => {
-      if (
-        screenView !==
-        "landing"
-      ) {
-        setScreenView(
-          "landing",
-        );
-        return;
-      }
-
-      handleBack();
-    };
-
-  const openCustomScreener =
-    () => {
-      setFilters(
-        (previous) =>
-          Object.fromEntries(
-            Object.entries(
-              normalizeFilters(
-                previous,
-              ),
-            ).filter(
-              ([key]) =>
-                CUSTOM_FILTER_KEYS.has(
-                  key,
-                ),
-            ),
-          ),
-      );
-
-      setActiveMetrics(
-        (previous) =>
-          new Set(
-            [
-              ...previous,
-            ].filter((key) =>
-              ALL_METRIC_DEFS.some(
-                (definition) =>
-                  definition.key ===
-                  key,
-              ),
-            ),
-          ),
-      );
-
-      setActivePreset(null);
-      setWizardStep(0);
-      setScreenView(
-        "custom",
-      );
-    };
-
-  const openSaveDialog =
-    () => {
-      setSaveName("");
-      setSaveDialogOpen(
-        true,
-      );
-    };
-
-  const goToWizardStep = (
-    nextStep,
-  ) => {
-    const boundedStep =
-      Math.min(
-        Math.max(
-          nextStep,
-          0,
-        ),
-        WIZARD_STEPS.length -
-          1,
-      );
-
-    setWizardStep(
-      boundedStep,
-    );
-
-    window.requestAnimationFrame(
-      () => {
-        window.scrollTo({
-          top: 0,
-          behavior: "smooth",
-        });
-      },
-    );
-  };
-
   return (
     <div
-      className="flex min-h-screen flex-col"
+      className="flex min-h-screen flex-col bg-white"
       style={{
         paddingBottom:
-          screenView ===
-          "custom"
-            ? "calc(env(safe-area-inset-bottom) + 154px)"
-            : "calc(env(safe-area-inset-bottom) + 64px)",
-        backgroundColor:
-          "hsl(var(--background))",
+          "calc(env(safe-area-inset-bottom) + 110px)",
       }}
     >
       {toast && (
@@ -1780,620 +1762,307 @@ export default function Screener() {
             "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto grid w-full max-w-xl grid-cols-[1fr_auto_1fr] items-center px-3 py-3 sm:px-5">
+        <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
           <button
             type="button"
-            onClick={
-              handleHeaderBack
-            }
-            aria-label={
-              screenView ===
-              "landing"
-                ? "Go back"
-                : "Back to screener choices"
-            }
+            onClick={handleBack}
+            aria-label="Go back"
             className="inline-flex min-h-[44px] min-w-[72px] items-center gap-1.5 justify-self-start rounded-xl px-2 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100 active:scale-95"
           >
-            <ArrowLeft
-              className="h-4 w-4 shrink-0"
-              strokeWidth={2}
-            />
+            <ArrowLeft className="h-4 w-4 shrink-0" />
             Back
           </button>
 
-          <div className="flex min-w-0 items-center justify-center gap-2">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-900">
+          <div className="flex items-center justify-center gap-1.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
               <SlidersHorizontal className="h-5 w-5 text-white" />
             </div>
 
-            <div className="min-w-0">
-              <h1 className="font-heading text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">
+            <div>
+              <h1 className="font-heading text-2xl font-bold tracking-tight">
                 Screener
               </h1>
-              <p className="truncate text-[11px] text-gray-500 sm:text-xs">
-                {screenView ===
-                "custom"
-                  ? "Build filters step by step"
-                  : screenView ===
-                      "quick"
-                    ? "Ready-made stock screens"
-                    : "Choose how to screen"}
+
+              <p className="text-xs text-gray-500">
+                Filter stocks by criteria
               </p>
             </div>
           </div>
 
-          <div
-            aria-hidden="true"
-          />
+          <div aria-hidden="true" />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-5 sm:px-6">
-        {screenView ===
-          "landing" && (
-          <div className="space-y-6">
-            <section>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-                Get started
-              </p>
-
-              <div className="grid gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setScreenView(
-                      "quick",
-                    )
-                  }
-                  className="group flex min-h-[116px] w-full items-center gap-4 rounded-3xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.99]"
-                >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
-                    <Search className="h-6 w-6" />
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-heading text-lg font-bold text-gray-950">
-                      Quick Screens
-                    </span>
-                    <span className="mt-1 block text-sm leading-5 text-gray-500">
-                      Choose a ready-made strategy and get results immediately.
-                    </span>
-                  </span>
-
-                  <span
-                    aria-hidden="true"
-                    className="text-xl text-gray-300 transition-transform group-hover:translate-x-1"
-                  >
-                    ›
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={
-                    openCustomScreener
-                  }
-                  className="group flex min-h-[116px] w-full items-center gap-4 rounded-3xl border border-gray-900 bg-gray-900 p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gray-800 hover:shadow-md active:scale-[0.99]"
-                >
-                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-white">
-                    <SlidersHorizontal className="h-6 w-6" />
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-heading text-lg font-bold text-white">
-                      Custom Screener
-                    </span>
-                    <span className="mt-1 block text-sm leading-5 text-gray-300">
-                      Select sectors and metrics across an eight-step guided screen.
-                    </span>
-                  </span>
-
-                  <span
-                    aria-hidden="true"
-                    className="text-xl text-gray-500 transition-transform group-hover:translate-x-1"
-                  >
-                    ›
-                  </span>
-                </button>
-              </div>
-            </section>
-
-            {savedScreens.length >
-              0 && (
-              <section>
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <p className="font-heading text-base font-bold text-gray-950">
-                      Saved Screens
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Run one of your saved filter sets.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {savedScreens.map(
-                    (screen) => (
-                      <div
-                        key={
-                          screen.id
-                        }
-                        className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm"
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            loadSavedScreen(
-                              screen,
-                            )
-                          }
-                          className="min-h-[48px] min-w-0 flex-1 rounded-xl px-3 text-left transition-colors hover:bg-gray-50"
-                        >
-                          <span className="block truncate text-sm font-semibold text-gray-950">
-                            {
-                              screen.name
-                            }
-                          </span>
-                          <span className="mt-0.5 block text-xs text-gray-500">
-                            Open saved screen
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          aria-label={
-                            "Delete " +
-                            screen.name
-                          }
-                          onClick={(
-                            event,
-                          ) =>
-                            deleteSavedScreen(
-                              screen.id,
-                              event,
-                            )
-                          }
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ),
-                  )}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-
-        {screenView ===
-          "quick" && (
-          <section className="space-y-4">
+      <main className="mx-auto w-full max-w-xl flex-1 space-y-8 px-4 py-5 sm:px-6">
+        <section>
+          <div className="mb-3 flex items-end justify-between">
             <div>
-              <p className="font-heading text-xl font-bold text-gray-950">
+              <h2 className="font-heading text-lg font-bold text-gray-950">
                 Quick Screens
-              </p>
-              <p className="mt-1 text-sm text-gray-500">
-                Tap a strategy to run it immediately.
+              </h2>
+
+              <p className="mt-0.5 text-xs text-gray-400">
+                Ready-made screens for common strategies
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {POPULAR_SCREENS.map(
-                (
-                  preset,
-                  index,
-                ) => (
+            <button
+              type="button"
+              className="min-h-9 rounded-lg px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+            >
+              View All
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {POPULAR_SCREENS.slice(0, 4).map(
+              (preset, index) => {
+                const ui =
+                  QUICK_SCREEN_UI[index];
+                const Icon =
+                  ui.icon;
+
+                return (
                   <button
-                    key={
-                      preset.label
-                    }
                     type="button"
-                    disabled={
-                      loading
-                    }
+                    key={preset.label}
                     onClick={() =>
                       applyPreset(
                         preset,
                         index,
                       )
                     }
-                    className={
-                      activePreset ===
-                      index
-                        ? "min-h-[104px] rounded-2xl border border-gray-900 bg-gray-900 p-4 text-left text-white shadow-md transition-all active:scale-[0.99] disabled:opacity-60"
-                        : "min-h-[104px] rounded-2xl border border-gray-200 bg-white p-4 text-left text-gray-950 shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.99] disabled:opacity-60"
-                    }
+                    className="group min-h-[144px] rounded-3xl border border-gray-100 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99]"
                   >
-                    <span className="flex items-center justify-between gap-3">
-                      <span className="font-heading text-base font-bold">
-                        {
-                          preset.label
-                        }
-                      </span>
-
-                      {loading &&
-                        activePreset ===
-                          index && (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      )}
+                    <span
+                      className={`mb-4 flex h-10 w-10 items-center justify-center rounded-2xl ${ui.iconClass}`}
+                    >
+                      <Icon className="h-5 w-5" />
                     </span>
 
-                    <span
-                      className={
-                        activePreset ===
-                        index
-                          ? "mt-2 block text-xs leading-5 text-gray-300"
-                          : "mt-2 block text-xs leading-5 text-gray-500"
-                      }
-                    >
-                      Uses a prepared set of filters and opens the matching stocks.
+                    <span className="block text-sm font-bold text-gray-950">
+                      {preset.label}
+                    </span>
+
+                    <span className="mt-1.5 block text-xs leading-5 text-gray-500">
+                      {ui.description}
                     </span>
                   </button>
+                );
+              },
+            )}
+          </div>
+        </section>
+
+        {savedScreens.length > 0 && (
+          <section>
+            <h2 className="mb-3 font-heading text-lg font-bold text-gray-950">
+              Saved Screens
+            </h2>
+
+            <div className="space-y-2">
+              {savedScreens.map(
+                (screen) => (
+                  <div
+                    key={screen.id}
+                    className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        loadSavedScreen(
+                          screen,
+                        )
+                      }
+                      className="flex min-h-11 min-w-0 flex-1 items-center justify-between rounded-xl px-3 text-left hover:bg-gray-50"
+                    >
+                      <span className="truncate text-sm font-semibold text-gray-900">
+                        {screen.name}
+                      </span>
+
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                    </button>
+
+                    <button
+                      type="button"
+                      aria-label={`Delete ${screen.name}`}
+                      onClick={(event) =>
+                        deleteSavedScreen(
+                          screen.id,
+                          event,
+                        )
+                      }
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 ),
               )}
+            </div>
+          </section>
+        )}
+
+        <section>
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <h2 className="font-heading text-lg font-bold text-gray-950">
+                Custom Screener
+              </h2>
+
+              <p className="mt-0.5 text-xs text-gray-400">
+                Choose sectors and enter only the values you need
+              </p>
             </div>
 
             <button
               type="button"
-              onClick={
-                openCustomScreener
-              }
-              className="min-h-[48px] w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
-            >
-              Build a custom screen instead
-            </button>
-          </section>
-        )}
-
-        {screenView ===
-          "custom" && (
-          <div className="space-y-5">
-            <section className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="mb-4 flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
-                    Step{" "}
-                    {wizardStep +
-                      1}{" "}
-                    of{" "}
-                    {
-                      WIZARD_STEPS.length
-                    }
-                  </p>
-                  <h2 className="mt-1 font-heading text-xl font-bold text-gray-950">
-                    {
-                      activeWizardStep.label
-                    }
-                  </h2>
-                </div>
-
-                <div className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">
-                  {selectedFilterCount}{" "}
-                  {selectedFilterCount ===
-                  1
-                    ? "filter"
-                    : "filters"}{" "}
-                  selected
-                </div>
-              </div>
-
-              <div
-                role="tablist"
-                aria-label="Screener sections"
-                className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
-              >
-                {WIZARD_STEPS.map(
-                  (
-                    step,
-                    index,
-                  ) => (
-                    <button
-                      key={
-                        step.key
-                      }
-                      type="button"
-                      role="tab"
-                      aria-selected={
-                        wizardStep ===
-                        index
-                      }
-                      onClick={() =>
-                        goToWizardStep(
-                          index,
-                        )
-                      }
-                      className={
-                        wizardStep ===
-                        index
-                          ? "min-h-[42px] shrink-0 rounded-full border border-gray-900 bg-gray-900 px-4 text-xs font-semibold text-white"
-                          : "min-h-[42px] shrink-0 rounded-full border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-600 transition-colors hover:border-gray-400"
-                      }
-                    >
-                      {index +
-                        1}
-                      .{" "}
-                      {
-                        step.label
-                      }
-                    </button>
-                  ),
-                )}
-              </div>
-            </section>
-
-            {wizardStep ===
-              0 ? (
-              <section className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="font-heading text-base font-bold text-gray-950">
-                    Choose sectors
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-gray-500">
-                    Select as many sectors as you want, or choose All to search the full stock universe.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <FilterChip
-                    label="All sectors"
-                    active={
-                      selectedSectors.length ===
-                      0
-                    }
-                    onClick={
-                      clearSectors
-                    }
-                  />
-
-                  {SECTORS.map(
-                    (sector) => (
-                      <FilterChip
-                        key={
-                          sector
-                        }
-                        label={
-                          sector
-                        }
-                        active={selectedSectors.includes(
-                          sector,
-                        )}
-                        onClick={() =>
-                          toggleSector(
-                            sector,
-                          )
-                        }
-                      />
-                    ),
-                  )}
-                </div>
-              </section>
-            ) : (
-              <section className="space-y-3">
-                <div className="px-1">
-                  <h3 className="font-heading text-base font-bold text-gray-950">
-                    {
-                      activeMetricGroup.group
-                    }{" "}
-                    metrics
-                  </h3>
-                  <p className="mt-1 text-xs leading-5 text-gray-500">
-                    Tap a metric to select it. Press and hold a metric to see its description.
-                  </p>
-                </div>
-
-                {activeMetricGroup.metrics.map(
-                  (
-                    definition,
-                  ) => {
-                    const isActive =
-                      activeMetrics.has(
-                        definition.key,
-                      );
-
-                    return (
-                      <div
-                        key={
-                          definition.key
-                        }
-                        className={
-                          isActive
-                            ? "rounded-2xl border border-gray-900 bg-white p-4 shadow-sm ring-1 ring-gray-900"
-                            : "rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                        }
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <FilterChip
-                            label={
-                              definition.label
-                            }
-                            active={
-                              isActive
-                            }
-                            onClick={() =>
-                              toggleMetric(
-                                definition.key,
-                              )
-                            }
-                            tooltip={
-                              definition.desc
-                            }
-                          />
-
-                          <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
-                            {
-                              definition.unit
-                            }
-                          </span>
-                        </div>
-
-                        {isActive && (
-                          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4">
-                            <div>
-                              <Label className="mb-1.5 block text-[11px] font-semibold text-gray-500">
-                                Minimum
-                              </Label>
-
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="any"
-                                placeholder={
-                                  definition.minPlaceholder
-                                }
-                                value={
-                                  filters[
-                                    definition.minKey
-                                  ] ?? ""
-                                }
-                                onChange={(
-                                  event,
-                                ) =>
-                                  updateNumberFilter(
-                                    definition.minKey,
-                                    event.target.value,
-                                  )
-                                }
-                                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-950 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/20"
-                              />
-                            </div>
-
-                            <div>
-                              <Label className="mb-1.5 block text-[11px] font-semibold text-gray-500">
-                                Maximum
-                              </Label>
-
-                              <input
-                                type="number"
-                                inputMode="decimal"
-                                step="any"
-                                placeholder={
-                                  definition.maxPlaceholder
-                                }
-                                value={
-                                  filters[
-                                    definition.maxKey
-                                  ] ?? ""
-                                }
-                                onChange={(
-                                  event,
-                                ) =>
-                                  updateNumberFilter(
-                                    definition.maxKey,
-                                    event.target.value,
-                                  )
-                                }
-                                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-950 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/20"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  },
-                )}
-              </section>
-            )}
-          </div>
-        )}
-      </main>
-
-      {screenView ===
-        "custom" && (
-        <div
-          className="fixed inset-x-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur-xl"
-          style={{
-            bottom:
-              "calc(env(safe-area-inset-bottom) + 64px)",
-          }}
-        >
-          <div className="mx-auto flex w-full max-w-xl items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-[46px] px-4"
-              disabled={
-                loading
-              }
               onClick={() => {
-                if (
-                  wizardStep ===
-                  0
-                ) {
-                  setScreenView(
-                    "landing",
-                  );
-                  return;
-                }
-
-                goToWizardStep(
-                  wizardStep -
-                    1,
+                setFilters({});
+                setActiveMetrics(
+                  new Set(),
+                );
+                setActivePreset(
+                  null,
                 );
               }}
+              className="min-h-9 rounded-lg px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
             >
-              Back
-            </Button>
+              Clear All
+            </button>
+          </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-[46px] px-4"
-              disabled={
-                loading
-              }
-              onClick={
-                openSaveDialog
-              }
-            >
-              <Save className="mr-1.5 h-4 w-4" />
-              Save
-            </Button>
+          <div className="mb-6">
+            <p className="mb-2 text-xs font-semibold text-gray-700">
+              Sector
+            </p>
 
-            {wizardStep <
-            WIZARD_STEPS.length -
-              1 ? (
-              <Button
-                type="button"
-                className="min-h-[46px] flex-1"
-                disabled={
-                  loading
+            <div className="flex flex-wrap gap-2">
+              <FilterChip
+                label="All"
+                active={
+                  selectedSectors.length ===
+                  0
                 }
-                onClick={() =>
-                  goToWizardStep(
-                    wizardStep +
-                      1,
-                  )
-                }
-              >
-                Next
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                className="min-h-[46px] flex-1"
-                disabled={
-                  loading
-                }
-                onClick={() => {
-                  setActivePreset(
-                    null,
+                onClick={clearSectors}
+              />
+
+              {SECTORS.map(
+                (sector) => {
+                  const Icon =
+                    SECTOR_ICON_MAP[
+                      sector
+                    ] || Building2;
+
+                  return (
+                    <button
+                      type="button"
+                      key={sector}
+                      onClick={() =>
+                        toggleSector(
+                          sector,
+                        )
+                      }
+                      className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors ${
+                        selectedSectors.includes(
+                          sector,
+                        )
+                          ? "border-gray-900 bg-gray-900 text-white"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-400"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {sector}
+                    </button>
                   );
-                  void runScreen();
-                }}
-              >
-                {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="mr-2 h-4 w-4" />
-                )}
-                Run Screen
-              </Button>
+                },
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {METRIC_GROUPS.map(
+              (group) => (
+                <div key={group.group}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                      {group.group}
+                    </h3>
+
+                    <div className="h-px flex-1 bg-gray-100" />
+                  </div>
+
+                  <div className="space-y-2">
+                    {group.metrics.map(
+                      (definition) => (
+                        <MetricFilterRow
+                          key={
+                            definition.key
+                          }
+                          definition={{
+                            ...definition,
+                            group:
+                              group.group,
+                          }}
+                          filters={filters}
+                          onChange={
+                            updateNumberFilter
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
+              ),
             )}
           </div>
+        </section>
+      </main>
+
+      <div
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-100 bg-white/95 px-4 pb-3 pt-3 backdrop-blur-xl"
+        style={{
+          paddingBottom:
+            "calc(env(safe-area-inset-bottom) + 12px)",
+        }}
+      >
+        <div className="mx-auto flex w-full max-w-xl gap-2">
+          <Button
+            className="h-12 flex-1 rounded-2xl bg-gray-950 text-white hover:bg-gray-800"
+            onClick={() => {
+              setActivePreset(null);
+              void runScreen();
+            }}
+            disabled={loading}
+          >
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="mr-2 h-4 w-4" />
+            )}
+
+            Run Screener
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 rounded-2xl px-4"
+            disabled={loading}
+            onClick={() => {
+              setSaveName("");
+              setSaveDialogOpen(
+                true,
+              );
+            }}
+          >
+            <Save className="h-4 w-4" />
+            <span className="sr-only">
+              Save screen
+            </span>
+          </Button>
         </div>
-      )}
+      </div>
 
       <Dialog
         open={
@@ -2425,7 +2094,8 @@ export default function Screener() {
                   event,
                 ) =>
                   setSaveName(
-                    event.target.value,
+                    event.target
+                      .value,
                   )
                 }
                 onKeyDown={(
@@ -2436,6 +2106,7 @@ export default function Screener() {
                     "Enter"
                   ) {
                     event.preventDefault();
+
                     void saveScreen();
                   }
                 }}
@@ -2456,6 +2127,7 @@ export default function Screener() {
               {saving && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
+
               Save Screen
             </Button>
           </div>
