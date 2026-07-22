@@ -901,35 +901,35 @@ const QUICK_SCREEN_UI = [
     description:
       "Top technology companies by market cap",
     iconClass:
-      "bg-gray-100 text-gray-900",
+      "bg-gray-100 text-black",
   },
   {
     icon: CircleDollarSign,
     description:
       "Stocks with dividend yield above 3%",
     iconClass:
-      "bg-gray-100 text-gray-900",
+      "bg-gray-100 text-black",
   },
   {
     icon: BarChart3,
     description:
       "Stocks trading at oversold RSI levels",
     iconClass:
-      "bg-gray-100 text-gray-900",
+      "bg-gray-100 text-black",
   },
   {
     icon: TrendingUp,
     description:
       "Stocks showing strong recent momentum",
     iconClass:
-      "bg-gray-100 text-gray-900",
+      "bg-gray-100 text-black",
   },
   {
     icon: BadgeDollarSign,
     description:
       "Stocks priced below five dollars",
     iconClass:
-      "bg-gray-100 text-gray-900",
+      "bg-gray-100 text-black",
   },
 ];
 
@@ -988,19 +988,19 @@ function MetricSelectionRow({
 
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-sm font-semibold text-black">
             {definition.label}
           </span>
 
           {definition.unit &&
             definition.unit.toLowerCase() !== "x" && (
-              <span className="text-[10px] font-medium text-gray-400">
+              <span className="text-[10px] font-medium text-black">
                 {definition.unit}
               </span>
             )}
         </span>
 
-        <span className="mt-1 block text-xs leading-5 text-gray-500">
+        <span className="mt-1 block text-xs leading-5 text-black">
           {definition.desc}
         </span>
       </span>
@@ -1015,7 +1015,7 @@ function ActiveMetricFilterRow({
 }) {
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm">
-      <p className="break-words text-sm font-semibold leading-5 text-gray-900">
+      <p className="break-words text-sm font-semibold leading-5 text-black">
         {definition.label}
       </p>
 
@@ -1036,10 +1036,10 @@ function ActiveMetricFilterRow({
               event.target.value,
             )
           }
-          className="h-9 min-w-0 rounded-xl border border-gray-200 bg-white px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400"
+          className="h-9 min-w-0 rounded-xl border border-gray-200 bg-white px-2 text-center text-xs text-black outline-none transition focus:border-gray-400"
         />
 
-        <span className="text-xs text-gray-300">
+        <span className="text-xs text-black">
           –
         </span>
 
@@ -1059,7 +1059,7 @@ function ActiveMetricFilterRow({
               event.target.value,
             )
           }
-          className="h-9 min-w-0 rounded-xl border border-gray-200 bg-white px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400"
+          className="h-9 min-w-0 rounded-xl border border-gray-200 bg-white px-2 text-center text-xs text-black outline-none transition focus:border-gray-400"
         />
       </div>
     </div>
@@ -1817,7 +1817,7 @@ export default function Screener() {
       className="flex min-h-screen flex-col bg-background"
       style={{
         paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 110px)",
+          "calc(env(safe-area-inset-bottom) + 190px)",
       }}
     >
       {toast && (
@@ -1838,7 +1838,7 @@ export default function Screener() {
             type="button"
             onClick={handleBack}
             aria-label="Go back"
-            className="inline-flex min-h-[44px] min-w-[72px] items-center gap-1.5 justify-self-start rounded-xl px-2 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100 active:scale-95"
+            className="inline-flex min-h-[44px] min-w-[72px] items-center gap-1.5 justify-self-start rounded-xl px-2 py-2 text-sm font-semibold text-black transition-colors hover:bg-gray-100 active:scale-95"
           >
             <ArrowLeft className="h-4 w-4 shrink-0" />
             Back
@@ -1872,18 +1872,18 @@ export default function Screener() {
         <section>
           <div className="mb-3 flex items-end justify-between">
             <div>
-              <h2 className="font-heading text-lg font-bold text-gray-950">
+              <h2 className="font-heading text-lg font-bold text-black">
                 Quick Screens
               </h2>
 
-              <p className="mt-0.5 text-xs text-gray-400">
+              <p className="mt-0.5 text-xs text-black">
                 Ready-made screens for common strategies
               </p>
             </div>
 
             <button
               type="button"
-              className="min-h-9 rounded-lg px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+              className="min-h-9 rounded-lg px-2 text-xs font-medium text-black transition-colors hover:bg-gray-50 hover:text-black"
             >
               View All
             </button>
@@ -1915,11 +1915,11 @@ export default function Screener() {
                       <Icon className="h-4 w-4" />
                     </span>
 
-                    <span className="block text-[13px] font-bold leading-4 text-gray-950">
+                    <span className="block text-[13px] font-bold leading-4 text-black">
                       {preset.label}
                     </span>
 
-                    <span className="mt-1 block text-[11px] leading-4 text-gray-500">
+                    <span className="mt-1 block text-[11px] leading-4 text-black">
                       {ui.description}
                     </span>
                   </button>
@@ -1931,7 +1931,7 @@ export default function Screener() {
 
         {savedScreens.length > 0 && (
           <section>
-            <h2 className="mb-3 font-heading text-lg font-bold text-gray-950">
+            <h2 className="mb-3 font-heading text-lg font-bold text-black">
               Saved Screens
             </h2>
 
@@ -1951,11 +1951,11 @@ export default function Screener() {
                       }
                       className="flex min-h-11 min-w-0 flex-1 items-center justify-between rounded-xl px-3 text-left hover:bg-gray-50"
                     >
-                      <span className="truncate text-sm font-semibold text-gray-900">
+                      <span className="truncate text-sm font-semibold text-black">
                         {screen.name}
                       </span>
 
-                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                      <ChevronRight className="h-4 w-4 shrink-0 text-black" />
                     </button>
 
                     <button
@@ -1967,7 +1967,7 @@ export default function Screener() {
                           event,
                         )
                       }
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-900"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-black transition-colors hover:bg-gray-100 hover:text-black"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1981,11 +1981,11 @@ export default function Screener() {
         <section>
           <div className="mb-3 flex items-end justify-between">
             <div>
-              <h2 className="font-heading text-lg font-bold text-gray-950">
+              <h2 className="font-heading text-lg font-bold text-black">
                 Custom Screener
               </h2>
 
-              <p className="mt-0.5 text-xs text-gray-400">
+              <p className="mt-0.5 text-xs text-black">
                 Choose sectors and enter only the values you need
               </p>
             </div>
@@ -2001,14 +2001,14 @@ export default function Screener() {
                   null,
                 );
               }}
-              className="min-h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              className="min-h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-black transition-colors hover:bg-gray-50"
             >
               Clear All
             </button>
           </div>
 
           <div className="mb-6">
-            <p className="mb-2 text-xs font-semibold text-gray-700">
+            <p className="mb-2 text-xs font-semibold text-black">
               Sector
             </p>
 
@@ -2060,7 +2060,7 @@ export default function Screener() {
               (group) => (
                 <div key={group.group}>
                   <div className="mb-2 flex items-center gap-2">
-                    <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">
+                    <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-black">
                       {group.group}
                     </h3>
 
@@ -2096,24 +2096,24 @@ export default function Screener() {
 
           <div className="mt-8">
             <div className="mb-3">
-              <h3 className="font-heading text-base font-bold text-gray-950">
+              <h3 className="font-heading text-base font-bold text-black">
                 Selected Metrics
               </h3>
 
-              <p className="mt-0.5 text-xs text-gray-400">
+              <p className="mt-0.5 text-xs text-black">
                 Enter the minimum, maximum, or both for each selected metric
               </p>
             </div>
 
             {activeMetrics.size === 0 ? (
               <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 px-5 py-8 text-center">
-                <SlidersHorizontal className="mx-auto h-6 w-6 text-gray-300" />
+                <SlidersHorizontal className="mx-auto h-6 w-6 text-black" />
 
-                <p className="mt-2 text-sm font-semibold text-gray-700">
+                <p className="mt-2 text-sm font-semibold text-black">
                   No metrics selected
                 </p>
 
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-black">
                   Check a metric above to add its Min and Max fields here.
                 </p>
               </div>
@@ -2147,11 +2147,7 @@ export default function Screener() {
       </main>
 
       <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-100 bg-white/95 px-4 pb-3 pt-3 backdrop-blur-xl"
-        style={{
-          paddingBottom:
-            "calc(env(safe-area-inset-bottom) + 12px)",
-        }}
+        className="fixed inset-x-0 bottom-[calc(72px+env(safe-area-inset-bottom))] z-40 border-t border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-xl"
       >
         <div className="mx-auto flex w-full max-w-xl gap-2">
           <Button
