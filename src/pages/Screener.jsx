@@ -969,14 +969,14 @@ function MetricSelectionRow({
           definition.key,
         )
       }
-      className={`flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
         selected
           ? "border-gray-900 bg-gray-50 shadow-sm"
           : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/60"
       }`}
     >
       <span
-        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
           selected
             ? "border-gray-900 bg-gray-900 text-white"
             : "border-gray-300 bg-white text-transparent"
@@ -1016,24 +1016,9 @@ function ActiveMetricFilterRow({
   return (
     <div className="rounded-2xl border border-gray-100 bg-white px-3 py-3 shadow-sm">
       <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="truncate text-sm font-semibold text-gray-900">
-              {definition.label}
-            </p>
-
-            {definition.unit &&
-              definition.unit.toLowerCase() !== "x" && (
-                <span className="text-[10px] text-gray-400">
-                  {definition.unit}
-                </span>
-              )}
-          </div>
-
-          <p className="truncate text-[10px] text-gray-400">
-            Set the minimum, maximum, or both.
-          </p>
-        </div>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
+          {definition.label}
+        </p>
 
         <div className="grid w-[150px] shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-1.5 sm:w-[190px]">
           <input
@@ -2003,21 +1988,27 @@ export default function Screener() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setFilters({});
-                setActiveMetrics(
-                  new Set(),
-                );
-                setActivePreset(
-                  null,
-                );
-              }}
-              className="min-h-9 rounded-lg px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
-            >
-              Clear All
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                {activeMetrics.size} selected
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFilters({});
+                  setActiveMetrics(
+                    new Set(),
+                  );
+                  setActivePreset(
+                    null,
+                  );
+                }}
+                className="min-h-9 rounded-lg px-2 text-xs font-medium text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+              >
+                Clear All
+              </button>
+            </div>
           </div>
 
           <div className="mb-6">
@@ -2108,20 +2099,14 @@ export default function Screener() {
           </div>
 
           <div className="mt-8">
-            <div className="mb-3 flex items-end justify-between">
-              <div>
-                <h3 className="font-heading text-base font-bold text-gray-950">
-                  Selected Metrics
-                </h3>
+            <div className="mb-3">
+              <h3 className="font-heading text-base font-bold text-gray-950">
+                Selected Metrics
+              </h3>
 
-                <p className="mt-0.5 text-xs text-gray-400">
-                  Enter the minimum, maximum, or both for each selected metric
-                </p>
-              </div>
-
-              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
-                {activeMetrics.size} selected
-              </span>
+              <p className="mt-0.5 text-xs text-gray-400">
+                Enter the minimum, maximum, or both for each selected metric
+              </p>
             </div>
 
             {activeMetrics.size === 0 ? (
