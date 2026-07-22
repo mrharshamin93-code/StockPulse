@@ -190,8 +190,7 @@ function sessionFromLocationState(
         Boolean(
           state?.hasMore ??
             state.results
-              .length ===
-              PAGE_SIZE,
+              .length > 0,
         ),
       generatedAt:
         Date.now(),
@@ -554,8 +553,7 @@ export default function ScreenerResults() {
           : [],
       currentPage: 1,
       hasMore:
-        legacyResults.length ===
-        PAGE_SIZE,
+        legacyResults.length > 0,
       generatedAt:
         Date.now(),
     };
@@ -928,8 +926,7 @@ export default function ScreenerResults() {
                 MAX_PAGES &&
               Boolean(
                 data?.hasMore ??
-                  nextResults.length ===
-                    PAGE_SIZE,
+                  nextResults.length > 0,
               ),
             generatedAt:
               Date.now(),
