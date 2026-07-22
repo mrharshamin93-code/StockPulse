@@ -2185,10 +2185,6 @@ export default function Watchlist() {
       return false;
     }
 
-    setToast(
-      "Removed from watchlist",
-    );
-
     return true;
   }
 
