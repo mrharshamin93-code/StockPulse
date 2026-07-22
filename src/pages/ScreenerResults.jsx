@@ -4,7 +4,9 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useLocation } from "react-router-dom";
+import {
+  useLocation,
+} from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,32 +15,143 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
+import {
+  supabase,
+} from "@/lib/supabase";
+import {
+  useAuth,
+} from "@/lib/AuthContext";
 import SubPageHeader from "@/components/SubPageHeader";
 
 const PAGE_SIZE = 12;
-const MAX_PAGES = 10;
+const RESULT_LIMIT = 48;
 const SCREENER_SESSION_KEY =
   "screener_paginated_results_v2";
+const CURRENT_PAGE_KEY =
+  "screener_results_current_page";
+
+function normalizeTicker(
+  value,
+) {
+  return String(
+    value || "",
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function normalizeResults(
+  value,
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen =
+    new Set();
+
+  return value
+    .filter(
+      (stock) =>
+        stock &&
+        typeof stock ===
+          "object",
+    )
+    .filter((stock) => {
+      const ticker =
+        normalizeTicker(
+          stock?.ticker,
+        );
+
+      if (
+        !ticker ||
+        seen.has(ticker)
+      ) {
+        return false;
+      }
+
+      seen.add(ticker);
+      return true;
+    })
+    .slice(
+      0,
+      RESULT_LIMIT,
+    );
+}
+
+function flattenSessionResults(
+  value,
+) {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return [];
+  }
+
+  if (
+    Array.isArray(
+      value.results,
+    )
+  ) {
+    return normalizeResults(
+      value.results,
+    );
+  }
+
+  if (
+    Array.isArray(
+      value.pages,
+    )
+  ) {
+    return normalizeResults(
+      value.pages.flatMap(
+        (page) =>
+          Array.isArray(page)
+            ? page
+            : [],
+      ),
+    );
+  }
+
+  return [];
+}
 
 function readStoredResults() {
   try {
     const stored =
-      window.sessionStorage.getItem(
-        "screener_last_results",
-      );
+      window.sessionStorage
+        .getItem(
+          "screener_last_results",
+        );
 
     if (!stored) {
       return [];
     }
 
-    const parsed =
-      JSON.parse(stored);
+    return normalizeResults(
+      JSON.parse(stored),
+    );
+  } catch {
+    return [];
+  }
+}
 
-    return Array.isArray(parsed)
-      ? parsed
-      : [];
+function readStoredSessionResults() {
+  try {
+    const stored =
+      window.sessionStorage
+        .getItem(
+          SCREENER_SESSION_KEY,
+        );
+
+    if (!stored) {
+      return [];
+    }
+
+    return flattenSessionResults(
+      JSON.parse(stored),
+    );
   } catch {
     return [];
   }
@@ -47,9 +160,10 @@ function readStoredResults() {
 function readStoredFilters() {
   try {
     const stored =
-      window.sessionStorage.getItem(
-        "screener_filters",
-      );
+      window.sessionStorage
+        .getItem(
+          "screener_filters",
+        );
 
     if (!stored) {
       return {};
@@ -71,155 +185,32 @@ function readStoredFilters() {
   }
 }
 
-function normalizeTicker(
-  value,
-) {
-  return String(
-    value || "",
-  )
-    .trim()
-    .toUpperCase();
-}
-
-function normalizeScreenerSession(
-  value,
-) {
-  if (
-    !value ||
-    value.version !== 2 ||
-    !Array.isArray(
-      value.pages,
-    )
-  ) {
-    return null;
-  }
-
-  const pages =
-    value.pages
-      .filter(
-        Array.isArray,
-      )
-      .map((page) =>
-        page.filter(
-          (stock) =>
-            stock &&
-            typeof stock ===
-              "object",
-        ),
+function readStoredPage() {
+  try {
+    const parsed =
+      Number(
+        window.sessionStorage
+          .getItem(
+            CURRENT_PAGE_KEY,
+          ),
       );
 
-  if (
-    pages.length === 0
-  ) {
-    return null;
-  }
-
-  const requestedPage =
-    Number(
-      value.currentPage,
-    );
-
-  const currentPage =
-    Number.isInteger(
-      requestedPage,
+    return Number.isInteger(
+      parsed,
     )
-      ? Math.min(
-          pages.length,
-          Math.max(
-            1,
-            requestedPage,
-          ),
+      ? Math.max(
+          1,
+          parsed,
         )
       : 1;
-
-  const filters =
-    value.filters &&
-    typeof value.filters ===
-      "object" &&
-    !Array.isArray(
-      value.filters,
-    )
-      ? value.filters
-      : {};
-
-  return {
-    version: 2,
-    filters,
-    pages,
-    currentPage,
-    hasMore:
-      Boolean(
-        value.hasMore,
-      ) &&
-      pages.length <
-        MAX_PAGES,
-    generatedAt:
-      Number(
-        value.generatedAt,
-      ) || Date.now(),
-  };
-}
-
-function sessionFromLocationState(
-  state,
-) {
-  const supplied =
-    normalizeScreenerSession(
-      state?.screenerSession,
-    );
-
-  if (supplied) {
-    return supplied;
-  }
-
-  if (
-    !state?.loading &&
-    Array.isArray(
-      state?.results,
-    )
-  ) {
-    return {
-      version: 2,
-      filters:
-        state?.filters || {},
-      pages: [
-        state.results,
-      ],
-      currentPage: 1,
-      hasMore:
-        Boolean(
-          state?.hasMore ??
-            state.results
-              .length > 0,
-        ),
-      generatedAt:
-        Date.now(),
-    };
-  }
-
-  return null;
-}
-
-function readStoredScreenerSession() {
-  try {
-    const stored =
-      window.sessionStorage.getItem(
-        SCREENER_SESSION_KEY,
-      );
-
-    if (!stored) {
-      return null;
-    }
-
-    return normalizeScreenerSession(
-      JSON.parse(stored),
-    );
   } catch {
-    return null;
+    return 1;
   }
 }
 
-function finiteNumber(value) {
+function finiteNumber(
+  value,
+) {
   if (
     value === null ||
     value === undefined ||
@@ -231,7 +222,9 @@ function finiteNumber(value) {
   const parsed =
     Number(value);
 
-  return Number.isFinite(parsed)
+  return Number.isFinite(
+    parsed,
+  )
     ? parsed
     : null;
 }
@@ -241,11 +234,15 @@ function formatFixed(
   digits = 2,
 ) {
   const parsed =
-    finiteNumber(value);
+    finiteNumber(
+      value,
+    );
 
   return parsed === null
     ? null
-    : parsed.toFixed(digits);
+    : parsed.toFixed(
+        digits,
+      );
 }
 
 function Metric({
@@ -272,11 +269,9 @@ function ResultRow({
   added,
 }) {
   const ticker =
-    String(
-      stock?.ticker || "",
-    )
-      .trim()
-      .toUpperCase();
+    normalizeTicker(
+      stock?.ticker,
+    );
 
   const change =
     finiteNumber(
@@ -297,7 +292,8 @@ function ResultRow({
     (change ?? 0) >= 0;
 
   const week52Positive =
-    (week52Change ?? 0) >= 0;
+    (week52Change ?? 0) >=
+    0;
 
   const formattedEps =
     formatFixed(
@@ -334,18 +330,23 @@ function ResultRow({
 
             {stock?.exchange && (
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60">
-                {stock.exchange}
+                {
+                  stock.exchange
+                }
               </span>
             )}
           </div>
 
           <p className="truncate text-xs text-muted-foreground">
-            {stock?.name || ticker}
+            {stock?.name ||
+              ticker}
           </p>
 
           {stock?.sector && (
             <p className="text-[10px] text-muted-foreground/50">
-              {stock.sector}
+              {
+                stock.sector
+              }
             </p>
           )}
         </div>
@@ -354,7 +355,9 @@ function ResultRow({
           <p className="text-sm font-semibold">
             {price === null
               ? "—"
-              : `$${price.toFixed(2)}`}
+              : `$${price.toFixed(
+                  2,
+                )}`}
           </p>
 
           {change !== null && (
@@ -374,7 +377,10 @@ function ResultRow({
               {changePositive
                 ? "+"
                 : ""}
-              {change.toFixed(2)}%
+              {change.toFixed(
+                2,
+              )}
+              %
             </div>
           )}
         </div>
@@ -403,7 +409,8 @@ function ResultRow({
         <Metric
           label="52W Chg"
           value={
-            week52Change !== null ? (
+            week52Change !==
+            null ? (
               <span
                 className={
                   week52Positive
@@ -414,7 +421,10 @@ function ResultRow({
                 {week52Positive
                   ? "+"
                   : ""}
-                {week52Change.toFixed(1)}%
+                {week52Change.toFixed(
+                  1,
+                )}
+                %
               </span>
             ) : null
           }
@@ -431,7 +441,8 @@ function ResultRow({
         <Metric
           label="EPS"
           value={
-            formattedEps !== null
+            formattedEps !==
+            null
               ? `$${formattedEps}`
               : null
           }
@@ -448,7 +459,8 @@ function ResultRow({
         <Metric
           label="Mkt Cap"
           value={
-            formattedMarketCap !== null
+            formattedMarketCap !==
+            null
               ? `$${formattedMarketCap}B`
               : null
           }
@@ -457,7 +469,8 @@ function ResultRow({
         <Metric
           label="Div Yield"
           value={
-            formattedDividendYield !== null
+            formattedDividendYield !==
+            null
               ? `${formattedDividendYield}%`
               : null
           }
@@ -474,7 +487,8 @@ function ResultRow({
         <Metric
           label="ROE %"
           value={
-            formattedRoe !== null
+            formattedRoe !==
+            null
               ? `${formattedRoe}%`
               : null
           }
@@ -517,146 +531,142 @@ export default function ScreenerResults() {
   );
 
   const [
-    session,
-    setSession,
-  ] = useState(() => {
-    const supplied =
-      sessionFromLocationState(
-        state,
-      );
-
-    if (supplied) {
-      return supplied;
-    }
-
-    const stored =
-      readStoredScreenerSession();
-
-    if (stored) {
-      return stored;
-    }
-
-    const legacyResults =
-      readStoredResults();
-
-    return {
-      version: 2,
-      filters:
-        state?.filters ||
-        readStoredFilters(),
-      pages:
-        legacyResults.length >
-        0
-          ? [
-              legacyResults,
-            ]
-          : [],
-      currentPage: 1,
-      hasMore:
-        legacyResults.length > 0,
-      generatedAt:
-        Date.now(),
-    };
-  });
-
-  const [
-    pageLoading,
-    setPageLoading,
-  ] = useState(false);
-
-  const [
-    requestedPage,
-    setRequestedPage,
-  ] = useState(null);
-
-  const [
-    pageError,
-    setPageError,
-  ] = useState("");
+    currentPage,
+    setCurrentPage,
+  ] = useState(
+    readStoredPage,
+  );
 
   const toastTimerRef =
     useRef(null);
 
-  const pageRequestRef =
-    useRef(null);
-
-  const pendingActivationRef =
-    useRef(null);
-
-  const results =
-    useMemo(
-      () =>
-        session.pages[
-          session.currentPage -
-            1
-        ] || [],
-      [
-        session.pages,
-        session.currentPage,
-      ],
-    );
-
-  const totalResults =
-    useMemo(
-      () =>
-        session.pages.reduce(
-          (
-            total,
-            page,
-          ) =>
-            total +
-            (Array.isArray(
-              page,
-            )
-              ? page.length
-              : 0),
-          0,
-        ),
-      [session.pages],
-    );
-
-  const pageNumbers =
+  const allResults =
     useMemo(() => {
-      const loadedCount =
-        session.pages.length;
-
       if (
-        loadedCount === 0
+        loading ||
+        error
       ) {
         return [];
       }
 
-      const count =
-        loadedCount +
-        (session.hasMore &&
-        loadedCount <
-          MAX_PAGES
-          ? 1
-          : 0);
+      /*
+       * A freshly completed screen always wins, including
+       * an intentionally empty result array. This prevents
+       * stale results from an older screen appearing.
+       */
+      if (
+        Array.isArray(
+          state?.results,
+        )
+      ) {
+        return normalizeResults(
+          state.results,
+        );
+      }
 
-      return Array.from(
-        {
-          length: count,
-        },
-        (
-          _,
-          index,
-        ) => index + 1,
-      );
+      const suppliedSession =
+        flattenSessionResults(
+          state
+            ?.screenerSession,
+        );
+
+      if (
+        suppliedSession.length >
+        0
+      ) {
+        return suppliedSession;
+      }
+
+      const storedSession =
+        readStoredSessionResults();
+
+      if (
+        storedSession.length >
+        0
+      ) {
+        return storedSession;
+      }
+
+      return readStoredResults();
     }, [
-      session.pages.length,
-      session.hasMore,
+      state,
+      loading,
+      error,
     ]);
 
-  const canGoNext =
-    session.currentPage <
-      session.pages.length ||
-    (
-      session.currentPage ===
-        session.pages.length &&
-      session.hasMore &&
-      session.pages.length <
-        MAX_PAGES
+  const filters =
+    useMemo(
+      () =>
+        state?.filters ||
+        state
+          ?.screenerSession
+          ?.filters ||
+        readStoredFilters(),
+      [state],
+    );
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        allResults.length /
+          PAGE_SIZE,
+      ),
+    );
+
+  const safeCurrentPage =
+    Math.min(
+      totalPages,
+      Math.max(
+        1,
+        currentPage,
+      ),
+    );
+
+  const results =
+    useMemo(() => {
+      const start =
+        (safeCurrentPage -
+          1) *
+        PAGE_SIZE;
+
+      return allResults.slice(
+        start,
+        start +
+          PAGE_SIZE,
+      );
+    }, [
+      allResults,
+      safeCurrentPage,
+    ]);
+
+  const pageNumbers =
+    useMemo(
+      () =>
+        Array.from(
+          {
+            length:
+              totalPages,
+          },
+          (
+            _,
+            index,
+          ) => index + 1,
+        ),
+      [totalPages],
+    );
+
+  const resultSignature =
+    useMemo(
+      () =>
+        allResults
+          .map((stock) =>
+            normalizeTicker(
+              stock?.ticker,
+            ),
+          )
+          .join("|"),
+      [allResults],
     );
 
   useEffect(() => {
@@ -668,6 +678,53 @@ export default function ScreenerResults() {
   }, []);
 
   useEffect(() => {
+    /*
+     * A different screen begins on page one. Returning to
+     * the same stored result set preserves its current page.
+     */
+    if (!resultSignature) {
+      setCurrentPage(1);
+      return;
+    }
+
+    const storedResults =
+      readStoredResults();
+
+    const storedSignature =
+      storedResults
+        .map((stock) =>
+          normalizeTicker(
+            stock?.ticker,
+          ),
+        )
+        .join("|");
+
+    if (
+      storedSignature &&
+      storedSignature !==
+        resultSignature
+    ) {
+      setCurrentPage(1);
+    }
+  }, [
+    resultSignature,
+  ]);
+
+  useEffect(() => {
+    if (
+      currentPage !==
+      safeCurrentPage
+    ) {
+      setCurrentPage(
+        safeCurrentPage,
+      );
+    }
+  }, [
+    currentPage,
+    safeCurrentPage,
+  ]);
+
+  useEffect(() => {
     if (
       loading ||
       error
@@ -675,57 +732,46 @@ export default function ScreenerResults() {
       return;
     }
 
-    const supplied =
-      sessionFromLocationState(
-        state,
-      );
-
-    if (supplied) {
-      setSession(
-        supplied,
-      );
-
-      setPageError(
-        "",
-      );
-    }
-  }, [
-    state,
-    loading,
-    error,
-  ]);
-
-  useEffect(() => {
-    if (
-      loading ||
-      error ||
-      session.pages.length ===
-        0
-    ) {
-      return;
-    }
-
     try {
-      window.sessionStorage.setItem(
-        SCREENER_SESSION_KEY,
-        JSON.stringify(
-          session,
-        ),
-      );
+      window.sessionStorage
+        .setItem(
+          "screener_last_results",
+          JSON.stringify(
+            allResults,
+          ),
+        );
 
-      window.sessionStorage.setItem(
-        "screener_last_results",
-        JSON.stringify(
-          session.pages[0],
-        ),
-      );
+      window.sessionStorage
+        .setItem(
+          SCREENER_SESSION_KEY,
+          JSON.stringify({
+            version: 3,
+            filters,
+            results:
+              allResults,
+            currentPage:
+              safeCurrentPage,
+            generatedAt:
+              Date.now(),
+          }),
+        );
+
+      window.sessionStorage
+        .setItem(
+          CURRENT_PAGE_KEY,
+          String(
+            safeCurrentPage,
+          ),
+        );
     } catch {
       // Session storage is optional.
     }
   }, [
-    session,
+    allResults,
+    filters,
     loading,
     error,
+    safeCurrentPage,
   ]);
 
   const showToast = (
@@ -735,9 +781,7 @@ export default function ScreenerResults() {
       toastTimerRef.current,
     );
 
-    setToast(
-      message,
-    );
+    setToast(message);
 
     toastTimerRef.current =
       window.setTimeout(
@@ -748,350 +792,35 @@ export default function ScreenerResults() {
       );
   };
 
-  const scrollToResults =
-    () => {
-      window.scrollTo({
-        top: 0,
-        behavior:
-          "smooth",
-      });
-    };
-
-  const loadPage =
-    async (
-      pageNumber,
-      options = {},
-    ) => {
-      const prefetch =
-        Boolean(
-          options.prefetch,
-        );
-      if (
-        !Number.isInteger(
+  const goToPage = (
+    pageNumber,
+  ) => {
+    const nextPage =
+      Math.min(
+        totalPages,
+        Math.max(
+          1,
           pageNumber,
-        ) ||
-        pageNumber < 1 ||
-        pageNumber >
-          MAX_PAGES
-      ) {
-        return;
-      }
-
-      const cached =
-        session.pages[
-          pageNumber - 1
-        ];
-
-      if (
-        Array.isArray(
-          cached,
-        )
-      ) {
-        if (!prefetch) {
-          setSession(
-            (previous) => ({
-              ...previous,
-              currentPage:
-                pageNumber,
-            }),
-          );
-
-          setPageError(
-            "",
-          );
-
-          scrollToResults();
-        }
-
-        return;
-      }
-
-      if (
-        pageRequestRef.current !==
-        null
-      ) {
-        if (
-          pageRequestRef.current ===
-            pageNumber &&
-          !prefetch
-        ) {
-          pendingActivationRef.current =
-            pageNumber;
-        }
-
-        return;
-      }
-
-      if (
-        pageNumber !==
-          session.pages.length +
-            1 ||
-        !session.hasMore
-      ) {
-        return;
-      }
-
-      pageRequestRef.current =
-        pageNumber;
-
-      setPageLoading(
-        true,
-      );
-
-      setRequestedPage(
-        pageNumber,
-      );
-
-      setPageError(
-        "",
-      );
-
-      const excludedTickers = [
-        ...new Set(
-          session.pages
-            .flat()
-            .map((stock) =>
-              normalizeTicker(
-                stock?.ticker,
-              ),
-            )
-            .filter(
-              Boolean,
-            ),
         ),
-      ];
-
-      try {
-        const {
-          data,
-          error:
-            functionError,
-        } =
-          await supabase.functions.invoke(
-            "stock-screener",
-            {
-              body: {
-                filters:
-                  session.filters,
-                page:
-                  pageNumber,
-                excludedTickers,
-              },
-            },
-          );
-
-        if (
-          functionError
-        ) {
-          throw functionError;
-        }
-
-        if (
-          data?.error
-        ) {
-          throw new Error(
-            data.error,
-          );
-        }
-
-        const excludedSet =
-          new Set(
-            excludedTickers,
-          );
-
-        const pageTickers =
-          new Set();
-
-        const nextResults =
-          (
-            Array.isArray(
-              data?.stocks,
-            )
-              ? data.stocks
-              : []
-          ).filter(
-            (stock) => {
-              const ticker =
-                normalizeTicker(
-                  stock?.ticker,
-                );
-
-              if (
-                !ticker ||
-                excludedSet.has(
-                  ticker,
-                ) ||
-                pageTickers.has(
-                  ticker,
-                )
-              ) {
-                return false;
-              }
-
-              pageTickers.add(
-                ticker,
-              );
-
-              return true;
-            },
-          );
-
-        if (
-          nextResults.length ===
-          0
-        ) {
-          setSession(
-            (previous) => ({
-              ...previous,
-              hasMore:
-                false,
-            }),
-          );
-
-          if (
-            !prefetch ||
-            pendingActivationRef.current ===
-              pageNumber
-          ) {
-            showToast(
-              "No more matching stocks were found.",
-            );
-          }
-
-          return;
-        }
-
-        const activatePage =
-          !prefetch ||
-          pendingActivationRef.current ===
-            pageNumber;
-
-        setSession(
-          (previous) => ({
-            ...previous,
-            pages: [
-              ...previous.pages,
-              nextResults,
-            ],
-            currentPage:
-              activatePage
-                ? pageNumber
-                : previous.currentPage,
-            hasMore:
-              pageNumber <
-                MAX_PAGES &&
-              Boolean(
-                data?.hasMore ??
-                  nextResults.length > 0,
-              ),
-            generatedAt:
-              Date.now(),
-          }),
-        );
-
-        if (activatePage) {
-          scrollToResults();
-        }
-      } catch (
-        pageLoadError
-      ) {
-        console.error(
-          "Failed to load screener page:",
-          pageLoadError,
-        );
-
-        const message =
-          pageLoadError?.message ||
-          "Unable to load this results page.";
-
-        if (
-          !prefetch ||
-          pendingActivationRef.current ===
-            pageNumber
-        ) {
-          setPageError(
-            message,
-          );
-
-          showToast(
-            "Unable to load page " +
-              pageNumber +
-              ".",
-          );
-        }
-      } finally {
-        if (
-          pendingActivationRef.current ===
-          pageNumber
-        ) {
-          pendingActivationRef.current =
-            null;
-        }
-
-        pageRequestRef.current =
-          null;
-
-        setPageLoading(
-          false,
-        );
-
-        setRequestedPage(
-          null,
-        );
-      }
-    };
-
-  useEffect(() => {
-    if (
-      loading ||
-      error ||
-      pageLoading ||
-      pageRequestRef.current !==
-        null ||
-      session.pages.length ===
-        0 ||
-      !session.hasMore ||
-      session.pages.length >=
-        MAX_PAGES
-    ) {
-      return undefined;
-    }
-
-    const timer =
-      window.setTimeout(
-        () => {
-          void loadPage(
-            session.pages.length +
-              1,
-            {
-              prefetch: true,
-            },
-          );
-        },
-        400,
       );
 
-    return () => {
-      window.clearTimeout(
-        timer,
-      );
-    };
-  }, [
-    loading,
-    error,
-    pageLoading,
-    session.pages.length,
-    session.hasMore,
-  ]);
+    setCurrentPage(
+      nextPage,
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior:
+        "smooth",
+    });
+  };
 
   const addToWatchlist =
     async (stock) => {
       const ticker =
-        String(
-          stock?.ticker || "",
-        )
-          .trim()
-          .toUpperCase();
+        normalizeTicker(
+          stock?.ticker,
+        );
 
       if (
         !ticker ||
@@ -1107,32 +836,41 @@ export default function ScreenerResults() {
         return;
       }
 
-      setAddingTicker(ticker);
+      setAddingTicker(
+        ticker,
+      );
 
       try {
         const {
-          data: existingItem,
-          error: existingError,
-        } = await supabase
-          .from(
-            "watchlist_items",
-          )
-          .select("id")
-          .eq(
-            "user_id",
-            user.id,
-          )
-          .eq(
-            "ticker",
-            ticker,
-          )
-          .maybeSingle();
+          data:
+            existingItem,
+          error:
+            existingError,
+        } =
+          await supabase
+            .from(
+              "watchlist_items",
+            )
+            .select("id")
+            .eq(
+              "user_id",
+              user.id,
+            )
+            .eq(
+              "ticker",
+              ticker,
+            )
+            .maybeSingle();
 
-        if (existingError) {
+        if (
+          existingError
+        ) {
           throw existingError;
         }
 
-        if (existingItem) {
+        if (
+          existingItem
+        ) {
           setAddedTickers(
             (previous) =>
               new Set([
@@ -1149,22 +887,28 @@ export default function ScreenerResults() {
         }
 
         const {
-          error: insertError,
-        } = await supabase
-          .from(
-            "watchlist_items",
-          )
-          .insert({
-            user_id:
-              user.id,
-            ticker,
-            company_name:
-              stock?.name ||
+          error:
+            insertError,
+        } =
+          await supabase
+            .from(
+              "watchlist_items",
+            )
+            .insert({
+              user_id:
+                user.id,
+
               ticker,
-            exchange:
-              stock?.exchange ||
-              "",
-          });
+
+              company_name:
+                stock?.name ||
+                ticker,
+
+              exchange:
+                stock
+                  ?.exchange ||
+                "",
+            });
 
         if (insertError) {
           if (
@@ -1200,14 +944,17 @@ export default function ScreenerResults() {
         showToast(
           `${ticker} added to watchlist`,
         );
-      } catch (error) {
+      } catch (
+        addError
+      ) {
         console.error(
           "Failed to add screener result to watchlist:",
-          error,
+          addError,
         );
 
         showToast(
-          error?.message ||
+          addError
+            ?.message ||
             "Failed to add to watchlist",
         );
       } finally {
@@ -1233,9 +980,7 @@ export default function ScreenerResults() {
         title={
           loading
             ? ""
-            : "Results · " +
-              totalResults +
-              " found"
+            : `Results · ${allResults.length} found`
         }
         backPath="/screener"
       />
@@ -1250,7 +995,7 @@ export default function ScreenerResults() {
             </p>
 
             <p className="mt-1 text-xs text-muted-foreground">
-              Finding stocks that match your filters.
+              Finding up to 48 stocks that match your filters.
             </p>
           </div>
         )}
@@ -1270,7 +1015,7 @@ export default function ScreenerResults() {
 
         {!loading &&
           !error &&
-          results.length ===
+          allResults.length ===
             0 && (
             <div className="py-24 text-center text-sm text-muted-foreground">
               No results found. Try adjusting your filters.
@@ -1291,15 +1036,8 @@ export default function ScreenerResults() {
 
               return (
                 <ResultRow
-                  key={
-                    (ticker ||
-                      "stock") +
-                    "-" +
-                    index
-                  }
-                  stock={
-                    stock
-                  }
+                  key={`${ticker || "stock"}-${(safeCurrentPage - 1) * PAGE_SIZE + index}`}
+                  stock={stock}
                   onAdd={
                     addToWatchlist
                   }
@@ -1317,18 +1055,8 @@ export default function ScreenerResults() {
 
         {!loading &&
           !error &&
-          pageError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-xs text-red-700">
-              {pageError}
-            </div>
-          )}
-
-        {!loading &&
-          !error &&
-          results.length >
-            0 &&
-          pageNumbers.length >
-            1 && (
+          allResults.length >
+            PAGE_SIZE && (
             <nav
               aria-label="Screener result pages"
               className="flex items-center justify-center gap-2 pt-4"
@@ -1337,19 +1065,19 @@ export default function ScreenerResults() {
                 type="button"
                 aria-label="Previous page"
                 disabled={
-                  session.currentPage ===
-                    1 ||
-                  pageLoading
+                  safeCurrentPage ===
+                  1
                 }
                 onClick={() =>
-                  void loadPage(
-                    session.currentPage -
+                  goToPage(
+                    safeCurrentPage -
                       1,
                   )
                 }
                 className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft className="h-4 w-4" />
+
                 <span className="hidden sm:inline">
                   Previous
                 </span>
@@ -1362,12 +1090,7 @@ export default function ScreenerResults() {
                   ) => {
                     const isCurrent =
                       pageNumber ===
-                      session.currentPage;
-
-                    const isLoading =
-                      pageLoading &&
-                      requestedPage ===
-                        pageNumber;
+                      safeCurrentPage;
 
                     return (
                       <button
@@ -1375,42 +1098,26 @@ export default function ScreenerResults() {
                           pageNumber
                         }
                         type="button"
-                        aria-label={
-                          "Page " +
-                          pageNumber
-                        }
+                        aria-label={`Page ${pageNumber}`}
                         aria-current={
                           isCurrent
                             ? "page"
                             : undefined
                         }
-                        disabled={
-                          pageLoading &&
-                          requestedPage !==
-                            pageNumber &&
-                          !Array.isArray(
-                            session.pages[
-                              pageNumber -
-                                1
-                            ],
-                          )
-                        }
                         onClick={() =>
-                          void loadPage(
+                          goToPage(
                             pageNumber,
                           )
                         }
                         className={
                           isCurrent
                             ? "flex h-10 min-w-10 items-center justify-center rounded-lg bg-gray-900 px-3 text-sm font-semibold text-white"
-                            : "flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            : "flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                         }
                       >
-                        {isLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
+                        {
                           pageNumber
-                        )}
+                        }
                       </button>
                     );
                   },
@@ -1421,22 +1128,12 @@ export default function ScreenerResults() {
                 type="button"
                 aria-label="Next page"
                 disabled={
-                  !canGoNext ||
-                  (
-                    pageLoading &&
-                    !Array.isArray(
-                      session.pages[
-                        session.currentPage
-                      ],
-                    ) &&
-                    requestedPage !==
-                      session.currentPage +
-                        1
-                  )
+                  safeCurrentPage ===
+                  totalPages
                 }
                 onClick={() =>
-                  void loadPage(
-                    session.currentPage +
+                  goToPage(
+                    safeCurrentPage +
                       1,
                   )
                 }
@@ -1445,6 +1142,7 @@ export default function ScreenerResults() {
                 <span className="hidden sm:inline">
                   Next
                 </span>
+
                 <ChevronRight className="h-4 w-4" />
               </button>
             </nav>
