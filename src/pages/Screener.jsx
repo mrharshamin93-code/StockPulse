@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import {
   Activity,
   ArrowLeft,
@@ -1172,32 +1173,80 @@ export default function Screener() {
     );
 
   useEffect(() => {
-    const selectors = [
-      "[data-bottom-navigation]",
-      "[data-testid='bottom-navigation']",
-      "nav.fixed.inset-x-0.bottom-0",
-      "footer.fixed.inset-x-0.bottom-0",
-    ];
+    const hiddenElements = new Map();
 
-    const hiddenElements = [];
+    const shouldHideBottomNavigation = (
+      element,
+    ) => {
+      if (
+        !(element instanceof HTMLElement) ||
+        element.closest(
+          "[data-screener-action-bar]",
+        )
+      ) {
+        return false;
+      }
 
-    selectors.forEach((selector) => {
-      document
-        .querySelectorAll(selector)
+      const style =
+        window.getComputedStyle(
+          element,
+        );
+
+      const rect =
+        element.getBoundingClientRect();
+
+      const isBottomFixed =
+        (style.position === "fixed" ||
+          style.position === "sticky") &&
+        rect.bottom >=
+          window.innerHeight - 4 &&
+        rect.height >= 40 &&
+        rect.height <= 140;
+
+      if (!isBottomFixed) {
+        return false;
+      }
+
+      const semanticMatch =
+        element.matches(
+          "nav, footer, [role='navigation']",
+        ) ||
+        Boolean(
+          element.querySelector(
+            "nav, [role='navigation']",
+          ),
+        );
+
+      const linkCount =
+        element.querySelectorAll(
+          "a, button",
+        ).length;
+
+      return (
+        semanticMatch ||
+        linkCount >= 3
+      );
+    };
+
+    const hideBottomNavigation = () => {
+      document.body
+        .querySelectorAll("*")
         .forEach((element) => {
           if (
-            element.closest(
-              "[data-screener-action-bar]",
+            !shouldHideBottomNavigation(
+              element,
+            ) ||
+            hiddenElements.has(
+              element,
             )
           ) {
             return;
           }
 
-          hiddenElements.push({
+          hiddenElements.set(
             element,
-            display:
-              element.style.display,
-          });
+            element.style.display,
+          );
 
           element.style.setProperty(
             "display",
@@ -1205,18 +1254,45 @@ export default function Screener() {
             "important",
           );
         });
-    });
+    };
 
     document.body.classList.add(
       "screener-page-active",
     );
 
+    hideBottomNavigation();
+
+    const observer =
+      new MutationObserver(
+        hideBottomNavigation,
+      );
+
+    observer.observe(
+      document.body,
+      {
+        childList: true,
+        subtree: true,
+      },
+    );
+
+    window.addEventListener(
+      "resize",
+      hideBottomNavigation,
+    );
+
     return () => {
+      observer.disconnect();
+
+      window.removeEventListener(
+        "resize",
+        hideBottomNavigation,
+      );
+
       hiddenElements.forEach(
-        ({
-          element,
+        (
           display,
-        }) => {
+          element,
+        ) => {
           if (display) {
             element.style.display =
               display;
@@ -2209,8 +2285,12 @@ export default function Screener() {
         </section>
       </main>
 
-      <div
-        data-screener-action-bar className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-100 bg-white/95 px-4 pt-3 backdrop-blur-xl" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
+      {typeof document !==
+        "undefined" &&
+        createPortal(
+          (
+            <div
+        data-screener-action-bar className="fixed inset-x-0 bottom-0 z-[10000] border-t border-gray-100 bg-white/95 px-4 pt-3 backdrop-blur-xl" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
       >
         <div className="mx-auto flex w-full max-w-xl gap-2">
           <Button
@@ -2249,6 +2329,9 @@ export default function Screener() {
           </Button>
         </div>
       </div>
+          ),
+          document.body,
+        )}
 
       <Dialog
         open={
