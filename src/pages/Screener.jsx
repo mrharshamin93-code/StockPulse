@@ -106,7 +106,7 @@ const METRIC_GROUPS = [
         key: "pe",
         label: "P/E Ratio",
         desc:
-          "Price ÷ EPS. Lower is generally cheaper; compare to peers. Negative earnings means there is no meaningful P/E.",
+          "Share price divided by trailing twelve-month earnings per share. It shows how much investors are paying for each dollar of reported earnings. The ratio is not meaningful when earnings are zero or negative.",
         unit: "x",
         minKey: "minPe",
         maxKey: "maxPe",
@@ -117,7 +117,7 @@ const METRIC_GROUPS = [
         key: "forwardPe",
         label: "Forward P/E",
         desc:
-          "Price ÷ estimated future EPS. Reflects expected earnings growth.",
+          "Share price divided by forecast earnings per share, typically for the next fiscal year or next twelve months. It reflects analyst earnings estimates rather than historical results.",
         unit: "x",
         minKey: "minForwardPe",
         maxKey: "maxForwardPe",
@@ -128,7 +128,7 @@ const METRIC_GROUPS = [
         key: "peg",
         label: "PEG Ratio",
         desc:
-          "P/E ÷ earnings growth rate. Accounts for growth; below 1 is often considered attractive.",
+          "The price-to-earnings ratio divided by the expected earnings growth rate. It relates a company’s valuation to its projected growth, though results depend heavily on the growth estimate used.",
         unit: "x",
         minKey: "minPeg",
         maxKey: "maxPeg",
@@ -139,7 +139,7 @@ const METRIC_GROUPS = [
         key: "pb",
         label: "P/B Ratio",
         desc:
-          "Price ÷ book value per share. Useful for asset-heavy companies; below 1 may indicate undervaluation.",
+          "Market price per share divided by book value per share. It compares a company’s market valuation with the accounting value of its net assets.",
         unit: "x",
         minKey: "minPb",
         maxKey: "maxPb",
@@ -150,7 +150,7 @@ const METRIC_GROUPS = [
         key: "ps",
         label: "P/S Ratio",
         desc:
-          "Price ÷ revenue per share. Useful for unprofitable or high-growth companies.",
+          "Market capitalization divided by annual revenue, or equivalently share price divided by revenue per share. It measures how much investors are paying for each dollar of sales.",
         unit: "x",
         minKey: "minPs",
         maxKey: "maxPs",
@@ -161,7 +161,7 @@ const METRIC_GROUPS = [
         key: "evEbitda",
         label: "EV/EBITDA",
         desc:
-          "Enterprise value ÷ EBITDA. Useful for comparing companies with different debt levels.",
+          "Enterprise value divided by earnings before interest, taxes, depreciation and amortization. It compares operating earnings with the total value of the business, including debt and excluding cash.",
         unit: "x",
         minKey: "minEvEbitda",
         maxKey: "maxEvEbitda",
@@ -172,7 +172,7 @@ const METRIC_GROUPS = [
         key: "pcf",
         label: "P/Cash Flow",
         desc:
-          "Price ÷ operating cash flow per share. Cash flow can be harder to manipulate than earnings.",
+          "Market capitalization divided by operating cash flow, or share price divided by operating cash flow per share. It measures valuation relative to cash generated from normal business operations.",
         unit: "x",
         minKey: "minPcf",
         maxKey: "maxPcf",
@@ -183,7 +183,7 @@ const METRIC_GROUPS = [
         key: "pfcf",
         label: "P/Free Cash Flow",
         desc:
-          "Price ÷ free cash flow per share. Free cash flow is cash remaining after capital expenditures.",
+          "Market capitalization divided by free cash flow, or share price divided by free cash flow per share. Free cash flow is generally operating cash flow minus capital expenditures.",
         unit: "x",
         minKey: "minPfcf",
         maxKey: "maxPfcf",
@@ -199,7 +199,7 @@ const METRIC_GROUPS = [
         key: "grossMargin",
         label: "Gross Margin",
         desc:
-          "Gross profit ÷ revenue. Shows pricing power and production efficiency.",
+          "Gross profit divided by revenue. It measures the percentage of revenue remaining after direct costs associated with producing goods or delivering services.",
         unit: "%",
         minKey: "minGrossMargin",
         maxKey: "maxGrossMargin",
@@ -210,7 +210,7 @@ const METRIC_GROUPS = [
         key: "operatingMargin",
         label: "Operating Margin",
         desc:
-          "Operating income ÷ revenue. Profit after operating costs but before interest and taxes.",
+          "Operating income divided by revenue. It measures profitability after direct costs and operating expenses, but before interest and taxes.",
         unit: "%",
         minKey: "minOperatingMargin",
         maxKey: "maxOperatingMargin",
@@ -221,7 +221,7 @@ const METRIC_GROUPS = [
         key: "netMargin",
         label: "Net Profit Margin",
         desc:
-          "Net income ÷ revenue. Bottom-line profitability after all expenses.",
+          "Net income divided by revenue. It measures the percentage of revenue remaining after all operating expenses, interest, taxes and other costs.",
         unit: "%",
         minKey: "minNetMargin",
         maxKey: "maxNetMargin",
@@ -230,9 +230,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "roe",
-        label: "ROE",
+        label: "Return on Equity — ROE",
         desc:
-          "Net income ÷ shareholders' equity. Measures management efficiency.",
+          "Net income divided by average shareholders’ equity. It measures the return generated on the capital invested by common shareholders.",
         unit: "%",
         minKey: "minRoe",
         maxKey: "maxRoe",
@@ -241,9 +241,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "roa",
-        label: "ROA",
+        label: "Return on Assets — ROA",
         desc:
-          "Net income ÷ total assets. Shows how efficiently assets generate profit.",
+          "Net income divided by average total assets. It measures how effectively a company uses its assets to generate profit.",
         unit: "%",
         minKey: "minRoa",
         maxKey: "maxRoa",
@@ -252,9 +252,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "roic",
-        label: "ROIC",
+        label: "Return on Invested Capital — ROIC",
         desc:
-          "Return on invested capital. Measures how efficiently capital is allocated.",
+          "Net operating profit after tax divided by invested capital. It measures the return earned on the capital used to fund the company’s operations.",
         unit: "%",
         minKey: "minRoic",
         maxKey: "maxRoic",
@@ -268,9 +268,9 @@ const METRIC_GROUPS = [
     metrics: [
       {
         key: "revenueGrowth",
-        label: "Revenue Growth (YoY)",
+        label: "Revenue Growth — Year over Year",
         desc:
-          "Year-over-year revenue increase. Shows top-line business expansion.",
+          "The percentage change in revenue compared with the corresponding period one year earlier. It measures the rate at which the company’s sales are expanding or contracting.",
         unit: "%",
         minKey: "minRevenueGrowth",
         maxKey: "maxRevenueGrowth",
@@ -279,9 +279,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "epsGrowth",
-        label: "EPS Growth (YoY)",
+        label: "EPS Growth — Year over Year",
         desc:
-          "Year-over-year earnings-per-share growth.",
+          "The percentage change in earnings per share compared with the corresponding period one year earlier. It reflects changes in profitability on a per-share basis.",
         unit: "%",
         minKey: "minEpsGrowth",
         maxKey: "maxEpsGrowth",
@@ -292,7 +292,7 @@ const METRIC_GROUPS = [
         key: "ebitdaGrowth",
         label: "EBITDA Growth",
         desc:
-          "Growth in earnings before interest, taxes, depreciation and amortization.",
+          "The percentage change in earnings before interest, taxes, depreciation and amortization compared with the prior comparable period.",
         unit: "%",
         minKey: "minEbitdaGrowth",
         maxKey: "maxEbitdaGrowth",
@@ -301,9 +301,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "fcfGrowth",
-        label: "FCF Growth",
+        label: "Free Cash Flow Growth",
         desc:
-          "Growth in free cash flow after capital expenditures.",
+          "The percentage change in free cash flow compared with the prior comparable period. Free cash flow generally equals operating cash flow minus capital expenditures.",
         unit: "%",
         minKey: "minFcfGrowth",
         maxKey: "maxFcfGrowth",
@@ -312,9 +312,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "week52Change",
-        label: "52W Price Change",
+        label: "52-Week Price Change",
         desc:
-          "Stock-price change over the past 52 weeks.",
+          "The percentage change in the stock price over the previous 52 weeks. It measures historical price performance and does not include dividends unless explicitly stated.",
         unit: "%",
         minKey: "minWeek52Change",
         maxKey: "maxWeek52Change",
@@ -328,9 +328,9 @@ const METRIC_GROUPS = [
     metrics: [
       {
         key: "deRatio",
-        label: "D/E Ratio",
+        label: "Debt-to-Equity Ratio",
         desc:
-          "Total debt ÷ shareholders' equity. Lower generally indicates less financial leverage.",
+          "Total debt divided by shareholders’ equity. It measures the amount of debt financing used relative to the company’s equity capital.",
         unit: "x",
         minKey: "minDe",
         maxKey: "maxDe",
@@ -341,7 +341,7 @@ const METRIC_GROUPS = [
         key: "currentRatio",
         label: "Current Ratio",
         desc:
-          "Current assets ÷ current liabilities. Measures short-term liquidity.",
+          "Current assets divided by current liabilities. It measures the company’s ability to meet obligations due within approximately one year using short-term assets.",
         unit: "x",
         minKey: "minCurrentRatio",
         maxKey: "maxCurrentRatio",
@@ -352,7 +352,7 @@ const METRIC_GROUPS = [
         key: "quickRatio",
         label: "Quick Ratio",
         desc:
-          "Current assets excluding inventory ÷ current liabilities.",
+          "Cash, marketable securities and receivables divided by current liabilities. It measures short-term liquidity while excluding inventory and other less-liquid current assets.",
         unit: "x",
         minKey: "minQuickRatio",
         maxKey: "maxQuickRatio",
@@ -361,9 +361,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "interestCoverage",
-        label: "Interest Coverage",
+        label: "Interest Coverage Ratio",
         desc:
-          "EBIT ÷ interest expense. Measures the ability to pay interest.",
+          "Earnings before interest and taxes divided by interest expense. It measures how many times operating earnings cover the company’s interest obligations.",
         unit: "x",
         minKey: "minInterestCoverage",
         maxKey: "maxInterestCoverage",
@@ -372,9 +372,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "debtEbitda",
-        label: "Debt/EBITDA",
+        label: "Debt-to-EBITDA",
         desc:
-          "Total debt ÷ EBITDA. Measures leverage relative to operating earnings.",
+          "Total debt divided by EBITDA. It measures debt relative to operating earnings before interest, taxes, depreciation and amortization.",
         unit: "x",
         minKey: "minDebtEbitda",
         maxKey: "maxDebtEbitda",
@@ -390,7 +390,7 @@ const METRIC_GROUPS = [
         key: "assetTurnover",
         label: "Asset Turnover",
         desc:
-          "Revenue ÷ average total assets. Measures asset-use efficiency.",
+          "Revenue divided by average total assets. It measures how efficiently a company uses its asset base to generate sales.",
         unit: "x",
         minKey: "minAssetTurnover",
         maxKey: "maxAssetTurnover",
@@ -401,7 +401,7 @@ const METRIC_GROUPS = [
         key: "inventoryTurnover",
         label: "Inventory Turnover",
         desc:
-          "Cost of goods sold ÷ average inventory. Measures how quickly inventory sells.",
+          "Cost of goods sold divided by average inventory. It estimates how many times inventory is sold or used during a reporting period.",
         unit: "x",
         minKey: "minInventoryTurnover",
         maxKey: "maxInventoryTurnover",
@@ -412,7 +412,7 @@ const METRIC_GROUPS = [
         key: "receivablesTurnover",
         label: "Receivables Turnover",
         desc:
-          "Revenue ÷ average accounts receivable. Measures collection efficiency.",
+          "Net credit sales divided by average accounts receivable. It measures how efficiently a company collects amounts owed by customers.",
         unit: "x",
         minKey: "minReceivablesTurnover",
         maxKey: "maxReceivablesTurnover",
@@ -421,9 +421,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "dso",
-        label: "Days Sales Outstanding",
+        label: "Days Sales Outstanding — DSO",
         desc:
-          "Average number of days required to collect payment after a sale.",
+          "The average number of days required to collect payment after a credit sale. Lower values generally indicate faster collection, although appropriate levels vary by industry.",
         unit: "days",
         minKey: "minDso",
         maxKey: "maxDso",
@@ -439,7 +439,7 @@ const METRIC_GROUPS = [
         key: "dividendYield",
         label: "Dividend Yield",
         desc:
-          "Annual dividend ÷ stock price.",
+          "Annual dividends per share divided by the current share price. It represents annual dividend income as a percentage of the stock’s market price.",
         unit: "%",
         minKey: "minDividendYield",
         maxKey: "maxDividendYield",
@@ -450,7 +450,7 @@ const METRIC_GROUPS = [
         key: "payoutRatio",
         label: "Payout Ratio",
         desc:
-          "Dividends ÷ net income. Measures how much profit is distributed to shareholders.",
+          "Dividends paid to common shareholders divided by net income available to common shareholders. It measures the percentage of earnings distributed as dividends.",
         unit: "%",
         minKey: "minPayoutRatio",
         maxKey: "maxPayoutRatio",
@@ -459,9 +459,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "dividendGrowth",
-        label: "Dividend Growth (5Y)",
+        label: "Five-Year Dividend Growth",
         desc:
-          "Compound annual dividend growth over five years.",
+          "The compound annual growth rate of dividends per share over the previous five years. It measures the historical pace of dividend increases.",
         unit: "%",
         minKey: "minDividendGrowth",
         maxKey: "maxDividendGrowth",
@@ -475,9 +475,9 @@ const METRIC_GROUPS = [
     metrics: [
       {
         key: "marketCapB",
-        label: "Market Cap",
+        label: "Market Capitalization",
         desc:
-          "Total market value in billions. Large-cap is generally above $10 billion.",
+          "Current share price multiplied by the number of shares outstanding. It represents the total market value of the company’s equity.",
         unit: "B",
         minKey: "minMarketCapB",
         maxKey: "maxMarketCapB",
@@ -486,9 +486,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "eps",
-        label: "EPS (TTM)",
+        label: "Earnings per Share — TTM",
         desc:
-          "Trailing twelve-month earnings per share.",
+          "Net income available to common shareholders over the trailing twelve months divided by weighted-average diluted shares outstanding.",
         unit: "$",
         minKey: "minEps",
         maxKey: "maxEps",
@@ -497,9 +497,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "bookValuePerShare",
-        label: "Book Value/Share",
+        label: "Book Value per Share",
         desc:
-          "Net assets per share after subtracting liabilities.",
+          "Common shareholders’ equity divided by common shares outstanding. It represents the accounting value of net assets attributable to each common share.",
         unit: "$",
         minKey: "minBookValue",
         maxKey: "maxBookValue",
@@ -508,9 +508,9 @@ const METRIC_GROUPS = [
       },
       {
         key: "fcfPerShare",
-        label: "FCF/Share",
+        label: "Free Cash Flow per Share",
         desc:
-          "Free cash flow generated per share after capital expenditures.",
+          "Free cash flow divided by weighted-average shares outstanding. It measures the amount of free cash flow generated for each share.",
         unit: "$",
         minKey: "minFcfPerShare",
         maxKey: "maxFcfPerShare",
