@@ -3,7 +3,10 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import {
   Bell,
   CheckCircle2,
@@ -52,6 +55,7 @@ function formatTimestamp(value) {
 
 export default function PriceAlerts() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
 
   const [alerts, setAlerts] =
@@ -193,6 +197,68 @@ export default function PriceAlerts() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const requestedTicker =
+      String(
+        location.state?.ticker ||
+          "",
+      )
+        .trim()
+        .toUpperCase();
+
+    if (
+      !location.state
+        ?.openAddAlert ||
+      !requestedTicker
+    ) {
+      return;
+    }
+
+    setTicker(
+      requestedTicker,
+    );
+    setCondition("above");
+    setTargetPrice("");
+    setError("");
+    setOpen(true);
+
+    navigate(
+      location.pathname,
+      {
+        replace: true,
+        state: null,
+      },
+    );
+  }, [
+    location.key,
+    location.pathname,
+    location.state,
+    navigate,
+  ]);
+
+  function openBlankAlertDialog() {
+    setTicker("");
+    setCondition("above");
+    setTargetPrice("");
+    setError("");
+    setOpen(true);
+  }
+
+  function handleAlertDialogOpenChange(
+    nextOpen,
+  ) {
+    setOpen(nextOpen);
+
+    if (
+      !nextOpen &&
+      !saving
+    ) {
+      setTicker("");
+      setCondition("above");
+      setTargetPrice("");
+    }
+  }
 
   async function handleAdd(event) {
     event.preventDefault();
@@ -558,8 +624,8 @@ export default function PriceAlerts() {
 
             <button
               type="button"
-              onClick={() =>
-                setOpen(true)
+              onClick={
+                openBlankAlertDialog
               }
               className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-900 transition-colors hover:bg-gray-200"
             >
@@ -848,7 +914,9 @@ export default function PriceAlerts() {
 
       <Dialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={
+          handleAlertDialogOpenChange
+        }
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
