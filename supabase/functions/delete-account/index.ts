@@ -1,4 +1,11 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
+import {
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2.110.7";
+
+const REPORT_BUCKET = "monthly-reports";
+const STORAGE_PAGE_SIZE = 100;
+const STORAGE_DELETE_BATCH_SIZE = 100;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,6 +21,11 @@ type JsonValue =
   | null
   | JsonValue[]
   | { [key: string]: JsonValue };
+
+type DeleteStep = {
+  table: string;
+  column: string;
+};
 
 function jsonResponse(
   body: Record<string, JsonValue>,
@@ -36,6 +48,49 @@ function getRequiredEnvironmentVariable(name: string): string {
   }
 
   return value;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      code?: unknown;
+    };
+
+    const parts = [
+      candidate.message,
+      candidate.details,
+      candidate.hint,
+      candidate.code,
+    ]
+      .filter(
+        (value): value is string =>
+          typeof value === "string" && value.trim().length > 0,
+      )
+      .map((value) => value.trim());
+
+    if (parts.length > 0) {
+      return [...new Set(parts)].join(" — ");
+    }
+  }
+
+  return "Unknown error";
+}
+
+function isMissingBucketError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+
+  return (
+    message.includes("bucket not found") ||
+    message.includes("not found") ||
+    message.includes("404")
+  );
 }
 
 async function revokeAppleToken(options: {
@@ -69,6 +124,132 @@ async function revokeAppleToken(options: {
   }
 }
 
+async function listStorageFilesRecursively(
+  adminClient: SupabaseClient,
+  bucket: string,
+  prefix: string,
+): Promise<string[]> {
+  const filePaths: string[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await adminClient.storage
+      .from(bucket)
+      .list(prefix, {
+        limit: STORAGE_PAGE_SIZE,
+        offset,
+        sortBy: {
+          column: "name",
+          order: "asc",
+        },
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const entries = data || [];
+
+    for (const entry of entries) {
+      const path = prefix
+        ? `${prefix}/${entry.name}`
+        : entry.name;
+
+      const isFolder =
+        !entry.id &&
+        !entry.metadata;
+
+      if (isFolder) {
+        const nestedPaths = await listStorageFilesRecursively(
+          adminClient,
+          bucket,
+          path,
+        );
+
+        filePaths.push(...nestedPaths);
+      } else {
+        filePaths.push(path);
+      }
+    }
+
+    if (entries.length < STORAGE_PAGE_SIZE) {
+      break;
+    }
+
+    offset += STORAGE_PAGE_SIZE;
+  }
+
+  return filePaths;
+}
+
+async function deleteUserReportFiles(
+  adminClient: SupabaseClient,
+  userId: string,
+): Promise<number> {
+  let filePaths: string[];
+
+  try {
+    filePaths = await listStorageFilesRecursively(
+      adminClient,
+      REPORT_BUCKET,
+      userId,
+    );
+  } catch (error) {
+    if (isMissingBucketError(error)) {
+      console.warn(
+        `Storage bucket "${REPORT_BUCKET}" was not found; continuing account deletion.`,
+      );
+      return 0;
+    }
+
+    throw new Error(
+      `Unable to list monthly report files: ${getErrorMessage(error)}`,
+    );
+  }
+
+  for (
+    let index = 0;
+    index < filePaths.length;
+    index += STORAGE_DELETE_BATCH_SIZE
+  ) {
+    const batch = filePaths.slice(
+      index,
+      index + STORAGE_DELETE_BATCH_SIZE,
+    );
+
+    const { error } = await adminClient.storage
+      .from(REPORT_BUCKET)
+      .remove(batch);
+
+    if (error) {
+      throw new Error(
+        `Unable to delete monthly report files: ${getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  return filePaths.length;
+}
+
+async function deleteTableRows(
+  adminClient: SupabaseClient,
+  userId: string,
+  step: DeleteStep,
+): Promise<void> {
+  const { error } = await adminClient
+    .from(step.table)
+    .delete()
+    .eq(step.column, userId);
+
+  if (error) {
+    throw new Error(
+      `Account deletion failed while removing ${step.table}: ${getErrorMessage(
+        error,
+      )}`,
+    );
+  }
+}
+
 Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "OPTIONS") {
     return new Response("ok", {
@@ -87,6 +268,23 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   try {
+    const requestBody = await request
+      .json()
+      .catch(() => null) as {
+        confirmation?: unknown;
+      } | null;
+
+    if (requestBody?.confirmation !== "DELETE_ACCOUNT") {
+      return jsonResponse(
+        {
+          success: false,
+          error:
+            "Account deletion confirmation is missing or invalid.",
+        },
+        400,
+      );
+    }
+
     const supabaseUrl =
       getRequiredEnvironmentVariable("SUPABASE_URL");
 
@@ -128,10 +326,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     /*
-     * User-scoped client.
-     *
-     * This verifies the JWT against Supabase Auth instead of
-     * trusting a user ID supplied by the browser.
+     * Verify the caller through Supabase Auth. Never trust a user ID
+     * supplied by the browser.
      */
     const authenticatedClient = createClient(
       supabaseUrl,
@@ -171,10 +367,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     /*
-     * Administrative client.
-     *
-     * Never expose SUPABASE_SERVICE_ROLE_KEY in Vite or the
-     * browser. It must remain an Edge Function secret.
+     * Service-role client. The service key remains server-side and
+     * must never be exposed through Vite or committed to GitHub.
      */
     const adminClient = createClient(
       supabaseUrl,
@@ -203,20 +397,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
       providers.includes("apple");
 
     /*
-     * Apple token handling
-     *
-     * Supabase's normal browser OAuth session does not give the
-     * application the Apple refresh token afterward.
-     *
-     * When native Sign in with Apple is added, securely save the
-     * Apple refresh token in this server-only table during the
-     * initial Apple authorization-code exchange:
-     *
-     * private.apple_oauth_tokens
-     *   user_id uuid primary key
-     *   refresh_token text not null
-     *
-     * The private schema must not be exposed through the API.
+     * Apple requires token revocation when the app supports native
+     * Sign in with Apple. The native authorization-code flow must save
+     * the refresh token in private.apple_oauth_tokens.
      */
     if (usesApple) {
       const {
@@ -295,15 +478,24 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     /*
-     * Delete child records before parent records.
-     *
-     * Every deletion is checked individually. A failed deletion
-     * stops the operation and the Auth identity remains active.
+     * Delete private report files before deleting their database rows.
+     * Supabase Storage objects are not removed by Postgres cascades.
      */
-    const deletionSteps: Array<{
-      table: string;
-      column: string;
-    }> = [
+    const deletedReportFiles =
+      await deleteUserReportFiles(
+        adminClient,
+        user.id,
+      );
+
+    /*
+     * Delete child rows before parent rows. Every step is checked.
+     * The Auth identity is retained if any application cleanup fails.
+     */
+    const deletionSteps: DeleteStep[] = [
+      {
+        table: "monthly_report_deliveries",
+        column: "user_id",
+      },
       {
         table: "stock_transactions",
         column: "user_id",
@@ -324,36 +516,31 @@ Deno.serve(async (request: Request): Promise<Response> => {
         table: "stocks",
         column: "user_id",
       },
+      {
+        table: "watchlists",
+        column: "user_id",
+      },
+      {
+        table: "profiles",
+        column: "id",
+      },
     ];
 
+    const deletedTables: string[] = [];
+
     for (const step of deletionSteps) {
-      const { error: deletionError } =
-        await adminClient
-          .from(step.table)
-          .delete()
-          .eq(step.column, user.id);
+      await deleteTableRows(
+        adminClient,
+        user.id,
+        step,
+      );
 
-      if (deletionError) {
-        console.error(
-          `Failed to delete records from ${step.table}:`,
-          deletionError,
-        );
-
-        return jsonResponse(
-          {
-            success: false,
-            error: `Account deletion failed while removing ${step.table}. No success response was issued.`,
-          },
-          500,
-        );
-      }
+      deletedTables.push(step.table);
     }
 
     /*
-     * This must be the final server-side operation.
-     *
-     * Once it succeeds, the Supabase Auth identity is permanently
-     * removed and its existing JWT can no longer be refreshed.
+     * Delete the Supabase Auth identity last. Once this succeeds, the
+     * user's refresh token can no longer create a new session.
      */
     const { error: deleteUserError } =
       await adminClient.auth.admin.deleteUser(
@@ -380,17 +567,25 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return jsonResponse({
       success: true,
       message: "Account permanently deleted.",
+      cleanup: {
+        deleted_report_files: deletedReportFiles,
+        deleted_tables: deletedTables,
+        auth_user_deleted: true,
+      },
     });
   } catch (error) {
-    console.error("Unexpected account deletion error:", error);
+    const message = getErrorMessage(error);
+
+    console.error(
+      "Unexpected account deletion error:",
+      message,
+      error,
+    );
 
     return jsonResponse(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "An unexpected account deletion error occurred.",
+        error: message,
       },
       500,
     );
