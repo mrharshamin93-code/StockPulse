@@ -13,6 +13,7 @@ import {
   Banknote,
   BarChart3,
   Building2,
+  Check,
   ChevronRight,
   CircleDollarSign,
   Cpu,
@@ -32,6 +33,7 @@ import {
   Trash2,
   TrendingUp,
   WalletCards,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -955,10 +957,69 @@ const SECTOR_ICON_MAP = {
   "Communication Services": Radio,
 };
 
-function MetricFilterRow({
+function MetricSelectionRow({
+  definition,
+  selected,
+  onToggle,
+}) {
+  const GroupIcon =
+    GROUP_ICON_MAP[
+      definition.group
+    ] || SlidersHorizontal;
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onToggle(
+          definition.key,
+        )
+      }
+      className={`flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+        selected
+          ? "border-gray-900 bg-gray-50 shadow-sm"
+          : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50/60"
+      }`}
+    >
+      <span
+        className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
+          selected
+            ? "border-gray-900 bg-gray-900 text-white"
+            : "border-gray-300 bg-white text-transparent"
+        }`}
+        aria-hidden="true"
+      >
+        <Check className="h-3.5 w-3.5" />
+      </span>
+
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-50 text-gray-700">
+        <GroupIcon className="h-4 w-4" />
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <span className="text-sm font-semibold text-gray-900">
+            {definition.label}
+          </span>
+
+          <span className="text-[10px] font-medium text-gray-400">
+            {definition.unit}
+          </span>
+        </span>
+
+        <span className="mt-1 block text-xs leading-5 text-gray-500">
+          {definition.desc}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ActiveMetricFilterRow({
   definition,
   filters,
   onChange,
+  onRemove,
 }) {
   const GroupIcon =
     GROUP_ICON_MAP[
@@ -984,7 +1045,7 @@ function MetricFilterRow({
           </div>
 
           <p className="truncate text-[10px] text-gray-400">
-            {definition.desc}
+            Set the minimum, maximum, or both.
           </p>
         </div>
 
@@ -1031,6 +1092,19 @@ function MetricFilterRow({
             className="h-9 min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center text-xs text-gray-900 outline-none transition focus:border-gray-400 focus:bg-white"
           />
         </div>
+
+        <button
+          type="button"
+          aria-label={`Remove ${definition.label}`}
+          onClick={() =>
+            onRemove(
+              definition.key,
+            )
+          }
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
@@ -1300,6 +1374,47 @@ export default function Screener() {
 
     setActivePreset(null);
   };
+
+  const removeMetric =
+    (key) => {
+      const definition =
+        ALL_METRIC_DEFS.find(
+          (item) =>
+            item.key === key,
+        );
+
+      setActiveMetrics(
+        (previous) => {
+          const next =
+            new Set(previous);
+
+          next.delete(key);
+
+          return next;
+        },
+      );
+
+      if (definition) {
+        setFilters(
+          (previous) => {
+            const next = {
+              ...previous,
+            };
+
+            delete next[
+              definition.minKey
+            ];
+            delete next[
+              definition.maxKey
+            ];
+
+            return next;
+          },
+        );
+      }
+
+      setActivePreset(null);
+    };
 
   const clearSectors =
     () => {
@@ -1995,7 +2110,7 @@ export default function Screener() {
                   <div className="space-y-2">
                     {group.metrics.map(
                       (definition) => (
-                        <MetricFilterRow
+                        <MetricSelectionRow
                           key={
                             definition.key
                           }
@@ -2004,9 +2119,11 @@ export default function Screener() {
                             group:
                               group.group,
                           }}
-                          filters={filters}
-                          onChange={
-                            updateNumberFilter
+                          selected={activeMetrics.has(
+                            definition.key,
+                          )}
+                          onToggle={
+                            toggleMetric
                           }
                         />
                       ),
@@ -2014,6 +2131,65 @@ export default function Screener() {
                   </div>
                 </div>
               ),
+            )}
+          </div>
+
+          <div className="mt-8">
+            <div className="mb-3 flex items-end justify-between">
+              <div>
+                <h3 className="font-heading text-base font-bold text-gray-950">
+                  Selected Metrics
+                </h3>
+
+                <p className="mt-0.5 text-xs text-gray-400">
+                  Enter the minimum, maximum, or both for each selected metric
+                </p>
+              </div>
+
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                {activeMetrics.size} selected
+              </span>
+            </div>
+
+            {activeMetrics.size === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 px-5 py-8 text-center">
+                <SlidersHorizontal className="mx-auto h-6 w-6 text-gray-300" />
+
+                <p className="mt-2 text-sm font-semibold text-gray-700">
+                  No metrics selected
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  Check a metric above to add its Min and Max fields here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {ALL_METRIC_DEFS.filter(
+                  (definition) =>
+                    activeMetrics.has(
+                      definition.key,
+                    ),
+                ).map(
+                  (definition) => (
+                    <ActiveMetricFilterRow
+                      key={
+                        definition.key
+                      }
+                      definition={
+                        definition
+                      }
+                      filters={filters}
+                      onChange={
+                        updateNumberFilter
+                      }
+                      onRemove={
+                        removeMetric
+                      }
+                    />
+                  ),
+                )}
+              </div>
             )}
           </div>
         </section>
