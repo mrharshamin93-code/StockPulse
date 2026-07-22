@@ -31,7 +31,6 @@ const LONG_PRESS_MS = 600;
 const TOOLTIP_VISIBLE_MS = 5000;
 const SCREENER_SESSION_KEY =
   "screener_paginated_results_v2";
-const PAGE_SIZE = 12;
 
 const SECTORS = [
   "Technology",
@@ -508,6 +507,39 @@ const ALL_METRIC_DEFS =
     (group) => group.metrics,
   );
 
+const WIZARD_STEPS = [
+  {
+    key: "sector",
+    label: "Sector",
+  },
+  ...METRIC_GROUPS.map(
+    (group) => ({
+      key: group.group
+        .toLowerCase()
+        .replace(
+          /[^a-z0-9]+/g,
+          "-",
+        )
+        .replace(
+          /^-|-$/g,
+          "",
+        ),
+      label: group.group,
+    }),
+  ),
+];
+
+const CUSTOM_FILTER_KEYS =
+  new Set([
+    "sectors",
+    ...ALL_METRIC_DEFS.flatMap(
+      (definition) => [
+        definition.minKey,
+        definition.maxKey,
+      ],
+    ),
+  ]);
+
 function readSessionObject(
   key,
   fallback,
@@ -962,6 +994,16 @@ export default function Screener() {
     setSaving,
   ] = useState(false);
 
+  const [
+    screenView,
+    setScreenView,
+  ] = useState("landing");
+
+  const [
+    wizardStep,
+    setWizardStep,
+  ] = useState(0);
+
   const toastTimerRef =
     useRef(null);
 
@@ -974,17 +1016,21 @@ export default function Screener() {
       [filters],
     );
 
-  useEffect(() => {
-    document.body.classList.add(
-      "screener-force-landscape",
-    );
+  const activeWizardStep =
+    WIZARD_STEPS[
+      wizardStep
+    ];
 
-    return () => {
-      document.body.classList.remove(
-        "screener-force-landscape",
-      );
-    };
-  }, []);
+  const activeMetricGroup =
+    wizardStep === 0
+      ? null
+      : METRIC_GROUPS[
+          wizardStep - 1
+        ];
+
+  const selectedFilterCount =
+    selectedSectors.length +
+    activeMetrics.size;
 
   const showToast =
     useCallback(
@@ -1618,46 +1664,109 @@ export default function Screener() {
     setActivePreset(null);
   };
 
+  const handleHeaderBack =
+    () => {
+      if (
+        screenView !==
+        "landing"
+      ) {
+        setScreenView(
+          "landing",
+        );
+        return;
+      }
+
+      handleBack();
+    };
+
+  const openCustomScreener =
+    () => {
+      setFilters(
+        (previous) =>
+          Object.fromEntries(
+            Object.entries(
+              normalizeFilters(
+                previous,
+              ),
+            ).filter(
+              ([key]) =>
+                CUSTOM_FILTER_KEYS.has(
+                  key,
+                ),
+            ),
+          ),
+      );
+
+      setActiveMetrics(
+        (previous) =>
+          new Set(
+            [
+              ...previous,
+            ].filter((key) =>
+              ALL_METRIC_DEFS.some(
+                (definition) =>
+                  definition.key ===
+                  key,
+              ),
+            ),
+          ),
+      );
+
+      setActivePreset(null);
+      setWizardStep(0);
+      setScreenView(
+        "custom",
+      );
+    };
+
+  const openSaveDialog =
+    () => {
+      setSaveName("");
+      setSaveDialogOpen(
+        true,
+      );
+    };
+
+  const goToWizardStep = (
+    nextStep,
+  ) => {
+    const boundedStep =
+      Math.min(
+        Math.max(
+          nextStep,
+          0,
+        ),
+        WIZARD_STEPS.length -
+          1,
+      );
+
+    setWizardStep(
+      boundedStep,
+    );
+
+    window.requestAnimationFrame(
+      () => {
+        window.scrollTo({
+          top: 0,
+          behavior: "smooth",
+        });
+      },
+    );
+  };
+
   return (
     <div
-      className="screener-landscape-shell flex min-h-screen flex-col"
+      className="flex min-h-screen flex-col"
       style={{
         paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 64px)",
+          screenView ===
+          "custom"
+            ? "calc(env(safe-area-inset-bottom) + 154px)"
+            : "calc(env(safe-area-inset-bottom) + 64px)",
         backgroundColor:
           "hsl(var(--background))",
       }}
     >
-      <style>
-        {`
-          @media screen and (max-width: 767px) and (orientation: portrait) {
-            body.screener-force-landscape {
-              overflow: hidden !important;
-            }
-
-            .screener-landscape-shell {
-              position: fixed !important;
-              top: 0;
-              left: 0;
-              width: 100vh;
-              width: 100dvh;
-              height: 100vw;
-              height: 100dvw;
-              min-height: 100vw !important;
-              min-height: 100dvw !important;
-              transform: rotate(90deg) translateY(-100%);
-              transform-origin: top left;
-              overflow-x: hidden;
-              overflow-y: auto;
-              overscroll-behavior: contain;
-              -webkit-overflow-scrolling: touch;
-              z-index: 60;
-              background: hsl(var(--background));
-            }
-          }
-        `}
-      </style>
-
       {toast && (
         <div className="fixed bottom-24 left-1/2 z-[100] -translate-x-1/2 whitespace-nowrap rounded-full bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
           {toast}
@@ -1665,45 +1774,50 @@ export default function Screener() {
       )}
 
       <header
-        className="sticky top-0 z-10 border-b border-gray-100"
+        className="sticky top-0 z-30 border-b border-gray-100 bg-white/95 backdrop-blur-xl"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
-          backgroundColor:
-            "hsl(var(--background))",
         }}
       >
-        <div className="mx-auto grid max-w-5xl grid-cols-[1fr_auto_1fr] items-center px-4 py-4 sm:px-6">
+        <div className="mx-auto grid w-full max-w-xl grid-cols-[1fr_auto_1fr] items-center px-3 py-3 sm:px-5">
           <button
             type="button"
             onClick={
-              handleBack
+              handleHeaderBack
             }
-            aria-label="Go back"
-            className="inline-flex min-h-[36px] items-center gap-1.5 justify-self-start px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
+            aria-label={
+              screenView ===
+              "landing"
+                ? "Go back"
+                : "Back to screener choices"
+            }
+            className="inline-flex min-h-[44px] min-w-[72px] items-center gap-1.5 justify-self-start rounded-xl px-2 py-2 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-100 active:scale-95"
           >
             <ArrowLeft
               className="h-4 w-4 shrink-0"
-              strokeWidth={
-                2
-              }
+              strokeWidth={2}
             />
-
             Back
           </button>
 
-          <div className="flex items-center justify-center gap-1.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
+          <div className="flex min-w-0 items-center justify-center gap-2">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-900">
               <SlidersHorizontal className="h-5 w-5 text-white" />
             </div>
 
-            <div>
-              <h1 className="font-heading text-2xl font-bold tracking-tight">
+            <div className="min-w-0">
+              <h1 className="font-heading text-xl font-bold tracking-tight text-gray-950 sm:text-2xl">
                 Screener
               </h1>
-
-              <p className="text-xs text-gray-500">
-                Filter stocks by criteria
+              <p className="truncate text-[11px] text-gray-500 sm:text-xs">
+                {screenView ===
+                "custom"
+                  ? "Build filters step by step"
+                  : screenView ===
+                      "quick"
+                    ? "Ready-made stock screens"
+                    : "Choose how to screen"}
               </p>
             </div>
           </div>
@@ -1714,354 +1828,572 @@ export default function Screener() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 space-y-5 px-4 py-6 sm:px-6">
-        <div>
-          <Label className="mb-2 block text-xs text-gray-500">
-            Quick Screens
-          </Label>
+      <main className="mx-auto w-full max-w-xl flex-1 px-4 py-5 sm:px-6">
+        {screenView ===
+          "landing" && (
+          <div className="space-y-6">
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
+                Get started
+              </p>
 
-          <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-            {POPULAR_SCREENS.map(
-              (
-                preset,
-                index,
-              ) => (
-                <FilterChip
-                  key={
-                    preset.label
-                  }
-                  label={
-                    preset.label
-                  }
-                  active={
-                    activePreset ===
-                    index
-                  }
+              <div className="grid gap-3">
+                <button
+                  type="button"
                   onClick={() =>
-                    applyPreset(
-                      preset,
-                      index,
+                    setScreenView(
+                      "quick",
                     )
                   }
-                />
-              ),
+                  className="group flex min-h-[116px] w-full items-center gap-4 rounded-3xl border border-gray-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.99]"
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+                    <Search className="h-6 w-6" />
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-heading text-lg font-bold text-gray-950">
+                      Quick Screens
+                    </span>
+                    <span className="mt-1 block text-sm leading-5 text-gray-500">
+                      Choose a ready-made strategy and get results immediately.
+                    </span>
+                  </span>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-gray-300 transition-transform group-hover:translate-x-1"
+                  >
+                    ›
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={
+                    openCustomScreener
+                  }
+                  className="group flex min-h-[116px] w-full items-center gap-4 rounded-3xl border border-gray-900 bg-gray-900 p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:bg-gray-800 hover:shadow-md active:scale-[0.99]"
+                >
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-white">
+                    <SlidersHorizontal className="h-6 w-6" />
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-heading text-lg font-bold text-white">
+                      Custom Screener
+                    </span>
+                    <span className="mt-1 block text-sm leading-5 text-gray-300">
+                      Select sectors and metrics across an eight-step guided screen.
+                    </span>
+                  </span>
+
+                  <span
+                    aria-hidden="true"
+                    className="text-xl text-gray-500 transition-transform group-hover:translate-x-1"
+                  >
+                    ›
+                  </span>
+                </button>
+              </div>
+            </section>
+
+            {savedScreens.length >
+              0 && (
+              <section>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-heading text-base font-bold text-gray-950">
+                      Saved Screens
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Run one of your saved filter sets.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {savedScreens.map(
+                    (screen) => (
+                      <div
+                        key={
+                          screen.id
+                        }
+                        className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-sm"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            loadSavedScreen(
+                              screen,
+                            )
+                          }
+                          className="min-h-[48px] min-w-0 flex-1 rounded-xl px-3 text-left transition-colors hover:bg-gray-50"
+                        >
+                          <span className="block truncate text-sm font-semibold text-gray-950">
+                            {
+                              screen.name
+                            }
+                          </span>
+                          <span className="mt-0.5 block text-xs text-gray-500">
+                            Open saved screen
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          aria-label={
+                            "Delete " +
+                            screen.name
+                          }
+                          onClick={(
+                            event,
+                          ) =>
+                            deleteSavedScreen(
+                              screen.id,
+                              event,
+                            )
+                          }
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </section>
             )}
           </div>
+        )}
 
-          {savedScreens.length >
-            0 && (
-            <div className="mt-3">
-              <Label className="mb-2 block text-xs text-gray-500">
-                Saved Screens
-              </Label>
+        {screenView ===
+          "quick" && (
+          <section className="space-y-4">
+            <div>
+              <p className="font-heading text-xl font-bold text-gray-950">
+                Quick Screens
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Tap a strategy to run it immediately.
+              </p>
+            </div>
 
-              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                {savedScreens.map(
-                  (screen) => (
-                    <div
-                      key={
-                        screen.id
-                      }
-                      className="flex shrink-0 items-center gap-1 rounded-full border border-gray-200 bg-white py-1 pl-3 pr-1.5 transition-colors hover:border-gray-400"
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          loadSavedScreen(
-                            screen,
-                          )
-                        }
-                        className="whitespace-nowrap text-xs font-medium"
-                      >
+            <div className="grid gap-3 sm:grid-cols-2">
+              {POPULAR_SCREENS.map(
+                (
+                  preset,
+                  index,
+                ) => (
+                  <button
+                    key={
+                      preset.label
+                    }
+                    type="button"
+                    disabled={
+                      loading
+                    }
+                    onClick={() =>
+                      applyPreset(
+                        preset,
+                        index,
+                      )
+                    }
+                    className={
+                      activePreset ===
+                      index
+                        ? "min-h-[104px] rounded-2xl border border-gray-900 bg-gray-900 p-4 text-left text-white shadow-md transition-all active:scale-[0.99] disabled:opacity-60"
+                        : "min-h-[104px] rounded-2xl border border-gray-200 bg-white p-4 text-left text-gray-950 shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md active:scale-[0.99] disabled:opacity-60"
+                    }
+                  >
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="font-heading text-base font-bold">
                         {
-                          screen.name
+                          preset.label
                         }
-                      </button>
+                      </span>
 
-                      <button
-                        type="button"
-                        aria-label={`Delete ${screen.name}`}
-                        onClick={(
-                          event,
-                        ) =>
-                          deleteSavedScreen(
-                            screen.id,
-                            event,
-                          )
-                        }
-                        className="p-0.5 text-muted-foreground transition-colors hover:text-red-500"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                      {loading &&
+                        activePreset ===
+                          index && (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      )}
+                    </span>
+
+                    <span
+                      className={
+                        activePreset ===
+                        index
+                          ? "mt-2 block text-xs leading-5 text-gray-300"
+                          : "mt-2 block text-xs leading-5 text-gray-500"
+                      }
+                    >
+                      Uses a prepared set of filters and opens the matching stocks.
+                    </span>
+                  </button>
+                ),
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={
+                openCustomScreener
+              }
+              className="min-h-[48px] w-full rounded-2xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-50"
+            >
+              Build a custom screen instead
+            </button>
+          </section>
+        )}
+
+        {screenView ===
+          "custom" && (
+          <div className="space-y-5">
+            <section className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="mb-4 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                    Step{" "}
+                    {wizardStep +
+                      1}{" "}
+                    of{" "}
+                    {
+                      WIZARD_STEPS.length
+                    }
+                  </p>
+                  <h2 className="mt-1 font-heading text-xl font-bold text-gray-950">
+                    {
+                      activeWizardStep.label
+                    }
+                  </h2>
+                </div>
+
+                <div className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">
+                  {selectedFilterCount}{" "}
+                  {selectedFilterCount ===
+                  1
+                    ? "filter"
+                    : "filters"}{" "}
+                  selected
+                </div>
+              </div>
+
+              <div
+                role="tablist"
+                aria-label="Screener sections"
+                className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+              >
+                {WIZARD_STEPS.map(
+                  (
+                    step,
+                    index,
+                  ) => (
+                    <button
+                      key={
+                        step.key
+                      }
+                      type="button"
+                      role="tab"
+                      aria-selected={
+                        wizardStep ===
+                        index
+                      }
+                      onClick={() =>
+                        goToWizardStep(
+                          index,
+                        )
+                      }
+                      className={
+                        wizardStep ===
+                        index
+                          ? "min-h-[42px] shrink-0 rounded-full border border-gray-900 bg-gray-900 px-4 text-xs font-semibold text-white"
+                          : "min-h-[42px] shrink-0 rounded-full border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-600 transition-colors hover:border-gray-400"
+                      }
+                    >
+                      {index +
+                        1}
+                      .{" "}
+                      {
+                        step.label
+                      }
+                    </button>
                   ),
                 )}
               </div>
-            </div>
-          )}
-        </div>
+            </section>
 
-        <div
-          className="space-y-5 rounded-2xl border border-gray-100 p-4"
-          style={{
-            backgroundColor:
-              "hsl(var(--card))",
-          }}
-        >
-          <p className="font-heading text-sm font-semibold">
-            Filters
-          </p>
+            {wizardStep ===
+              0 ? (
+              <section className="rounded-3xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="mb-4">
+                  <h3 className="font-heading text-base font-bold text-gray-950">
+                    Choose sectors
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    Select as many sectors as you want, or choose All to search the full stock universe.
+                  </p>
+                </div>
 
-          <div>
-            <Label className="mb-2 block text-xs text-gray-500">
-              Sector — choose one or more
-            </Label>
-
-            <div className="flex flex-wrap gap-2">
-              <FilterChip
-                label="All"
-                active={
-                  selectedSectors.length ===
-                  0
-                }
-                onClick={
-                  clearSectors
-                }
-              />
-
-              {SECTORS.map(
-                (sector) => (
+                <div className="flex flex-wrap gap-2">
                   <FilterChip
-                    key={
-                      sector
+                    label="All sectors"
+                    active={
+                      selectedSectors.length ===
+                      0
                     }
-                    label={
-                      sector
-                    }
-                    active={selectedSectors.includes(
-                      sector,
-                    )}
-                    onClick={() =>
-                      toggleSector(
-                        sector,
-                      )
+                    onClick={
+                      clearSectors
                     }
                   />
-                ),
-              )}
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            <Label className="block text-xs text-gray-500">
-              Metrics — tap to add a filter · press and hold for a description
-            </Label>
-
-            {METRIC_GROUPS.map(
-              (group) => (
-                <div
-                  key={
-                    group.group
-                  }
-                >
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-                    {
-                      group.group
-                    }
-                  </p>
-
-                  <div className="flex flex-wrap gap-2">
-                    {group.metrics.map(
-                      (
-                        definition,
-                      ) => (
-                        <FilterChip
-                          key={
-                            definition.key
-                          }
-                          label={
-                            definition.label
-                          }
-                          active={activeMetrics.has(
-                            definition.key,
-                          )}
-                          onClick={() =>
-                            toggleMetric(
-                              definition.key,
-                            )
-                          }
-                          tooltip={
-                            definition.desc
-                          }
-                        />
-                      ),
-                    )}
-                  </div>
+                  {SECTORS.map(
+                    (sector) => (
+                      <FilterChip
+                        key={
+                          sector
+                        }
+                        label={
+                          sector
+                        }
+                        active={selectedSectors.includes(
+                          sector,
+                        )}
+                        onClick={() =>
+                          toggleSector(
+                            sector,
+                          )
+                        }
+                      />
+                    ),
+                  )}
                 </div>
-              ),
+              </section>
+            ) : (
+              <section className="space-y-3">
+                <div className="px-1">
+                  <h3 className="font-heading text-base font-bold text-gray-950">
+                    {
+                      activeMetricGroup.group
+                    }{" "}
+                    metrics
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    Tap a metric to select it. Press and hold a metric to see its description.
+                  </p>
+                </div>
+
+                {activeMetricGroup.metrics.map(
+                  (
+                    definition,
+                  ) => {
+                    const isActive =
+                      activeMetrics.has(
+                        definition.key,
+                      );
+
+                    return (
+                      <div
+                        key={
+                          definition.key
+                        }
+                        className={
+                          isActive
+                            ? "rounded-2xl border border-gray-900 bg-white p-4 shadow-sm ring-1 ring-gray-900"
+                            : "rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <FilterChip
+                            label={
+                              definition.label
+                            }
+                            active={
+                              isActive
+                            }
+                            onClick={() =>
+                              toggleMetric(
+                                definition.key,
+                              )
+                            }
+                            tooltip={
+                              definition.desc
+                            }
+                          />
+
+                          <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-500">
+                            {
+                              definition.unit
+                            }
+                          </span>
+                        </div>
+
+                        {isActive && (
+                          <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4">
+                            <div>
+                              <Label className="mb-1.5 block text-[11px] font-semibold text-gray-500">
+                                Minimum
+                              </Label>
+
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step="any"
+                                placeholder={
+                                  definition.minPlaceholder
+                                }
+                                value={
+                                  filters[
+                                    definition.minKey
+                                  ] ?? ""
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateNumberFilter(
+                                    definition.minKey,
+                                    event.target.value,
+                                  )
+                                }
+                                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-950 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/20"
+                              />
+                            </div>
+
+                            <div>
+                              <Label className="mb-1.5 block text-[11px] font-semibold text-gray-500">
+                                Maximum
+                              </Label>
+
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step="any"
+                                placeholder={
+                                  definition.maxPlaceholder
+                                }
+                                value={
+                                  filters[
+                                    definition.maxKey
+                                  ] ?? ""
+                                }
+                                onChange={(
+                                  event,
+                                ) =>
+                                  updateNumberFilter(
+                                    definition.maxKey,
+                                    event.target.value,
+                                  )
+                                }
+                                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-950 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900/20"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  },
+                )}
+              </section>
             )}
           </div>
+        )}
+      </main>
 
-          {activeMetrics.size >
-            0 && (
-            <div className="space-y-4 border-t border-gray-100 pt-4">
-              <p className="text-xs font-semibold text-gray-500">
-                Active Filters
-              </p>
-
-              {ALL_METRIC_DEFS.filter(
-                (definition) =>
-                  activeMetrics.has(
-                    definition.key,
-                  ),
-              ).map(
-                (definition) => (
-                  <div
-                    key={
-                      definition.key
-                    }
-                  >
-                    <p className="mb-2 text-xs font-medium text-gray-900">
-                      {
-                        definition.label
-                      }{" "}
-                      <span className="font-normal text-gray-500">
-                        (
-                        {
-                          definition.unit
-                        }
-                        )
-                      </span>
-                    </p>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="mb-1 block text-[10px] text-gray-500">
-                          Min
-                        </Label>
-
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder={
-                            definition.minPlaceholder
-                          }
-                          value={
-                            filters[
-                              definition
-                                .minKey
-                            ] ?? ""
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            updateNumberFilter(
-                              definition.minKey,
-                              event.target
-                                .value,
-                            )
-                          }
-                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400"
-                        />
-                      </div>
-
-                      <div>
-                        <Label className="mb-1 block text-[10px] text-gray-500">
-                          Max
-                        </Label>
-
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder={
-                            definition.maxPlaceholder
-                          }
-                          value={
-                            filters[
-                              definition
-                                .maxKey
-                            ] ?? ""
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            updateNumberFilter(
-                              definition.maxKey,
-                              event.target
-                                .value,
-                            )
-                          }
-                          className="h-9 w-full rounded-md border border-gray-200 bg-white px-3 py-1 text-sm text-gray-900 placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-400"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-          )}
-
-          <div className="flex gap-2">
+      {screenView ===
+        "custom" && (
+        <div
+          className="fixed inset-x-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur-xl"
+          style={{
+            bottom:
+              "calc(env(safe-area-inset-bottom) + 64px)",
+          }}
+        >
+          <div className="mx-auto flex w-full max-w-xl items-center gap-2">
             <Button
-              className="flex-1"
-              onClick={() => {
-                setActivePreset(
-                  null,
-                );
-
-                void runScreen();
-              }}
+              type="button"
+              variant="outline"
+              className="min-h-[46px] px-4"
               disabled={
                 loading
               }
-            >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="mr-2 h-4 w-4" />
-              )}
+              onClick={() => {
+                if (
+                  wizardStep ===
+                  0
+                ) {
+                  setScreenView(
+                    "landing",
+                  );
+                  return;
+                }
 
-              Run Screen
+                goToWizardStep(
+                  wizardStep -
+                    1,
+                );
+              }}
+            >
+              Back
             </Button>
 
             <Button
               type="button"
               variant="outline"
+              className="min-h-[46px] px-4"
               disabled={
                 loading
               }
-              onClick={() => {
-                setSaveName(
-                  "",
-                );
-
-                setSaveDialogOpen(
-                  true,
-                );
-              }}
+              onClick={
+                openSaveDialog
+              }
             >
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="mr-1.5 h-4 w-4" />
               Save
             </Button>
+
+            {wizardStep <
+            WIZARD_STEPS.length -
+              1 ? (
+              <Button
+                type="button"
+                className="min-h-[46px] flex-1"
+                disabled={
+                  loading
+                }
+                onClick={() =>
+                  goToWizardStep(
+                    wizardStep +
+                      1,
+                  )
+                }
+              >
+                Next
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="min-h-[46px] flex-1"
+                disabled={
+                  loading
+                }
+                onClick={() => {
+                  setActivePreset(
+                    null,
+                  );
+                  void runScreen();
+                }}
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="mr-2 h-4 w-4" />
+                )}
+                Run Screen
+              </Button>
+            )}
           </div>
         </div>
-
-        {!loading && (
-          <div className="py-16 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
-              <SlidersHorizontal className="h-8 w-8 text-gray-400" />
-            </div>
-
-            <h2 className="mb-1 font-heading text-lg font-semibold text-gray-900">
-              Find your next pick
-            </h2>
-
-            <p className="text-sm text-gray-500">
-              Set filters above or pick a quick screen to get started.
-            </p>
-          </div>
-        )}
-      </main>
+      )}
 
       <Dialog
         open={
@@ -2093,8 +2425,7 @@ export default function Screener() {
                   event,
                 ) =>
                   setSaveName(
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
                 onKeyDown={(
@@ -2105,7 +2436,6 @@ export default function Screener() {
                     "Enter"
                   ) {
                     event.preventDefault();
-
                     void saveScreen();
                   }
                 }}
@@ -2126,7 +2456,6 @@ export default function Screener() {
               {saving && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-
               Save Screen
             </Button>
           </div>
