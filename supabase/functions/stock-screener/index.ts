@@ -486,11 +486,13 @@ Deno.serve(async (request) => {
               role: "user",
 
               content:
-                "Return up to " +
+                "Return exactly " +
                 PAGE_SIZE +
                 " new real US-listed stocks matching these filters for results page " +
                 page +
-                ":\n\n" +
+                " whenever at least " +
+                PAGE_SIZE +
+                " eligible matches remain. Return fewer only when the eligible universe is exhausted. Do not stop early.\n\n" +
                 filtersText +
                 "\n\nReturn every required field for every stock. " +
                 "Use NASDAQ, NYSE, or AMEX for exchange. " +
@@ -607,8 +609,7 @@ Deno.serve(async (request) => {
       pageSize:
         PAGE_SIZE,
       hasMore:
-        stocks.length ===
-        PAGE_SIZE &&
+        stocks.length > 0 &&
         page < MAX_PAGE,
     });
   } catch (error) {
