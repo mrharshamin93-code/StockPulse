@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bell,
   CheckCircle2,
@@ -50,6 +51,7 @@ function formatTimestamp(value) {
 }
 
 export default function PriceAlerts() {
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [alerts, setAlerts] =
@@ -170,45 +172,6 @@ export default function PriceAlerts() {
           loadedNotifications,
         );
 
-        const unreadIds =
-          loadedNotifications
-            .filter(
-              (notification) =>
-                !notification.read_at,
-            )
-            .map(
-              (notification) =>
-                notification.id,
-            );
-
-        if (unreadIds.length) {
-          const {
-            error: readError,
-          } =
-            await supabase
-              .from(
-                "app_notifications",
-              )
-              .update({
-                read_at:
-                  new Date().toISOString(),
-              })
-              .in(
-                "id",
-                unreadIds,
-              )
-              .eq(
-                "user_id",
-                user.id,
-              );
-
-          if (readError) {
-            console.warn(
-              "Could not mark notifications read:",
-              readError,
-            );
-          }
-        }
       } catch (loadError) {
         console.error(
           "Price alerts failed to load:",
@@ -406,6 +369,110 @@ export default function PriceAlerts() {
                     nextEnabled,
                 }
               : item,
+        ),
+    );
+  }
+
+  async function handleOpenNotification(
+    notification,
+  ) {
+    if (!user?.id) {
+      return;
+    }
+
+    if (!notification.read_at) {
+      const readAt =
+        new Date().toISOString();
+
+      const {
+        error: updateError,
+      } =
+        await supabase
+          .from(
+            "app_notifications",
+          )
+          .update({
+            read_at:
+              readAt,
+          })
+          .eq(
+            "id",
+            notification.id,
+          )
+          .eq(
+            "user_id",
+            user.id,
+          );
+
+      if (updateError) {
+        setError(
+          updateError.message ||
+            "Unable to open the notification.",
+        );
+        return;
+      }
+
+      setNotifications(
+        (previous) =>
+          previous.map(
+            (item) =>
+              item.id ===
+              notification.id
+                ? {
+                    ...item,
+                    read_at:
+                      readAt,
+                  }
+                : item,
+          ),
+      );
+    }
+
+    if (notification.route) {
+      navigate(
+        notification.route,
+      );
+    }
+  }
+
+  async function handleDeleteNotification(
+    notificationId,
+  ) {
+    if (!user?.id) {
+      return;
+    }
+
+    const {
+      error: deleteError,
+    } =
+      await supabase
+        .from(
+          "app_notifications",
+        )
+        .delete()
+        .eq(
+          "id",
+          notificationId,
+        )
+        .eq(
+          "user_id",
+          user.id,
+        );
+
+    if (deleteError) {
+      setError(
+        deleteError.message ||
+          "Unable to delete the notification.",
+      );
+      return;
+    }
+
+    setNotifications(
+      (previous) =>
+        previous.filter(
+          (notification) =>
+            notification.id !==
+            notificationId,
         ),
     );
   }
@@ -699,41 +766,80 @@ export default function PriceAlerts() {
               {notifications.map(
                 (
                   notification,
-                ) => (
-                  <button
-                    type="button"
-                    key={
-                      notification.id
-                    }
-                    onClick={() => {
-                      if (
-                        notification.route
-                      ) {
-                        window.location.href =
-                          notification.route;
-                      }
-                    }}
-                    className="w-full px-5 py-4 text-left transition-colors hover:bg-gray-50"
-                  >
-                    <p className="text-sm font-semibold text-gray-900">
-                      {
-                        notification.title
-                      }
-                    </p>
+                ) => {
+                  const unread =
+                    !notification.read_at;
 
-                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                      {
-                        notification.body
+                  return (
+                    <div
+                      key={
+                        notification.id
                       }
-                    </p>
+                      className={`flex items-start gap-2 px-3 py-2 ${
+                        unread
+                          ? "bg-blue-50/70"
+                          : "bg-white"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleOpenNotification(
+                            notification,
+                          )
+                        }
+                        className="flex min-w-0 flex-1 items-start gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-gray-50"
+                      >
+                        <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+                          <Bell className="h-4 w-4 text-amber-500" />
 
-                    <p className="mt-1 text-[10px] text-gray-400">
-                      {formatTimestamp(
-                        notification.created_at,
-                      )}
-                    </p>
-                  </button>
-                ),
+                          {unread ? (
+                            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
+                          ) : null}
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          <span
+                            className={`block text-sm ${
+                              unread
+                                ? "font-bold text-gray-950"
+                                : "font-semibold text-gray-800"
+                            }`}
+                          >
+                            {
+                              notification.title
+                            }
+                          </span>
+
+                          <span className="mt-1 block text-xs leading-5 text-gray-500">
+                            {
+                              notification.body
+                            }
+                          </span>
+
+                          <span className="mt-1 block text-[10px] text-gray-400">
+                            {formatTimestamp(
+                              notification.created_at,
+                            )}
+                          </span>
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleDeleteNotification(
+                            notification.id,
+                          )
+                        }
+                        aria-label={`Delete ${notification.title}`}
+                        className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                },
               )}
             </div>
           )}
