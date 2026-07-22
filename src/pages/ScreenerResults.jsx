@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -26,11 +27,76 @@ import {
 import SubPageHeader from "@/components/SubPageHeader";
 
 const PAGE_SIZE = 12;
-const RESULT_LIMIT = 48;
+
 const SCREENER_SESSION_KEY =
-  "screener_paginated_results_v2";
+  "screener_server_results_v1";
+
 const CURRENT_PAGE_KEY =
   "screener_results_current_page";
+
+const SECTORS = [
+  "Technology",
+  "Healthcare",
+  "Finance",
+  "Energy",
+  "Consumer Cyclical",
+  "Industrials",
+  "Real Estate",
+  "Utilities",
+  "Materials",
+  "Communication Services",
+];
+
+const SORT_OPTIONS = {
+  marketCapB: {
+    label:
+      "Market Cap",
+    sortBy:
+      "marketCapB",
+    sortDirection:
+      "desc",
+  },
+  changePercent: {
+    label:
+      "Daily Change",
+    sortBy:
+      "changePercent",
+    sortDirection:
+      "desc",
+  },
+  week52Change: {
+    label:
+      "52W Change",
+    sortBy:
+      "week52Change",
+    sortDirection:
+      "desc",
+  },
+  pe: {
+    label:
+      "Lowest P/E",
+    sortBy:
+      "pe",
+    sortDirection:
+      "asc",
+  },
+  dividendYield: {
+    label:
+      "Dividend Yield",
+    sortBy:
+      "dividendYield",
+    sortDirection:
+      "desc",
+  },
+  roe: {
+    label:
+      "ROE",
+    sortBy:
+      "roe",
+    sortDirection:
+      "desc",
+  },
+};
 
 function normalizeTicker(
   value,
@@ -59,104 +125,53 @@ function normalizeResults(
         typeof stock ===
           "object",
     )
-    .filter((stock) => {
-      const ticker =
-        normalizeTicker(
-          stock?.ticker,
-        );
+    .filter(
+      (stock) => {
+        const ticker =
+          normalizeTicker(
+            stock?.ticker ||
+              stock?.symbol,
+          );
 
-      if (
-        !ticker ||
-        seen.has(ticker)
-      ) {
-        return false;
-      }
+        if (
+          !ticker ||
+          seen.has(ticker)
+        ) {
+          return false;
+        }
 
-      seen.add(ticker);
-      return true;
-    })
-    .slice(
-      0,
-      RESULT_LIMIT,
+        seen.add(ticker);
+
+        return true;
+      },
+    )
+    .map(
+      (stock) => ({
+        ...stock,
+        ticker:
+          normalizeTicker(
+            stock?.ticker ||
+              stock?.symbol,
+          ),
+      }),
     );
 }
 
-function flattenSessionResults(
+function normalizeFilters(
   value,
 ) {
   if (
     !value ||
-    typeof value !== "object"
+    typeof value !==
+      "object" ||
+    Array.isArray(value)
   ) {
-    return [];
+    return {};
   }
 
-  if (
-    Array.isArray(
-      value.results,
-    )
-  ) {
-    return normalizeResults(
-      value.results,
-    );
-  }
-
-  if (
-    Array.isArray(
-      value.pages,
-    )
-  ) {
-    return normalizeResults(
-      value.pages.flatMap(
-        (page) =>
-          Array.isArray(page)
-            ? page
-            : [],
-      ),
-    );
-  }
-
-  return [];
-}
-
-function readStoredResults() {
-  try {
-    const stored =
-      window.sessionStorage
-        .getItem(
-          "screener_last_results",
-        );
-
-    if (!stored) {
-      return [];
-    }
-
-    return normalizeResults(
-      JSON.parse(stored),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function readStoredSessionResults() {
-  try {
-    const stored =
-      window.sessionStorage
-        .getItem(
-          SCREENER_SESSION_KEY,
-        );
-
-    if (!stored) {
-      return [];
-    }
-
-    return flattenSessionResults(
-      JSON.parse(stored),
-    );
-  } catch {
-    return [];
-  }
+  return {
+    ...value,
+  };
 }
 
 function readStoredFilters() {
@@ -171,17 +186,9 @@ function readStoredFilters() {
       return {};
     }
 
-    const parsed =
-      JSON.parse(stored);
-
-    return (
-      parsed &&
-      typeof parsed ===
-        "object" &&
-      !Array.isArray(parsed)
-    )
-      ? parsed
-      : {};
+    return normalizeFilters(
+      JSON.parse(stored),
+    );
   } catch {
     return {};
   }
@@ -207,6 +214,35 @@ function readStoredPage() {
       : 1;
   } catch {
     return 1;
+  }
+}
+
+function readStoredSession() {
+  try {
+    const stored =
+      window.sessionStorage
+        .getItem(
+          SCREENER_SESSION_KEY,
+        );
+
+    if (!stored) {
+      return null;
+    }
+
+    const parsed =
+      JSON.parse(stored);
+
+    if (
+      !parsed ||
+      typeof parsed !==
+        "object"
+    ) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
   }
 }
 
@@ -247,6 +283,111 @@ function formatFixed(
       );
 }
 
+function buildRequestFilters(
+  baseFilters,
+  selectedSector,
+  positiveOnly,
+) {
+  const next = {
+    ...normalizeFilters(
+      baseFilters,
+    ),
+  };
+
+  if (
+    selectedSector !==
+    "All"
+  ) {
+    delete next.sector;
+
+    next.sectors = [
+      selectedSector,
+    ];
+  }
+
+  if (positiveOnly) {
+    const currentMinimum =
+      finiteNumber(
+        next.minChangePercent,
+      );
+
+    next.minChangePercent =
+      Math.max(
+        currentMinimum ?? 0,
+        0.000001,
+      );
+  }
+
+  return next;
+}
+
+function buildPageItems(
+  currentPage,
+  totalPages,
+) {
+  if (totalPages <= 7) {
+    return Array.from(
+      {
+        length:
+          totalPages,
+      },
+      (
+        _,
+        index,
+      ) =>
+        index + 1,
+    );
+  }
+
+  const values = [
+    1,
+    currentPage - 2,
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    currentPage + 2,
+    totalPages,
+  ]
+    .filter(
+      (page) =>
+        page >= 1 &&
+        page <=
+          totalPages,
+    )
+    .sort(
+      (left, right) =>
+        left - right,
+    );
+
+  const unique = [
+    ...new Set(values),
+  ];
+
+  const items = [];
+
+  unique.forEach(
+    (
+      page,
+      index,
+    ) => {
+      if (
+        index > 0 &&
+        page -
+          unique[index - 1] >
+          1
+      ) {
+        items.push(
+          `ellipsis-${page}`,
+        );
+      }
+
+      items.push(page);
+    },
+  );
+
+  return items;
+}
+
 function Metric({
   label,
   value,
@@ -272,7 +413,8 @@ function ResultRow({
 }) {
   const ticker =
     normalizeTicker(
-      stock?.ticker,
+      stock?.ticker ||
+        stock?.symbol,
     );
 
   const change =
@@ -341,6 +483,7 @@ function ResultRow({
 
           <p className="truncate text-xs text-muted-foreground">
             {stock?.name ||
+              stock?.companyName ||
               ticker}
           </p>
 
@@ -507,13 +650,145 @@ export default function ScreenerResults() {
   const { user } =
     useAuth();
 
-  const loading =
+  const routeLoading =
     Boolean(
       state?.loading,
     );
 
-  const error =
+  const routeError =
     state?.error || "";
+
+  const storedSession =
+    useMemo(
+      readStoredSession,
+      [],
+    );
+
+  const baseFilters =
+    useMemo(
+      () =>
+        normalizeFilters(
+          state?.filters ||
+            state
+              ?.screenerSession
+              ?.filters ||
+            storedSession
+              ?.filters ||
+            readStoredFilters(),
+        ),
+      [
+        state,
+        storedSession,
+      ],
+    );
+
+  const initialResults =
+    useMemo(
+      () =>
+        normalizeResults(
+          Array.isArray(
+            state?.results,
+          )
+            ? state.results
+            : storedSession
+                ?.results,
+        ),
+      [
+        state,
+        storedSession,
+      ],
+    );
+
+  const [
+    results,
+    setResults,
+  ] = useState(
+    initialResults,
+  );
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] = useState(() =>
+    state?.filters
+      ? 1
+      : Math.max(
+          1,
+          Number(
+            storedSession
+              ?.pagination
+              ?.page,
+          ) ||
+            readStoredPage(),
+        ),
+  );
+
+  const [
+    pagination,
+    setPagination,
+  ] = useState(() => ({
+    page:
+      currentPage,
+    pageSize:
+      PAGE_SIZE,
+    totalResults:
+      Number(
+        state
+          ?.pagination
+          ?.totalResults ??
+          storedSession
+            ?.pagination
+            ?.totalResults ??
+          initialResults.length,
+      ) || 0,
+    totalPages:
+      Number(
+        state
+          ?.pagination
+          ?.totalPages ??
+          storedSession
+            ?.pagination
+            ?.totalPages,
+      ) ||
+      (
+        initialResults.length >
+        0
+          ? 1
+          : 0
+      ),
+    hasNextPage:
+      Boolean(
+        state
+          ?.pagination
+          ?.hasNextPage ??
+          storedSession
+            ?.pagination
+            ?.hasNextPage,
+      ),
+    hasPreviousPage:
+      currentPage > 1,
+  }));
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(
+    routeLoading ||
+      initialResults.length ===
+        0,
+  );
+
+  const [
+    pageLoading,
+    setPageLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState(
+    routeError,
+  );
 
   const [
     toast,
@@ -535,7 +810,11 @@ export default function ScreenerResults() {
   const [
     sortKey,
     setSortKey,
-  ] = useState("marketCapB");
+  ] = useState(
+    storedSession
+      ?.sortKey ||
+      "marketCapB",
+  );
 
   const [
     filtersOpen,
@@ -545,279 +824,478 @@ export default function ScreenerResults() {
   const [
     selectedSector,
     setSelectedSector,
-  ] = useState("All");
+  ] = useState(
+    storedSession
+      ?.selectedSector ||
+      "All",
+  );
 
   const [
     positiveOnly,
     setPositiveOnly,
-  ] = useState(false);
-
-  const [
-    currentPage,
-    setCurrentPage,
   ] = useState(
-    readStoredPage,
+    Boolean(
+      storedSession
+        ?.positiveOnly,
+    ),
   );
 
   const toastTimerRef =
     useRef(null);
 
-  const allResults =
-    useMemo(() => {
-      if (
-        loading ||
-        error
-      ) {
-        return [];
-      }
+  const requestCounterRef =
+    useRef(0);
 
-      /*
-       * A freshly completed screen always wins, including
-       * an intentionally empty result array. This prevents
-       * stale results from an older screen appearing.
-       */
-      if (
-        Array.isArray(
-          state?.results,
-        )
-      ) {
-        return normalizeResults(
-          state.results,
-        );
-      }
+  const pageCacheRef =
+    useRef(
+      new Map(),
+    );
 
-      const suppliedSession =
-        flattenSessionResults(
-          state
-            ?.screenerSession,
-        );
+  const activeSort =
+    SORT_OPTIONS[
+      sortKey
+    ] ||
+    SORT_OPTIONS
+      .marketCapB;
 
-      if (
-        suppliedSession.length >
-        0
-      ) {
-        return suppliedSession;
-      }
-
-      const storedSession =
-        readStoredSessionResults();
-
-      if (
-        storedSession.length >
-        0
-      ) {
-        return storedSession;
-      }
-
-      return readStoredResults();
-    }, [
-      state,
-      loading,
-      error,
-    ]);
-
-  const filters =
+  const requestFilters =
     useMemo(
       () =>
-        state?.filters ||
-        state
-          ?.screenerSession
-          ?.filters ||
-        readStoredFilters(),
-      [state],
-    );
-
-  const availableSectors =
-    useMemo(
-      () => [
-        "All",
-        ...[
-          ...new Set(
-            allResults
-              .map((stock) =>
-                String(
-                  stock?.sector ||
-                    "",
-                ).trim(),
-              )
-              .filter(Boolean),
-          ),
-        ].sort(),
+        buildRequestFilters(
+          baseFilters,
+          selectedSector,
+          positiveOnly,
+        ),
+      [
+        baseFilters,
+        selectedSector,
+        positiveOnly,
       ],
-      [allResults],
     );
 
-  const filteredResults =
-    useMemo(() => {
-      const next =
-        allResults.filter(
-          (stock) => {
-            const sectorMatches =
-              selectedSector ===
-                "All" ||
-              String(
-                stock?.sector ||
-                  "",
-              ) ===
-                selectedSector;
-
-            const change =
-              finiteNumber(
-                stock
-                  ?.changePercent,
-              );
-
-            const directionMatches =
-              !positiveOnly ||
-              (change !== null &&
-                change > 0);
-
-            return (
-              sectorMatches &&
-              directionMatches
-            );
-          },
-        );
-
-      const numericSort = (
-        key,
-        direction = "desc",
-      ) =>
-        [...next].sort(
-          (a, b) => {
-            const left =
-              finiteNumber(
-                a?.[key],
-              );
-            const right =
-              finiteNumber(
-                b?.[key],
-              );
-
-            if (
-              left === null &&
-              right === null
-            ) {
-              return 0;
-            }
-
-            if (left === null) {
-              return 1;
-            }
-
-            if (right === null) {
-              return -1;
-            }
-
-            return direction ===
-              "asc"
-              ? left - right
-              : right - left;
-          },
-        );
-
-      switch (sortKey) {
-        case "changePercent":
-          return numericSort(
-            "changePercent",
-          );
-
-        case "week52Change":
-          return numericSort(
-            "week52Change",
-          );
-
-        case "pe":
-          return numericSort(
-            "pe",
-            "asc",
-          );
-
-        case "dividendYield":
-          return numericSort(
-            "dividendYield",
-          );
-
-        case "roe":
-          return numericSort(
-            "roe",
-          );
-
-        case "marketCapB":
-        default:
-          return numericSort(
-            "marketCapB",
-          );
-      }
-    }, [
-      allResults,
-      selectedSector,
-      positiveOnly,
-      sortKey,
-    ]);
+  const querySignature =
+    useMemo(
+      () =>
+        JSON.stringify({
+          filters:
+            requestFilters,
+          sortBy:
+            activeSort.sortBy,
+          sortDirection:
+            activeSort
+              .sortDirection,
+          pageSize:
+            PAGE_SIZE,
+        }),
+      [
+        requestFilters,
+        activeSort,
+      ],
+    );
 
   const totalPages =
     Math.max(
-      1,
-      Math.ceil(
-        filteredResults.length /
-          PAGE_SIZE,
-      ),
+      0,
+      Number(
+        pagination
+          ?.totalPages,
+      ) || 0,
     );
 
-  const safeCurrentPage =
-    Math.min(
-      totalPages,
-      Math.max(
-        1,
-        currentPage,
-      ),
+  const totalResults =
+    Math.max(
+      0,
+      Number(
+        pagination
+          ?.totalResults,
+      ) || 0,
     );
 
-  const results =
-    useMemo(() => {
-      const start =
-        (safeCurrentPage -
-          1) *
-        PAGE_SIZE;
-
-      return filteredResults.slice(
-        start,
-        start +
-          PAGE_SIZE,
-      );
-    }, [
-      filteredResults,
-      safeCurrentPage,
-    ]);
-
-  const pageNumbers =
+  const pageItems =
     useMemo(
       () =>
-        Array.from(
-          {
-            length:
-              totalPages,
-          },
-          (
-            _,
-            index,
-          ) => index + 1,
+        buildPageItems(
+          currentPage,
+          totalPages,
         ),
-      [totalPages],
+      [
+        currentPage,
+        totalPages,
+      ],
     );
 
-  const resultSignature =
-    useMemo(
-      () =>
-        allResults
-          .map((stock) =>
-            normalizeTicker(
-              stock?.ticker,
-            ),
-          )
-          .join("|"),
-      [allResults],
+  const showToast =
+    useCallback(
+      (message) => {
+        window.clearTimeout(
+          toastTimerRef.current,
+        );
+
+        setToast(message);
+
+        toastTimerRef.current =
+          window.setTimeout(
+            () => {
+              setToast(null);
+            },
+            2500,
+          );
+      },
+      [],
+    );
+
+  const loadPage =
+    useCallback(
+      async (
+        requestedPage,
+        {
+          useCache = true,
+          scroll = false,
+        } = {},
+      ) => {
+        const safePage =
+          Math.max(
+            1,
+            Math.trunc(
+              Number(
+                requestedPage,
+              ),
+            ) || 1,
+          );
+
+        const cacheKey =
+          `${querySignature}|page:${safePage}`;
+
+        if (
+          useCache &&
+          pageCacheRef
+            .current
+            .has(cacheKey)
+        ) {
+          const cached =
+            pageCacheRef
+              .current
+              .get(cacheKey);
+
+          setResults(
+            cached.results,
+          );
+
+          setPagination(
+            cached.pagination,
+          );
+
+          setCurrentPage(
+            cached
+              .pagination
+              .page,
+          );
+
+          setLoading(false);
+          setPageLoading(false);
+          setError("");
+
+          if (scroll) {
+            window.scrollTo({
+              top: 0,
+              behavior:
+                "smooth",
+            });
+          }
+
+          return;
+        }
+
+        const requestId =
+          requestCounterRef
+            .current + 1;
+
+        requestCounterRef.current =
+          requestId;
+
+        if (
+          results.length ===
+          0
+        ) {
+          setLoading(true);
+        } else {
+          setPageLoading(true);
+        }
+
+        setError("");
+
+        try {
+          const {
+            data,
+            error:
+              functionError,
+          } =
+            await supabase.functions.invoke(
+              "stock-screener",
+              {
+                body: {
+                  filters:
+                    requestFilters,
+                  page:
+                    safePage,
+                  pageSize:
+                    PAGE_SIZE,
+                  sortBy:
+                    activeSort
+                      .sortBy,
+                  sortDirection:
+                    activeSort
+                      .sortDirection,
+                  quoteStaleMinutes:
+                    5,
+                },
+              },
+            );
+
+          if (
+            requestId !==
+            requestCounterRef
+              .current
+          ) {
+            return;
+          }
+
+          if (functionError) {
+            throw functionError;
+          }
+
+          if (
+            data?.error ||
+            data?.ok === false
+          ) {
+            throw new Error(
+              data?.error ||
+                "Unable to load screener results.",
+            );
+          }
+
+          const nextResults =
+            normalizeResults(
+              data?.stocks,
+            );
+
+          const nextPagination = {
+            page:
+              Math.max(
+                1,
+                Number(
+                  data
+                    ?.pagination
+                    ?.page,
+                ) ||
+                  safePage,
+              ),
+            pageSize:
+              Math.max(
+                1,
+                Number(
+                  data
+                    ?.pagination
+                    ?.pageSize,
+                ) ||
+                  PAGE_SIZE,
+              ),
+            totalResults:
+              Math.max(
+                0,
+                Number(
+                  data
+                    ?.pagination
+                    ?.totalResults ??
+                    data?.total,
+                ) || 0,
+              ),
+            totalPages:
+              Math.max(
+                0,
+                Number(
+                  data
+                    ?.pagination
+                    ?.totalPages,
+                ) ||
+                  (
+                    Number(
+                      data?.total,
+                    ) > 0
+                      ? Math.ceil(
+                          Number(
+                            data
+                              ?.total,
+                          ) /
+                            PAGE_SIZE,
+                        )
+                      : 0
+                  ),
+              ),
+            hasNextPage:
+              Boolean(
+                data
+                  ?.pagination
+                  ?.hasNextPage ??
+                  data
+                    ?.hasMore,
+              ),
+            hasPreviousPage:
+              Boolean(
+                data
+                  ?.pagination
+                  ?.hasPreviousPage ??
+                  safePage > 1,
+              ),
+          };
+
+          /*
+           * If the database changed and a previously valid
+           * page is now beyond the last page, load the new
+           * final page automatically.
+           */
+          if (
+            nextPagination
+              .totalPages >
+              0 &&
+            safePage >
+              nextPagination
+                .totalPages
+          ) {
+            await loadPage(
+              nextPagination
+                .totalPages,
+              {
+                useCache:
+                  false,
+                scroll,
+              },
+            );
+
+            return;
+          }
+
+          pageCacheRef
+            .current
+            .set(
+              cacheKey,
+              {
+                results:
+                  nextResults,
+                pagination:
+                  nextPagination,
+              },
+            );
+
+          setResults(
+            nextResults,
+          );
+
+          setPagination(
+            nextPagination,
+          );
+
+          setCurrentPage(
+            nextPagination
+              .page,
+          );
+
+          try {
+            window.sessionStorage
+              .setItem(
+                "screener_last_results",
+                JSON.stringify(
+                  nextResults,
+                ),
+              );
+
+            window.sessionStorage
+              .setItem(
+                CURRENT_PAGE_KEY,
+                String(
+                  nextPagination
+                    .page,
+                ),
+              );
+
+            window.sessionStorage
+              .setItem(
+                SCREENER_SESSION_KEY,
+                JSON.stringify({
+                  version: 4,
+                  filters:
+                    baseFilters,
+                  results:
+                    nextResults,
+                  pagination:
+                    nextPagination,
+                  sortKey,
+                  selectedSector,
+                  positiveOnly,
+                  generatedAt:
+                    Date.now(),
+                }),
+              );
+          } catch {
+            // Session storage is optional.
+          }
+
+          if (scroll) {
+            window.scrollTo({
+              top: 0,
+              behavior:
+                "smooth",
+            });
+          }
+        } catch (
+          loadError
+        ) {
+          if (
+            requestId !==
+            requestCounterRef
+              .current
+          ) {
+            return;
+          }
+
+          console.error(
+            "Failed to load screener page:",
+            loadError,
+          );
+
+          setError(
+            loadError
+              ?.message ||
+              "Unable to load screener results.",
+          );
+
+          if (
+            results.length ===
+            0
+          ) {
+            setResults([]);
+          }
+        } finally {
+          if (
+            requestId ===
+            requestCounterRef
+              .current
+          ) {
+            setLoading(false);
+            setPageLoading(false);
+          }
+        }
+      },
+      [
+        activeSort,
+        baseFilters,
+        positiveOnly,
+        querySignature,
+        requestFilters,
+        results.length,
+        selectedSector,
+        sortKey,
+      ],
     );
 
   useEffect(() => {
@@ -825,160 +1303,125 @@ export default function ScreenerResults() {
       window.clearTimeout(
         toastTimerRef.current,
       );
+
+      requestCounterRef.current +=
+        1;
     };
   }, []);
 
+  /*
+   * Screener.jsx starts the first request before navigating
+   * here. Wait for that request to finish so two simultaneous
+   * page-one requests cannot refresh the same quotes twice.
+   *
+   * Once the supplied first page arrives, keep it visible and
+   * make one fast database request for exact count, sorting,
+   * and server-pagination metadata. The quotes from the first
+   * request are already fresh, so this second request normally
+   * makes zero Finnhub quote calls.
+   */
   useEffect(() => {
-    setCurrentPage(1);
-  }, [
-    sortKey,
-    selectedSector,
-    positiveOnly,
-  ]);
-
-  useEffect(() => {
-    /*
-     * A different screen begins on page one. Returning to
-     * the same stored result set preserves its current page.
-     */
-    if (!resultSignature) {
-      setCurrentPage(1);
+    if (routeLoading) {
+      setLoading(true);
       return;
     }
 
-    const storedResults =
-      readStoredResults();
-
-    const storedSignature =
-      storedResults
-        .map((stock) =>
-          normalizeTicker(
-            stock?.ticker,
-          ),
-        )
-        .join("|");
-
-    if (
-      storedSignature &&
-      storedSignature !==
-        resultSignature
-    ) {
-      setCurrentPage(1);
-    }
-  }, [
-    resultSignature,
-  ]);
-
-  useEffect(() => {
-    if (
-      currentPage !==
-      safeCurrentPage
-    ) {
-      setCurrentPage(
-        safeCurrentPage,
+    if (routeError) {
+      setError(
+        routeError,
       );
-    }
-  }, [
-    currentPage,
-    safeCurrentPage,
-  ]);
-
-  useEffect(() => {
-    if (
-      loading ||
-      error
-    ) {
+      setLoading(false);
       return;
     }
 
-    try {
-      window.sessionStorage
-        .setItem(
-          "screener_last_results",
-          JSON.stringify(
-            allResults,
-          ),
-        );
-
-      window.sessionStorage
-        .setItem(
-          SCREENER_SESSION_KEY,
-          JSON.stringify({
-            version: 3,
-            filters,
-            results:
-              allResults,
-            currentPage:
-              safeCurrentPage,
-            generatedAt:
-              Date.now(),
-          }),
-        );
-
-      window.sessionStorage
-        .setItem(
-          CURRENT_PAGE_KEY,
-          String(
-            safeCurrentPage,
-          ),
-        );
-    } catch {
-      // Session storage is optional.
-    }
-  }, [
-    allResults,
-    filters,
-    loading,
-    error,
-    safeCurrentPage,
-  ]);
-
-  const showToast = (
-    message,
-  ) => {
-    window.clearTimeout(
-      toastTimerRef.current,
-    );
-
-    setToast(message);
-
-    toastTimerRef.current =
-      window.setTimeout(
-        () => {
-          setToast(null);
-        },
-        2500,
-      );
-  };
-
-  const goToPage = (
-    pageNumber,
-  ) => {
-    const nextPage =
-      Math.min(
-        totalPages,
-        Math.max(
-          1,
-          pageNumber,
+    if (
+      Array.isArray(
+        state?.results,
+      )
+    ) {
+      setResults(
+        normalizeResults(
+          state.results,
         ),
       );
 
-    setCurrentPage(
-      nextPage,
-    );
+      setLoading(false);
+    }
 
-    window.scrollTo({
-      top: 0,
-      behavior:
-        "smooth",
-    });
-  };
+    pageCacheRef
+      .current
+      .clear();
+
+    void loadPage(
+      1,
+      {
+        useCache:
+          false,
+      },
+    );
+  }, [
+    querySignature,
+    routeLoading,
+    routeError,
+    state?.results,
+  ]);
+
+  const goToPage =
+    useCallback(
+      (pageNumber) => {
+        if (
+          pageLoading ||
+          loading
+        ) {
+          return;
+        }
+
+        const nextPage =
+          Math.min(
+            Math.max(
+              totalPages,
+              1,
+            ),
+            Math.max(
+              1,
+              Number(
+                pageNumber,
+              ) || 1,
+            ),
+          );
+
+        if (
+          nextPage ===
+          currentPage
+        ) {
+          return;
+        }
+
+        void loadPage(
+          nextPage,
+          {
+            useCache:
+              true,
+            scroll:
+              true,
+          },
+        );
+      },
+      [
+        currentPage,
+        loadPage,
+        loading,
+        pageLoading,
+        totalPages,
+      ],
+    );
 
   const addToWatchlist =
     async (stock) => {
       const ticker =
         normalizeTicker(
-          stock?.ticker,
+          stock?.ticker ||
+            stock?.symbol,
         );
 
       if (
@@ -1061,6 +1504,8 @@ export default function ScreenerResults() {
 
               company_name:
                 stock?.name ||
+                stock
+                  ?.companyName ||
                 ticker,
 
               exchange:
@@ -1121,6 +1566,14 @@ export default function ScreenerResults() {
       }
     };
 
+  const showToolbar =
+    !loading &&
+    !error &&
+    (
+      totalResults > 0 ||
+      results.length > 0
+    );
+
   return (
     <div
       className="flex min-h-screen flex-col bg-gray-50/50"
@@ -1137,213 +1590,250 @@ export default function ScreenerResults() {
 
       <SubPageHeader
         title={
-          loading
+          loading &&
+          results.length === 0
             ? ""
-            : `Results · ${filteredResults.length} found`
+            : `Results · ${totalResults.toLocaleString()} found`
         }
         backPath="/screener"
       />
 
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-3 px-4 py-6 sm:px-6">
-        {!loading &&
-          !error &&
-          allResults.length >
-            0 && (
-            <>
-              <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
-                <label className="min-w-0 flex-1">
-                  <span className="sr-only">
-                    Sort results
-                  </span>
+        {showToolbar && (
+          <>
+            <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm">
+              <label className="min-w-0 flex-1">
+                <span className="sr-only">
+                  Sort results
+                </span>
 
-                  <select
-                    value={sortKey}
-                    onChange={(event) =>
-                      setSortKey(
-                        event.target
-                          .value,
-                      )
-                    }
-                    className="h-10 w-full rounded-xl border-0 bg-gray-50 px-3 text-xs font-semibold text-gray-700 outline-none"
-                  >
-                    <option value="marketCapB">
-                      Sort: Market Cap
-                    </option>
-                    <option value="changePercent">
-                      Sort: Daily Change
-                    </option>
-                    <option value="week52Change">
-                      Sort: 52W Change
-                    </option>
-                    <option value="pe">
-                      Sort: Lowest P/E
-                    </option>
-                    <option value="dividendYield">
-                      Sort: Dividend Yield
-                    </option>
-                    <option value="roe">
-                      Sort: ROE
-                    </option>
-                  </select>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFiltersOpen(
-                      (value) =>
-                        !value,
+                <select
+                  value={
+                    sortKey
+                  }
+                  onChange={(event) =>
+                    setSortKey(
+                      event.target
+                        .value,
                     )
                   }
-                  className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-colors ${
-                    filtersOpen ||
-                    selectedSector !==
-                      "All" ||
-                    positiveOnly
-                      ? "border-gray-900 bg-gray-900 text-white"
-                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
+                  className="h-10 w-full rounded-xl border-0 bg-gray-50 px-3 text-xs font-semibold text-gray-700 outline-none"
                 >
-                  <Filter className="h-4 w-4" />
-                  Filters
-                </button>
-              </div>
+                  {Object.entries(
+                    SORT_OPTIONS,
+                  ).map(
+                    ([
+                      key,
+                      option,
+                    ]) => (
+                      <option
+                        key={
+                          key
+                        }
+                        value={
+                          key
+                        }
+                      >
+                        Sort:{" "}
+                        {
+                          option.label
+                        }
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
 
-              {filtersOpen && (
-                <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-gray-950">
-                        Filter results
-                      </p>
-
-                      <p className="text-[11px] text-gray-400">
-                        Refine the stocks already returned
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFiltersOpen(
-                          false,
-                        )
-                      }
-                      className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-50"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <p className="mb-2 text-xs font-semibold text-gray-700">
-                    Sector
-                  </p>
-
-                  <div className="mb-4 flex flex-wrap gap-2">
-                    {availableSectors.map(
-                      (sector) => (
-                        <button
-                          type="button"
-                          key={sector}
-                          onClick={() =>
-                            setSelectedSector(
-                              sector,
-                            )
-                          }
-                          className={`min-h-9 rounded-full border px-3 text-xs font-medium ${
-                            selectedSector ===
-                            sector
-                              ? "border-gray-900 bg-gray-900 text-white"
-                              : "border-gray-200 bg-white text-gray-600"
-                          }`}
-                        >
-                          {sector}
-                        </button>
-                      ),
-                    )}
-                  </div>
-
-                  <label className="flex min-h-11 items-center justify-between rounded-xl bg-gray-50 px-3">
-                    <span className="text-xs font-semibold text-gray-700">
-                      Daily gainers only
-                    </span>
-
-                    <input
-                      type="checkbox"
-                      checked={
-                        positiveOnly
-                      }
-                      onChange={(event) =>
-                        setPositiveOnly(
-                          event.target
-                            .checked,
-                        )
-                      }
-                      className="h-4 w-4 accent-gray-900"
-                    />
-                  </label>
-
-                  {(selectedSector !==
+              <button
+                type="button"
+                onClick={() =>
+                  setFiltersOpen(
+                    (value) =>
+                      !value,
+                  )
+                }
+                className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-colors ${
+                  filtersOpen ||
+                  selectedSector !==
                     "All" ||
-                    positiveOnly) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedSector(
-                          "All",
-                        );
-                        setPositiveOnly(
-                          false,
-                        );
-                      }}
-                      className="mt-3 w-full min-h-10 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50"
-                    >
-                      Clear result filters
-                    </button>
+                  positiveOnly
+                    ? "border-gray-900 bg-gray-900 text-white"
+                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+              </button>
+            </div>
+
+            {filtersOpen && (
+              <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-gray-950">
+                      Filter results
+                    </p>
+
+                    <p className="text-[11px] text-gray-500">
+                      Filters apply to the complete result set
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Close filters"
+                    onClick={() =>
+                      setFiltersOpen(
+                        false,
+                      )
+                    }
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-50"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <p className="mb-2 text-xs font-semibold text-gray-700">
+                  Sector
+                </p>
+
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {[
+                    "All",
+                    ...SECTORS,
+                  ].map(
+                    (sector) => (
+                      <button
+                        type="button"
+                        key={
+                          sector
+                        }
+                        onClick={() =>
+                          setSelectedSector(
+                            sector,
+                          )
+                        }
+                        className={`min-h-9 rounded-full border px-3 text-xs font-medium ${
+                          selectedSector ===
+                          sector
+                            ? "border-gray-900 bg-gray-900 text-white"
+                            : "border-gray-200 bg-white text-gray-700"
+                        }`}
+                      >
+                        {sector}
+                      </button>
+                    ),
                   )}
                 </div>
-              )}
-            </>
+
+                <label className="flex min-h-11 items-center justify-between rounded-xl bg-gray-50 px-3">
+                  <span className="text-xs font-semibold text-gray-700">
+                    Daily gainers only
+                  </span>
+
+                  <input
+                    type="checkbox"
+                    checked={
+                      positiveOnly
+                    }
+                    onChange={(event) =>
+                      setPositiveOnly(
+                        event.target
+                          .checked,
+                      )
+                    }
+                    className="h-4 w-4 accent-gray-900"
+                  />
+                </label>
+
+                {(selectedSector !==
+                  "All" ||
+                  positiveOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSector(
+                        "All",
+                      );
+                      setPositiveOnly(
+                        false,
+                      );
+                    }}
+                    className="mt-3 min-h-10 w-full rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  >
+                    Clear result filters
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {pageLoading &&
+          results.length >
+            0 && (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-medium text-gray-600 shadow-sm">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Loading page{" "}
+              {currentPage}…
+            </div>
           )}
 
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <Loader2 className="mb-4 h-7 w-7 animate-spin text-muted-foreground" />
+        {loading &&
+          results.length ===
+            0 && (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <Loader2 className="mb-4 h-7 w-7 animate-spin text-muted-foreground" />
 
-            <p className="text-sm font-semibold text-foreground">
-              Please wait...
-            </p>
+              <p className="text-sm font-semibold text-foreground">
+                Loading results…
+              </p>
 
-            <p className="mt-1 text-xs text-muted-foreground">
-              Finding up to 48 stocks that match your filters.
-            </p>
-          </div>
-        )}
+              <p className="mt-1 text-xs text-muted-foreground">
+                Filtering the cached stock database.
+              </p>
+            </div>
+          )}
 
         {!loading &&
           error && (
             <div className="mx-auto max-w-md rounded-2xl border border-red-200 bg-red-50 px-5 py-6 text-center">
               <p className="text-sm font-medium text-red-700">
-                Unable to run screen
+                Unable to load results
               </p>
 
               <p className="mt-1 text-xs leading-5 text-red-600">
                 {error}
               </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void loadPage(
+                    currentPage,
+                    {
+                      useCache:
+                        false,
+                    },
+                  )
+                }
+                className="mt-4 min-h-10 rounded-xl bg-gray-900 px-4 text-xs font-semibold text-white"
+              >
+                Try Again
+              </button>
             </div>
           )}
 
         {!loading &&
           !error &&
-          filteredResults.length ===
+          totalResults ===
             0 && (
             <div className="py-24 text-center text-sm text-muted-foreground">
-              No results match the selected result filters.
+              No stocks match the selected filters.
             </div>
           )}
 
-        {!loading &&
-          !error &&
+        {!error &&
           results.map(
             (
               stock,
@@ -1351,13 +1841,16 @@ export default function ScreenerResults() {
             ) => {
               const ticker =
                 normalizeTicker(
-                  stock?.ticker,
+                  stock?.ticker ||
+                    stock?.symbol,
                 );
 
               return (
                 <ResultRow
-                  key={`${ticker || "stock"}-${(safeCurrentPage - 1) * PAGE_SIZE + index}`}
-                  stock={stock}
+                  key={`${ticker || "stock"}-${currentPage}-${index}`}
+                  stock={
+                    stock
+                  }
                   onAdd={
                     addToWatchlist
                   }
@@ -1375,96 +1868,122 @@ export default function ScreenerResults() {
 
         {!loading &&
           !error &&
-          filteredResults.length >
-            PAGE_SIZE && (
+          totalPages > 1 && (
             <nav
               aria-label="Screener result pages"
-              className="flex items-center justify-center gap-2 pt-4"
+              className="space-y-3 pt-4"
             >
-              <button
-                type="button"
-                aria-label="Previous page"
-                disabled={
-                  safeCurrentPage ===
-                  1
-                }
-                onClick={() =>
-                  goToPage(
-                    safeCurrentPage -
-                      1,
-                  )
-                }
-                className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
+              <p className="text-center text-xs text-gray-500">
+                Page{" "}
+                {currentPage.toLocaleString()}{" "}
+                of{" "}
+                {totalPages.toLocaleString()}
+              </p>
 
-                <span className="hidden sm:inline">
-                  Previous
-                </span>
-              </button>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Previous page"
+                  disabled={
+                    currentPage <=
+                      1 ||
+                    pageLoading
+                  }
+                  onClick={() =>
+                    goToPage(
+                      currentPage -
+                        1,
+                    )
+                  }
+                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4" />
 
-              <div className="no-scrollbar flex max-w-[55vw] items-center gap-1 overflow-x-auto">
-                {pageNumbers.map(
-                  (
-                    pageNumber,
-                  ) => {
-                    const isCurrent =
-                      pageNumber ===
-                      safeCurrentPage;
+                  <span className="hidden sm:inline">
+                    Previous
+                  </span>
+                </button>
 
-                    return (
-                      <button
-                        key={
-                          pageNumber
-                        }
-                        type="button"
-                        aria-label={`Page ${pageNumber}`}
-                        aria-current={
-                          isCurrent
-                            ? "page"
-                            : undefined
-                        }
-                        onClick={() =>
-                          goToPage(
-                            pageNumber,
-                          )
-                        }
-                        className={
-                          isCurrent
-                            ? "flex h-10 min-w-10 items-center justify-center rounded-lg bg-gray-900 px-3 text-sm font-semibold text-white"
-                            : "flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
-                        }
-                      >
-                        {
-                          pageNumber
-                        }
-                      </button>
-                    );
-                  },
-                )}
+                <div className="no-scrollbar flex max-w-[58vw] items-center gap-1 overflow-x-auto">
+                  {pageItems.map(
+                    (item) => {
+                      if (
+                        typeof item ===
+                        "string"
+                      ) {
+                        return (
+                          <span
+                            key={
+                              item
+                            }
+                            className="px-1 text-xs text-gray-400"
+                            aria-hidden="true"
+                          >
+                            …
+                          </span>
+                        );
+                      }
+
+                      const isCurrent =
+                        item ===
+                        currentPage;
+
+                      return (
+                        <button
+                          key={
+                            item
+                          }
+                          type="button"
+                          aria-label={`Page ${item}`}
+                          aria-current={
+                            isCurrent
+                              ? "page"
+                              : undefined
+                          }
+                          disabled={
+                            pageLoading
+                          }
+                          onClick={() =>
+                            goToPage(
+                              item,
+                            )
+                          }
+                          className={
+                            isCurrent
+                              ? "inline-flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-900 bg-gray-900 px-2 text-xs font-semibold text-white"
+                              : "inline-flex h-10 min-w-10 items-center justify-center rounded-lg border border-gray-200 bg-white px-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          }
+                        >
+                          {item}
+                        </button>
+                      );
+                    },
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Next page"
+                  disabled={
+                    currentPage >=
+                      totalPages ||
+                    pageLoading
+                  }
+                  onClick={() =>
+                    goToPage(
+                      currentPage +
+                        1,
+                    )
+                  }
+                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span className="hidden sm:inline">
+                    Next
+                  </span>
+
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-
-              <button
-                type="button"
-                aria-label="Next page"
-                disabled={
-                  safeCurrentPage ===
-                  totalPages
-                }
-                onClick={() =>
-                  goToPage(
-                    safeCurrentPage +
-                      1,
-                  )
-                }
-                className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span className="hidden sm:inline">
-                  Next
-                </span>
-
-                <ChevronRight className="h-4 w-4" />
-              </button>
             </nav>
           )}
       </main>
