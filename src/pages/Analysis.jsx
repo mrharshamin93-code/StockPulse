@@ -5,17 +5,15 @@ import React, {
   useState,
 } from "react";
 import {
-  BarChart3,
-  FileText,
+  ArrowLeft,
+  Database,
   Loader2,
   Newspaper,
-  PieChart,
   RefreshCw,
   Search,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
-  TrendingUp,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 
@@ -23,34 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { POPULAR_TICKERS } from "@/lib/tickers";
-import bullImage from "@/assets/StockPulse.png";
-
-const FEATURE_CARDS = [
-  {
-    title: "AI-Powered Insights",
-    description:
-      "Uncover opportunities, risks, and important business trends.",
-    icon: Sparkles,
-  },
-  {
-    title: "Financial Analysis",
-    description:
-      "Review financial performance, profitability, and balance-sheet strength.",
-    icon: PieChart,
-  },
-  {
-    title: "Price & Trend Analysis",
-    description:
-      "Understand momentum, market performance, and long-term direction.",
-    icon: TrendingUp,
-  },
-  {
-    title: "News & Sentiment",
-    description:
-      "See recent developments, catalysts, and market-moving news.",
-    icon: FileText,
-  },
-];
+import bullImage from "@/assets/analysis-bull.png";
 
 const POPULAR_SEARCHES = [
   "AAPL",
@@ -107,6 +78,64 @@ function isValidAnalysis(
   );
 }
 
+function finiteNumber(
+  value,
+) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const parsed =
+    Number(value);
+
+  return Number.isFinite(
+    parsed,
+  )
+    ? parsed
+    : null;
+}
+
+function formatMetric(
+  value,
+  {
+    prefix = "",
+    suffix = "",
+    digits = 1,
+  } = {},
+) {
+  const parsed =
+    finiteNumber(value);
+
+  if (parsed === null) {
+    return "—";
+  }
+
+  return `${prefix}${parsed.toFixed(
+    digits,
+  )}${suffix}`;
+}
+
+function MetricCard({
+  label,
+  value,
+}) {
+  return (
+    <div className="min-w-0 rounded-xl bg-gray-50 px-3 py-3">
+      <p className="truncate text-[10px] font-medium text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-sm font-bold text-black">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function EmptyStateHero({
   query,
   q,
@@ -120,170 +149,116 @@ function EmptyStateHero({
   onPopularSelect,
 }) {
   return (
-    <div className="mx-auto w-full max-w-5xl">
-      <section className="flex flex-col items-center px-1 pb-14 pt-5 text-center sm:pt-10">
-        <div
-          className="relative mb-7 flex h-56 w-full max-w-md items-center justify-center sm:h-64"
-        >
-          <div
-            className="absolute inset-x-10 bottom-4 h-16 rounded-full bg-gray-100 blur-2xl"
-            aria-hidden="true"
-          />
+    <section className="mx-auto flex w-full max-w-4xl flex-col items-center px-1 pb-12 pt-6 text-center sm:pt-10">
+      <img
+        src={bullImage}
+        alt="Charging bull illustration"
+        className="mb-5 h-36 w-auto object-contain sm:h-44"
+      />
 
-          <img
-            src={bullImage}
-            alt="Bull market illustration"
-            className="relative h-48 w-auto object-contain sm:h-56"
-          />
-        </div>
+      <h1 className="font-heading text-4xl font-bold tracking-[-0.035em] text-black sm:text-5xl">
+        AI Stock Analysis
+      </h1>
 
-        <h1 className="max-w-3xl font-heading text-4xl font-bold tracking-[-0.035em] text-black sm:text-5xl">
-          AI Stock Analysis
-        </h1>
+      <p className="mt-4 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
+        Bullish and bearish AI insights backed by verified financial metrics.
+      </p>
 
-        <p className="mt-4 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
-          Advanced AI insights to help you research smarter and invest with confidence.
-        </p>
+      <form
+        onSubmit={onSubmit}
+        className="relative mt-8 w-full max-w-3xl"
+      >
+        <div className="flex min-h-[60px] items-center rounded-[22px] border border-gray-200 bg-white p-1.5 shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
+          <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
 
-        <form
-          onSubmit={onSubmit}
-          className="relative mt-9 w-full max-w-3xl"
-        >
-          <div className="flex min-h-[60px] items-center rounded-[22px] border border-gray-200 bg-white p-1.5 shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
-            <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
+          <div className="relative min-w-0 flex-1">
+            <Input
+              placeholder="Search any stock ticker, e.g., AAPL"
+              value={query}
+              onChange={onQueryChange}
+              className="h-12 border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
+              autoComplete="off"
+              autoCorrect="off"
+            />
 
-            <div className="relative min-w-0 flex-1">
-              <Input
-                placeholder="Search any stock ticker, e.g., AAPL"
-                value={query}
-                onChange={onQueryChange}
-                className="h-12 border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
-                autoComplete="off"
-                autoCorrect="off"
-              />
-
-              {showSuggestions &&
-                suggestions.length >
-                  0 && (
-                  <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-50 overflow-hidden rounded-2xl border border-gray-100 bg-white text-left shadow-xl">
-                    {suggestions.map(
-                      (stock) => (
-                        <button
-                          key={
+            {showSuggestions &&
+              suggestions.length >
+                0 && (
+                <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-50 overflow-hidden rounded-2xl border border-gray-100 bg-white text-left shadow-xl">
+                  {suggestions.map(
+                    (stock) => (
+                      <button
+                        key={
+                          stock.ticker
+                        }
+                        type="button"
+                        onClick={() =>
+                          onSuggestionSelect(
+                            stock,
+                          )
+                        }
+                        className="w-full border-b border-gray-100 px-4 py-3 transition-colors last:border-0 hover:bg-gray-50"
+                      >
+                        <p className="text-sm font-semibold text-black">
+                          {
                             stock.ticker
                           }
-                          type="button"
-                          onClick={() =>
-                            onSuggestionSelect(
-                              stock,
-                            )
-                          }
-                          className="w-full border-b border-gray-100 px-4 py-3 transition-colors last:border-0 hover:bg-gray-50"
-                        >
-                          <p className="text-sm font-semibold text-black">
-                            {
-                              stock.ticker
-                            }
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {
-                              stock.name
-                            }
-                          </p>
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
-            </div>
+                        </p>
 
-            <Button
-              type="submit"
-              disabled={
-                isLoading ||
-                !q
-              }
-              className="h-12 shrink-0 rounded-2xl bg-black px-6 text-sm font-semibold text-white hover:bg-gray-800 disabled:bg-gray-300"
-            >
-              Analyze
-              <Sparkles className="ml-1.5 h-4 w-4" />
-            </Button>
+                        <p className="text-xs text-gray-500">
+                          {
+                            stock.name
+                          }
+                        </p>
+                      </button>
+                    ),
+                  )}
+                </div>
+              )}
           </div>
 
-          {error && (
-            <p className="mt-3 text-sm text-red-600">
-              {error}
-            </p>
-          )}
-        </form>
-
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          <span className="mr-1 text-xs font-medium text-gray-500">
-            Popular tickers
-          </span>
-
-          {POPULAR_SEARCHES.map(
-            (ticker) => (
-              <button
-                key={ticker}
-                type="button"
-                onClick={() =>
-                  onPopularSelect(
-                    ticker,
-                  )
-                }
-                className="min-h-10 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
-              >
-                {ticker}
-              </button>
-            ),
-          )}
+          <Button
+            type="submit"
+            disabled={
+              isLoading
+            }
+            className="h-12 shrink-0 rounded-2xl bg-black px-6 text-sm font-semibold text-white hover:bg-gray-800 disabled:bg-gray-400"
+          >
+            Analyze
+            <Sparkles className="ml-1.5 h-4 w-4" />
+          </Button>
         </div>
-      </section>
 
-      <section className="border-t border-gray-100 px-1 py-12">
-        <div className="mb-8 text-center">
-          <h2 className="font-heading text-2xl font-bold tracking-tight text-black">
-            Powerful analysis. Clear insights.
-          </h2>
-
-          <p className="mt-2 text-sm text-gray-500">
-            Everything you need to evaluate a stock, backed by AI.
+        {error && (
+          <p className="mt-3 text-sm text-red-600">
+            {error}
           </p>
-        </div>
+        )}
+      </form>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {FEATURE_CARDS.map(
-            ({
-              title,
-              description,
-              icon: Icon,
-            }) => (
-              <div
-                key={title}
-                className="rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-[0_4px_18px_rgba(15,23,42,0.035)]"
-              >
-                <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-full bg-emerald-50">
-                  <Icon className="h-5 w-5 text-emerald-600" />
-                </div>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        <span className="mr-1 text-xs font-medium text-gray-500">
+          Popular tickers
+        </span>
 
-                <h3 className="font-heading text-sm font-bold text-black">
-                  {title}
-                </h3>
-
-                <p className="mt-2 text-xs leading-5 text-gray-500">
-                  {description}
-                </p>
-              </div>
-            ),
-          )}
-        </div>
-
-        <p className="mt-10 text-center text-[11px] text-gray-400">
-          AI-generated research is for informational purposes only and is not financial advice.
-        </p>
-      </section>
-    </div>
+        {POPULAR_SEARCHES.map(
+          (ticker) => (
+            <button
+              key={ticker}
+              type="button"
+              onClick={() =>
+                onPopularSelect(
+                  ticker,
+                )
+              }
+              className="min-h-10 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
+            >
+              {ticker}
+            </button>
+          ),
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -392,6 +367,10 @@ export default function Analysis() {
         if (
           !normalizedTicker
         ) {
+          setError(
+            "Enter a ticker to analyze.",
+          );
+
           return;
         }
 
@@ -495,7 +474,7 @@ export default function Analysis() {
                 !result?.valid
               ) {
                 setError(
-                  `“${normalizedTicker}” does not appear to be a valid ticker. Please try again.`,
+                  `“${normalizedTicker}” was not found in the stock database.`,
                 );
 
                 setLoadingInsights(
@@ -546,7 +525,8 @@ export default function Analysis() {
               );
 
               setError(
-                "AI analysis is temporarily unavailable. Please try again.",
+                analysisError?.message ||
+                  "AI analysis is temporarily unavailable. Please try again.",
               );
 
               setLoadingInsights(
@@ -680,6 +660,14 @@ export default function Analysis() {
         false,
       );
 
+      if (!q) {
+        setError(
+          "Enter a ticker to analyze.",
+        );
+
+        return;
+      }
+
       void runAnalysis(q);
     };
 
@@ -706,6 +694,36 @@ export default function Analysis() {
       void runAnalysis(
         ticker,
       );
+    };
+
+  const handleBackToAnalysis =
+    () => {
+      requestId.current +=
+        1;
+
+      autoRunTicker.current =
+        "";
+
+      setQuery("");
+      setError("");
+      setAnalysis(null);
+      setNews(null);
+      setQuote(null);
+      setActiveTicker("");
+      setActiveCompany("");
+      setShowSuggestions(
+        false,
+      );
+      setLoadingInsights(
+        false,
+      );
+      setLoadingNews(false);
+
+      window.scrollTo({
+        top: 0,
+        behavior:
+          "smooth",
+      });
     };
 
   const isLoading =
@@ -736,6 +754,10 @@ export default function Analysis() {
   const showEmptyState =
     !analysis &&
     !loadingInsights;
+
+  const metrics =
+    analysis?.metrics ||
+    {};
 
   return (
     <div
@@ -820,7 +842,18 @@ export default function Analysis() {
 
         {!loadingInsights &&
           analysis && (
-            <div className="mx-auto max-w-4xl space-y-6 py-6">
+            <div className="mx-auto max-w-4xl space-y-6 py-3">
+              <button
+                type="button"
+                onClick={
+                  handleBackToAnalysis
+                }
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl px-1 text-sm font-semibold text-gray-700 transition-colors hover:text-black"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Analysis
+              </button>
+
               <form
                 onSubmit={
                   handleSubmit
@@ -855,10 +888,9 @@ export default function Analysis() {
                   <Button
                     type="submit"
                     disabled={
-                      isLoading ||
-                      !q
+                      isLoading
                     }
-                    className="h-11 rounded-xl bg-black px-5 text-white hover:bg-gray-800"
+                    className="h-11 rounded-xl bg-black px-5 text-white hover:bg-gray-800 disabled:bg-gray-400"
                   >
                     Analyze
                   </Button>
@@ -887,6 +919,7 @@ export default function Analysis() {
                                 stock.ticker
                               }
                             </p>
+
                             <p className="text-xs text-gray-500">
                               {
                                 stock.name
@@ -989,6 +1022,118 @@ export default function Analysis() {
                 <p className="mt-3 text-[10px] text-gray-400">
                   AI-generated insights · Not financial advice · For informational purposes only
                 </p>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <Database className="h-4 w-4 text-emerald-600" />
+
+                  <div>
+                    <h2 className="font-heading text-sm font-bold text-black">
+                      Verified Financial Metrics
+                    </h2>
+
+                    <p className="text-[10px] text-gray-400">
+                      Sourced from the StockPulse database
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <MetricCard
+                    label="Market Cap"
+                    value={formatMetric(
+                      metrics.marketCapB,
+                      {
+                        prefix:
+                          "$",
+                        suffix:
+                          "B",
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="P/E"
+                    value={formatMetric(
+                      metrics.pe,
+                      {
+                        suffix:
+                          "x",
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="Revenue Growth"
+                    value={formatMetric(
+                      metrics.revenueGrowthYoy,
+                      {
+                        suffix:
+                          "%",
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="EPS Growth"
+                    value={formatMetric(
+                      metrics.epsGrowthYoy,
+                      {
+                        suffix:
+                          "%",
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="Gross Margin"
+                    value={formatMetric(
+                      metrics.grossMargin,
+                      {
+                        suffix:
+                          "%",
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="ROE"
+                    value={formatMetric(
+                      metrics.roe,
+                      {
+                        suffix:
+                          "%",
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="Debt / Equity"
+                    value={formatMetric(
+                      metrics.debtToEquity,
+                      {
+                        suffix:
+                          "x",
+                        digits:
+                          2,
+                      },
+                    )}
+                  />
+
+                  <MetricCard
+                    label="Dividend Yield"
+                    value={formatMetric(
+                      metrics.dividendYield,
+                      {
+                        suffix:
+                          "%",
+                        digits:
+                          2,
+                      },
+                    )}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
