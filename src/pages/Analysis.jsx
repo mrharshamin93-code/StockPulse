@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { POPULAR_TICKERS } from "@/lib/tickers";
+import bullImage from "@/assets/StockPulse.png";
 
 const FEATURE_CARDS = [
   {
@@ -122,53 +123,18 @@ function EmptyStateHero({
     <div className="mx-auto w-full max-w-5xl">
       <section className="flex flex-col items-center px-1 pb-14 pt-5 text-center sm:pt-10">
         <div
-          className="relative mb-7 flex h-44 w-full max-w-md items-center justify-center overflow-hidden sm:h-52"
-          aria-hidden="true"
+          className="relative mb-7 flex h-56 w-full max-w-md items-center justify-center sm:h-64"
         >
-          <div className="absolute left-1/2 top-1/2 h-28 w-60 -translate-x-1/2 -translate-y-1/2 rounded-[50%] bg-emerald-50 blur-2xl" />
+          <div
+            className="absolute inset-x-10 bottom-4 h-16 rounded-full bg-gray-100 blur-2xl"
+            aria-hidden="true"
+          />
 
-          <div className="absolute bottom-6 left-1/2 h-px w-64 -translate-x-1/2 bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
-
-          <div className="absolute bottom-9 left-[30%] h-14 w-7 rounded-t-xl border border-emerald-100 bg-emerald-50 shadow-sm" />
-          <div className="absolute bottom-9 left-[39%] h-24 w-7 rounded-t-xl border border-emerald-200 bg-emerald-100 shadow-sm" />
-          <div className="absolute bottom-9 left-[48%] h-16 w-7 rounded-t-xl border border-emerald-200 bg-emerald-50 shadow-sm" />
-          <div className="absolute bottom-9 left-[57%] h-32 w-7 rounded-t-xl border border-emerald-300 bg-emerald-500 shadow-sm" />
-
-          <svg
-            viewBox="0 0 280 130"
-            className="absolute bottom-7 left-1/2 h-28 w-64 -translate-x-1/2 overflow-visible"
-          >
-            <path
-              d="M18 103 C52 96, 61 72, 91 77 C119 82, 126 49, 155 55 C184 62, 198 38, 225 42 C246 45, 255 20, 267 13"
-              fill="none"
-              stroke="#16a34a"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-            <path
-              d="M254 13 L267 13 L267 26"
-              fill="none"
-              stroke="#16a34a"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-
-          <div className="absolute left-[27%] top-[29%] flex h-20 w-20 items-center justify-center rounded-full border-[9px] border-gray-800 bg-white shadow-lg">
-            <Search className="h-8 w-8 text-gray-800" />
-          </div>
-
-          <div className="absolute left-[36%] top-[57%] h-4 w-16 rotate-[42deg] rounded-full bg-gray-800 shadow-md" />
-
-          <div className="absolute right-[23%] top-[25%] rounded-2xl border border-gray-100 bg-white px-3 py-2 text-left shadow-md">
-            <p className="text-[10px] font-medium text-gray-400">
-              Growth
-            </p>
-            <p className="text-sm font-bold text-gray-950">
-              +18.4%
-            </p>
-          </div>
+          <img
+            src={bullImage}
+            alt="Bull market illustration"
+            className="relative h-48 w-auto object-contain sm:h-56"
+          />
         </div>
 
         <h1 className="max-w-3xl font-heading text-4xl font-bold tracking-[-0.035em] text-black sm:text-5xl">
