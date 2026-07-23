@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { POPULAR_TICKERS } from "@/lib/tickers";
-import bullImage from "@/assets/analysis-bull.png";
+import bullImage from "@/assets/StockPulse.png";
 
 const POPULAR_SEARCHES = [
   "AAPL",
