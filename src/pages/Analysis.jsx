@@ -14,6 +14,7 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  TrendingUp,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 
@@ -21,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { POPULAR_TICKERS } from "@/lib/tickers";
-import bullImage from "@/assets/StockPulse.png";
+import bullImage from "@/assets/analysis-bull.png";
 
 const POPULAR_SEARCHES = [
   "AAPL",
@@ -173,7 +174,7 @@ function EmptyStateHero({
 
           <div className="relative min-w-0 flex-1">
             <Input
-              placeholder="Search any stock ticker, e.g., AAPL"
+              placeholder="Enter Ticker"
               value={query}
               onChange={onQueryChange}
               className="h-12 border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
@@ -236,27 +237,29 @@ function EmptyStateHero({
         )}
       </form>
 
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-        <span className="mr-1 text-xs font-medium text-gray-500">
+      <div className="mt-6 flex flex-col items-center">
+        <p className="text-center text-xs font-medium text-gray-500">
           Popular tickers
-        </span>
+        </p>
 
-        {POPULAR_SEARCHES.map(
-          (ticker) => (
-            <button
-              key={ticker}
-              type="button"
-              onClick={() =>
-                onPopularSelect(
-                  ticker,
-                )
-              }
-              className="min-h-10 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
-            >
-              {ticker}
-            </button>
-          ),
-        )}
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+          {POPULAR_SEARCHES.map(
+            (ticker) => (
+              <button
+                key={ticker}
+                type="button"
+                onClick={() =>
+                  onPopularSelect(
+                    ticker,
+                  )
+                }
+                className="min-h-10 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
+              >
+                {ticker}
+              </button>
+            ),
+          )}
+        </div>
       </div>
     </section>
   );
@@ -774,10 +777,16 @@ export default function Analysis() {
             "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto flex max-w-5xl items-center justify-center px-4 py-4 sm:px-6">
-          <h1 className="font-heading text-lg font-bold tracking-tight text-black">
-            AI Stock Analysis
-          </h1>
+        <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-1.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
+              <TrendingUp className="h-5 w-5 text-white" />
+            </div>
+
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-black">
+              Analysis
+            </h1>
+          </div>
         </div>
       </header>
 
@@ -864,7 +873,7 @@ export default function Analysis() {
                   <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
 
                   <Input
-                    placeholder="Search another ticker"
+                    placeholder="Enter Ticker"
                     value={query}
                     onChange={(
                       event,
