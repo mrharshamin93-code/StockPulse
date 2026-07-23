@@ -1644,7 +1644,6 @@ export default function ScreenerResults() {
             ? ""
             : `Results · ${totalResults.toLocaleString()} found`
         }
-        backPath="/screener"
       />
 
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-3 px-4 py-6 sm:px-6">
