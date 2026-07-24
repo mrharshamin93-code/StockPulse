@@ -44,6 +44,18 @@ import MonthlyReport from "@/pages/MonthlyReport";
 import ReferralPage from "@/pages/ReferralPage";
 import ContactUs from "@/pages/ContactUs";
 
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/callback",
+  "/privacy",
+  "/terms",
+  "/legal",
+  "/contact-us",
+]);
+
 function AuthenticatedApp() {
   const {
     isLoadingPublicSettings,
@@ -53,12 +65,19 @@ function AuthenticatedApp() {
   const location =
     useLocation();
 
+  const isPublicPath =
+    PUBLIC_PATHS.has(
+      location.pathname,
+    );
+
   /*
-   * Do not block public routes while authentication
-   * initializes. ProtectedRoute handles auth loading
-   * for protected pages.
+   * Legal and contact pages remain publicly
+   * accessible even while authentication initializes.
    */
-  if (isLoadingPublicSettings) {
+  if (
+    isLoadingPublicSettings &&
+    !isPublicPath
+  ) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         Loading...
@@ -68,7 +87,8 @@ function AuthenticatedApp() {
 
   if (
     authError?.type ===
-    "user_not_registered"
+      "user_not_registered" &&
+    !isPublicPath
   ) {
     return (
       <UserNotRegisteredError />
@@ -90,22 +110,54 @@ function AuthenticatedApp() {
 
       <Route
         path="/forgot-password"
-        element={<ForgotPassword />}
+        element={
+          <ForgotPassword />
+        }
       />
 
       <Route
         path="/reset-password"
-        element={<ResetPassword />}
+        element={
+          <ResetPassword />
+        }
       />
 
       <Route
         path="/auth/callback"
-        element={<AuthCallback />}
+        element={
+          <AuthCallback />
+        }
       />
 
       <Route
+        path="/privacy"
+        element={
+          <Legal page="privacy" />
+        }
+      />
+
+      <Route
+        path="/terms"
+        element={
+          <Legal page="terms" />
+        }
+      />
+
+      {/*
+       * Preserve old links:
+       * /legal?page=privacy
+       * /legal?page=terms
+       */}
+      <Route
         path="/legal"
         element={<Legal />}
+      />
+
+      <Route
+        path="/contact-us"
+        element={
+          <ContactUs />
+        }
       />
 
       {/* Protected routes */}
@@ -173,7 +225,9 @@ function AuthenticatedApp() {
 
           <Route
             path="/screener/results"
-            element={<ScreenerResults />}
+            element={
+              <ScreenerResults />
+            }
           />
 
           <Route
@@ -183,32 +237,37 @@ function AuthenticatedApp() {
 
           <Route
             path="/settings/theme"
-            element={<ThemeSettings />}
+            element={
+              <ThemeSettings />
+            }
           />
 
           <Route
             path="/settings/currency"
-            element={<CurrencySettings />}
+            element={
+              <CurrencySettings />
+            }
           />
 
           <Route
             path="/price-alerts"
-            element={<PriceAlerts />}
+            element={
+              <PriceAlerts />
+            }
           />
 
           <Route
             path="/monthly-report"
-            element={<MonthlyReport />}
+            element={
+              <MonthlyReport />
+            }
           />
 
           <Route
             path="/referrals"
-            element={<ReferralPage />}
-          />
-
-          <Route
-            path="/contact-us"
-            element={<ContactUs />}
+            element={
+              <ReferralPage />
+            }
           />
         </Route>
       </Route>
