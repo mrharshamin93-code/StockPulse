@@ -210,9 +210,7 @@ export default function ContactUs() {
                 </h1>
 
                 <p className="mt-3 text-sm leading-6 text-gray-500">
-                  Send a support, privacy,
-                  account-deletion, bug, or legal
-                  question through this form.
+                  We’re here to help—send us a message and we’ll get back to you.
                 </p>
               </div>
 
