@@ -31,25 +31,19 @@ const POPULAR_SEARCHES = [
   "TSLA",
 ];
 
-async function fetchFinnhub(
-  action,
-  ticker,
-) {
-  const params =
-    new URLSearchParams({
-      action,
-      ticker,
-    });
+async function fetchFinnhub(action, ticker) {
+  const params = new URLSearchParams({
+    action,
+    ticker,
+  });
 
-  const response =
-    await fetch(
-      `/api/finnhub?${params.toString()}`,
-    );
+  const response = await fetch(
+    `/api/finnhub?${params.toString()}`,
+  );
 
-  const payload =
-    await response
-      .json()
-      .catch(() => ({}));
+  const payload = await response
+    .json()
+    .catch(() => ({}));
 
   if (!response.ok) {
     throw new Error(
@@ -61,25 +55,17 @@ async function fetchFinnhub(
   return payload;
 }
 
-function isValidAnalysis(
-  result,
-) {
+function isValidAnalysis(result) {
   return Boolean(
     result &&
       typeof result.summary ===
         "string" &&
-      Array.isArray(
-        result.pros,
-      ) &&
-      Array.isArray(
-        result.cons,
-      ),
+      Array.isArray(result.pros) &&
+      Array.isArray(result.cons),
   );
 }
 
-function finiteNumber(
-  value,
-) {
+function finiteNumber(value) {
   if (
     value === null ||
     value === undefined ||
@@ -88,12 +74,9 @@ function finiteNumber(
     return null;
   }
 
-  const parsed =
-    Number(value);
+  const parsed = Number(value);
 
-  return Number.isFinite(
-    parsed,
-  )
+  return Number.isFinite(parsed)
     ? parsed
     : null;
 }
@@ -106,8 +89,7 @@ function formatMetric(
     digits = 1,
   } = {},
 ) {
-  const parsed =
-    finiteNumber(value);
+  const parsed = finiteNumber(value);
 
   if (parsed === null) {
     return "—";
@@ -137,7 +119,6 @@ function MetricCard({
 
 function EmptyStateHero({
   query,
-  q,
   isLoading,
   error,
   suggestions,
@@ -165,31 +146,30 @@ function EmptyStateHero({
 
       <form
         onSubmit={onSubmit}
-        className="relative mt-8 w-full max-w-3xl"
+        className="mt-8 w-full max-w-3xl"
       >
-        <div className="flex min-h-[60px] items-center rounded-[22px] border border-gray-200 bg-white p-1.5 shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
-          <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
-
+        <div className="flex w-full items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
-            <Input
-              placeholder="Enter Ticker"
-              value={query}
-              onChange={onQueryChange}
-              className="h-12 border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
-              autoComplete="off"
-              autoCorrect="off"
-            />
+            <div className="flex h-[60px] items-center rounded-lg border border-gray-300 bg-white">
+              <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
+
+              <Input
+                placeholder="Enter Ticker"
+                value={query}
+                onChange={onQueryChange}
+                className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
+                autoComplete="off"
+                autoCorrect="off"
+              />
+            </div>
 
             {showSuggestions &&
-              suggestions.length >
-                0 && (
-                <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-50 overflow-hidden rounded-2xl border border-gray-100 bg-white text-left shadow-xl">
+              suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white text-left shadow-xl">
                   {suggestions.map(
                     (stock) => (
                       <button
-                        key={
-                          stock.ticker
-                        }
+                        key={stock.ticker}
                         type="button"
                         onClick={() =>
                           onSuggestionSelect(
@@ -199,15 +179,11 @@ function EmptyStateHero({
                         className="w-full border-b border-gray-100 px-4 py-3 transition-colors last:border-0 hover:bg-gray-50"
                       >
                         <p className="text-sm font-semibold text-black">
-                          {
-                            stock.ticker
-                          }
+                          {stock.ticker}
                         </p>
 
                         <p className="text-xs text-gray-500">
-                          {
-                            stock.name
-                          }
+                          {stock.name}
                         </p>
                       </button>
                     ),
@@ -216,16 +192,18 @@ function EmptyStateHero({
               )}
           </div>
 
-          <Button
+          <button
             type="submit"
-            disabled={
-              isLoading
-            }
-            className="h-12 shrink-0 rounded-2xl bg-black px-6 text-sm font-semibold text-white hover:bg-gray-800 disabled:bg-gray-400"
+            disabled={isLoading}
+            className="flex h-[60px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6"
+            style={{
+              backgroundColor: "#000000",
+              color: "#ffffff",
+            }}
           >
             Analyze
             <Sparkles className="ml-1.5 h-4 w-4" />
-          </Button>
+          </button>
         </div>
 
         {error && (
@@ -247,9 +225,7 @@ function EmptyStateHero({
                 key={ticker}
                 type="button"
                 onClick={() =>
-                  onPopularSelect(
-                    ticker,
-                  )
+                  onPopularSelect(ticker)
                 }
                 className="min-h-10 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
               >
@@ -265,8 +241,7 @@ function EmptyStateHero({
 
 export default function Analysis() {
   const {
-    ticker:
-      routeTicker,
+    ticker: routeTicker,
   } = useParams();
 
   const [
@@ -325,75 +300,55 @@ export default function Analysis() {
   const requestId =
     useRef(0);
 
-  const q =
-    query
-      .trim()
-      .toUpperCase();
+  const q = query
+    .trim()
+    .toUpperCase();
 
-  const suggestions =
-    q
-      ? [
-          ...POPULAR_TICKERS.filter(
-            (stock) =>
-              stock.ticker
-                .toUpperCase()
-                .startsWith(q),
-          ),
+  const suggestions = q
+    ? [
+        ...POPULAR_TICKERS.filter(
+          (stock) =>
+            stock.ticker
+              .toUpperCase()
+              .startsWith(q),
+        ),
 
-          ...POPULAR_TICKERS.filter(
-            (stock) =>
-              !stock.ticker
-                .toUpperCase()
-                .startsWith(q) &&
-              stock.name
-                .toUpperCase()
-                .startsWith(q),
-          ),
-        ].slice(
-          0,
-          6,
-        )
-      : [];
+        ...POPULAR_TICKERS.filter(
+          (stock) =>
+            !stock.ticker
+              .toUpperCase()
+              .startsWith(q) &&
+            stock.name
+              .toUpperCase()
+              .startsWith(q),
+        ),
+      ].slice(0, 6)
+    : [];
 
   const runAnalysis =
     useCallback(
       async (ticker) => {
         const normalizedTicker =
-          String(
-            ticker || "",
-          )
+          String(ticker || "")
             .trim()
             .toUpperCase();
 
-        if (
-          !normalizedTicker
-        ) {
+        if (!normalizedTicker) {
           setError(
             "Enter a ticker to analyze.",
           );
-
           return;
         }
 
         const currentRequest =
-          requestId.current +
-          1;
+          requestId.current + 1;
 
         requestId.current =
           currentRequest;
 
-        setShowSuggestions(
-          false,
-        );
-
-        setLoadingInsights(
-          true,
-        );
-
-        setLoadingNews(
-          true,
-        );
-
+        setShowSuggestions(false);
+        setLoadingInsights(true);
+        setLoadingNews(true);
         setError("");
         setAnalysis(null);
         setNews(null);
@@ -427,7 +382,6 @@ export default function Analysis() {
                 body: {
                   ticker:
                     normalizedTicker,
-
                   company_name:
                     companyName,
                 },
@@ -462,57 +416,47 @@ export default function Analysis() {
           );
 
         insightsCall
-          .then(
-            (result) => {
-              if (
-                requestId.current !==
-                currentRequest
-              ) {
-                return;
-              }
+          .then((result) => {
+            if (
+              requestId.current !==
+              currentRequest
+            ) {
+              return;
+            }
 
-              if (
-                !result?.valid
-              ) {
-                setError(
-                  `“${normalizedTicker}” was not found in the stock database.`,
-                );
-
-                setLoadingInsights(
-                  false,
-                );
-
-                return;
-              }
-
-              if (
-                !isValidAnalysis(
-                  result,
-                )
-              ) {
-                throw new Error(
-                  "The analysis response was incomplete",
-                );
-              }
-
-              setActiveCompany(
-                result.company_name ||
-                  companyName,
-              );
-
-              setAnalysis(
-                result,
+            if (!result?.valid) {
+              setError(
+                `“${normalizedTicker}” was not found in the stock database.`,
               );
 
               setLoadingInsights(
                 false,
               );
-            },
-          )
+              return;
+            }
+
+            if (
+              !isValidAnalysis(
+                result,
+              )
+            ) {
+              throw new Error(
+                "The analysis response was incomplete",
+              );
+            }
+
+            setActiveCompany(
+              result.company_name ||
+                companyName,
+            );
+
+            setAnalysis(result);
+            setLoadingInsights(
+              false,
+            );
+          })
           .catch(
-            (
-              analysisError,
-            ) => {
+            (analysisError) => {
               if (
                 requestId.current !==
                 currentRequest
@@ -537,18 +481,14 @@ export default function Analysis() {
           );
 
         quoteCall
-          .then(
-            (result) => {
-              if (
-                requestId.current ===
-                currentRequest
-              ) {
-                setQuote(
-                  result,
-                );
-              }
-            },
-          )
+          .then((result) => {
+            if (
+              requestId.current ===
+              currentRequest
+            ) {
+              setQuote(result);
+            }
+          })
           .catch(
             (quoteError) => {
               console.warn(
@@ -559,45 +499,37 @@ export default function Analysis() {
           );
 
         newsCall
-          .then(
-            (result) => {
-              if (
-                requestId.current !==
-                currentRequest
-              ) {
-                return;
-              }
+          .then((result) => {
+            if (
+              requestId.current !==
+              currentRequest
+            ) {
+              return;
+            }
 
-              setNews(
-                result?.articles ||
-                  [],
-              );
+            setNews(
+              result?.articles ||
+                [],
+            );
 
-              setLoadingNews(
-                false,
-              );
-            },
-          )
-          .catch(
-            (newsError) => {
-              if (
-                requestId.current !==
-                currentRequest
-              ) {
-                return;
-              }
+            setLoadingNews(false);
+          })
+          .catch((newsError) => {
+            if (
+              requestId.current !==
+              currentRequest
+            ) {
+              return;
+            }
 
-              console.warn(
-                "News request failed:",
-                newsError,
-              );
+            console.warn(
+              "News request failed:",
+              newsError,
+            );
 
-              setNews([]);
-              setLoadingNews(
-                false,
-              );
-            },
-          );
+            setNews([]);
+            setLoadingNews(false);
+          });
       },
       [],
     );
@@ -606,9 +538,7 @@ export default function Analysis() {
     const queryTicker =
       new URLSearchParams(
         window.location.search,
-      ).get(
-        "ticker",
-      );
+      ).get("ticker");
 
     const initialTicker =
       String(
@@ -630,9 +560,7 @@ export default function Analysis() {
     autoRunTicker.current =
       initialTicker;
 
-    setQuery(
-      initialTicker,
-    );
+    setQuery(initialTicker);
 
     void runAnalysis(
       initialTicker,
@@ -642,45 +570,35 @@ export default function Analysis() {
     runAnalysis,
   ]);
 
-  const handleRefresh =
-    () => {
-      setQuery(
-        activeTicker,
+  const handleRefresh = () => {
+    setQuery(activeTicker);
+
+    void runAnalysis(
+      activeTicker,
+    );
+  };
+
+  const handleSubmit = (
+    event,
+  ) => {
+    event.preventDefault();
+
+    setShowSuggestions(false);
+
+    if (!q) {
+      setError(
+        "Enter a ticker to analyze.",
       );
+      return;
+    }
 
-      void runAnalysis(
-        activeTicker,
-      );
-    };
-
-  const handleSubmit =
-    (event) => {
-      event.preventDefault();
-
-      setShowSuggestions(
-        false,
-      );
-
-      if (!q) {
-        setError(
-          "Enter a ticker to analyze.",
-        );
-
-        return;
-      }
-
-      void runAnalysis(q);
-    };
+    void runAnalysis(q);
+  };
 
   const handleSuggestionSelect =
     (stock) => {
-      setQuery(
-        stock.ticker,
-      );
-
-      setShowSuggestions(
-        false,
-      );
+      setQuery(stock.ticker);
+      setShowSuggestions(false);
 
       void runAnalysis(
         stock.ticker,
@@ -692,9 +610,7 @@ export default function Analysis() {
       setQuery(ticker);
       setError("");
 
-      void runAnalysis(
-        ticker,
-      );
+      void runAnalysis(ticker);
     };
 
   const isLoading =
@@ -702,23 +618,17 @@ export default function Analysis() {
     loadingNews;
 
   const quotePrice =
-    Number.isFinite(
-      quote?.c,
-    )
+    Number.isFinite(quote?.c)
       ? quote.c
       : null;
 
   const quoteChange =
-    Number.isFinite(
-      quote?.d,
-    )
+    Number.isFinite(quote?.d)
       ? quote.d
       : null;
 
   const quoteChangePercent =
-    Number.isFinite(
-      quote?.dp,
-    )
+    Number.isFinite(quote?.dp)
       ? quote.dp
       : null;
 
@@ -727,8 +637,7 @@ export default function Analysis() {
     !loadingInsights;
 
   const metrics =
-    analysis?.metrics ||
-    {};
+    analysis?.metrics || {};
 
   return (
     <div
@@ -739,7 +648,7 @@ export default function Analysis() {
       }}
     >
       <header
-        className="sticky top-0 z-10 border-b border-gray-100 bg-white/95 backdrop-blur-xl"
+        className="border-b border-gray-200"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
@@ -747,8 +656,20 @@ export default function Analysis() {
       >
         <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
           <div className="flex items-center gap-1.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
-              <Sparkles className="h-5 w-5 text-white" />
+            <div
+              className="flex h-10 w-10 items-center justify-center rounded-xl"
+              style={{
+                backgroundColor:
+                  "#000000",
+              }}
+            >
+              <Sparkles
+                className="h-5 w-5"
+                style={{
+                  color:
+                    "#ffffff",
+                }}
+              />
             </div>
 
             <h1 className="font-heading text-2xl font-bold tracking-tight text-black">
@@ -762,10 +683,7 @@ export default function Analysis() {
         {showEmptyState && (
           <EmptyStateHero
             query={query}
-            q={q}
-            isLoading={
-              isLoading
-            }
+            isLoading={isLoading}
             error={error}
             suggestions={
               suggestions
@@ -777,12 +695,10 @@ export default function Analysis() {
               event,
             ) => {
               setQuery(
-                event.target
-                  .value,
+                event.target.value,
               );
 
               setError("");
-
               setShowSuggestions(
                 true,
               );
@@ -803,7 +719,9 @@ export default function Analysis() {
           <div className="mx-auto mt-10 flex max-w-2xl flex-col items-center justify-center rounded-3xl border border-gray-100 bg-white p-12 shadow-sm">
             <div className="relative mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50">
               <span className="absolute inset-0 animate-pulse rounded-2xl bg-emerald-100 blur-md" />
+
               <span className="absolute -inset-1 animate-ping rounded-2xl border border-emerald-200" />
+
               <Sparkles className="relative h-6 w-6 animate-pulse text-emerald-600" />
             </div>
 
@@ -824,78 +742,86 @@ export default function Analysis() {
                 onSubmit={
                   handleSubmit
                 }
-                className="relative w-full"
+                className="w-full"
               >
-                <div className="flex min-h-[54px] items-center rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
-                  <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
+                <div className="flex w-full items-stretch gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <div className="flex h-[54px] items-center rounded-lg border border-gray-300 bg-white">
+                      <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
 
-                  <Input
-                    placeholder="Enter Ticker"
-                    value={query}
-                    onChange={(
-                      event,
-                    ) => {
-                      setQuery(
-                        event.target
-                          .value,
-                      );
+                      <Input
+                        placeholder="Enter Ticker"
+                        value={query}
+                        onChange={(
+                          event,
+                        ) => {
+                          setQuery(
+                            event.target
+                              .value,
+                          );
 
-                      setError("");
+                          setError("");
 
-                      setShowSuggestions(
-                        true,
-                      );
-                    }}
-                    className="h-11 flex-1 border-0 bg-transparent px-3 uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
-                    autoComplete="off"
-                    autoCorrect="off"
-                  />
+                          setShowSuggestions(
+                            true,
+                          );
+                        }}
+                        className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
+                        autoComplete="off"
+                        autoCorrect="off"
+                      />
+                    </div>
 
-                  <Button
+                    {showSuggestions &&
+                      suggestions.length >
+                        0 && (
+                        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
+                          {suggestions.map(
+                            (stock) => (
+                              <button
+                                key={
+                                  stock.ticker
+                                }
+                                type="button"
+                                onClick={() =>
+                                  handleSuggestionSelect(
+                                    stock,
+                                  )
+                                }
+                                className="w-full border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50"
+                              >
+                                <p className="text-sm font-semibold text-black">
+                                  {
+                                    stock.ticker
+                                  }
+                                </p>
+
+                                <p className="text-xs text-gray-500">
+                                  {
+                                    stock.name
+                                  }
+                                </p>
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      )}
+                  </div>
+
+                  <button
                     type="submit"
-                    disabled={
-                      isLoading
-                    }
-                    className="h-11 rounded-xl bg-black px-5 text-white hover:bg-gray-800 disabled:bg-gray-400"
+                    disabled={isLoading}
+                    className="flex h-[54px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{
+                      backgroundColor:
+                        "#000000",
+                      color:
+                        "#ffffff",
+                    }}
                   >
                     Analyze
-                  </Button>
+                  </button>
                 </div>
-
-                {showSuggestions &&
-                  suggestions.length >
-                    0 && (
-                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
-                      {suggestions.map(
-                        (stock) => (
-                          <button
-                            key={
-                              stock.ticker
-                            }
-                            type="button"
-                            onClick={() =>
-                              handleSuggestionSelect(
-                                stock,
-                              )
-                            }
-                            className="w-full border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50"
-                          >
-                            <p className="text-sm font-semibold text-black">
-                              {
-                                stock.ticker
-                              }
-                            </p>
-
-                            <p className="text-xs text-gray-500">
-                              {
-                                stock.name
-                              }
-                            </p>
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  )}
 
                 {error && (
                   <p className="mt-2 text-sm text-red-600">
@@ -982,9 +908,7 @@ export default function Analysis() {
                 )}
 
                 <p className="text-sm leading-relaxed text-gray-700">
-                  {
-                    analysis.summary
-                  }
+                  {analysis.summary}
                 </p>
 
                 <p className="mt-3 text-[10px] text-gray-400">
@@ -1013,10 +937,8 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.marketCapB,
                       {
-                        prefix:
-                          "$",
-                        suffix:
-                          "B",
+                        prefix: "$",
+                        suffix: "B",
                       },
                     )}
                   />
@@ -1026,8 +948,7 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.pe,
                       {
-                        suffix:
-                          "x",
+                        suffix: "x",
                       },
                     )}
                   />
@@ -1037,8 +958,7 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.revenueGrowthYoy,
                       {
-                        suffix:
-                          "%",
+                        suffix: "%",
                       },
                     )}
                   />
@@ -1048,8 +968,7 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.epsGrowthYoy,
                       {
-                        suffix:
-                          "%",
+                        suffix: "%",
                       },
                     )}
                   />
@@ -1059,8 +978,7 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.grossMargin,
                       {
-                        suffix:
-                          "%",
+                        suffix: "%",
                       },
                     )}
                   />
@@ -1070,8 +988,7 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.roe,
                       {
-                        suffix:
-                          "%",
+                        suffix: "%",
                       },
                     )}
                   />
@@ -1081,10 +998,8 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.debtToEquity,
                       {
-                        suffix:
-                          "x",
-                        digits:
-                          2,
+                        suffix: "x",
+                        digits: 2,
                       },
                     )}
                   />
@@ -1094,10 +1009,8 @@ export default function Analysis() {
                     value={formatMetric(
                       metrics.dividendYield,
                       {
-                        suffix:
-                          "%",
-                        digits:
-                          2,
+                        suffix: "%",
+                        digits: 2,
                       },
                     )}
                   />
@@ -1124,15 +1037,11 @@ export default function Analysis() {
                           key={`${item.title}-${index}`}
                         >
                           <p className="text-sm font-semibold text-emerald-700">
-                            {
-                              item.title
-                            }
+                            {item.title}
                           </p>
 
                           <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
-                            {
-                              item.detail
-                            }
+                            {item.detail}
                           </p>
                         </div>
                       ),
@@ -1159,15 +1068,11 @@ export default function Analysis() {
                           key={`${item.title}-${index}`}
                         >
                           <p className="text-sm font-semibold text-red-700">
-                            {
-                              item.title
-                            }
+                            {item.title}
                           </p>
 
                           <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
-                            {
-                              item.detail
-                            }
+                            {item.detail}
                           </p>
                         </div>
                       ),
@@ -1216,30 +1121,22 @@ export default function Analysis() {
                                   rel="noopener noreferrer"
                                   className="text-sm font-medium text-black hover:underline"
                                 >
-                                  {
-                                    item.title
-                                  }
+                                  {item.title}
                                 </a>
                               ) : (
                                 <p className="text-sm font-medium text-black">
-                                  {
-                                    item.title
-                                  }
+                                  {item.title}
                                 </p>
                               )}
 
                               <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
-                                {
-                                  item.summary
-                                }
+                                {item.summary}
                               </p>
 
                               <div className="mt-1 flex flex-wrap items-center gap-2">
                                 {item.date && (
                                   <p className="text-xs text-gray-400">
-                                    {
-                                      item.date
-                                    }
+                                    {item.date}
                                   </p>
                                 )}
 
@@ -1260,16 +1157,12 @@ export default function Analysis() {
                                         rel="noopener noreferrer"
                                         className="text-xs font-medium text-emerald-700 hover:underline"
                                       >
-                                        {
-                                          item.source
-                                        }{" "}
+                                        {item.source}{" "}
                                         ↗
                                       </a>
                                     ) : (
                                       <span className="text-xs font-medium text-gray-400">
-                                        {
-                                          item.source
-                                        }
+                                        {item.source}
                                       </span>
                                     )}
                                   </>
