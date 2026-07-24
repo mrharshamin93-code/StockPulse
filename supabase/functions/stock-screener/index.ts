@@ -84,6 +84,13 @@ type ScreenerRow = {
   return_1_month: number | null;
   return_3_month: number | null;
   volatility_30d: number | null;
+  sma_20: number | null;
+  sma_50: number | null;
+  price_above_sma_20: boolean | null;
+  sma_20_above_sma_50: boolean | null;
+  bullish_ma_crossover_at: string | null;
+  bullish_ma_crossover_days_ago: number | null;
+  relative_volume: number | null;
 
   fundamentals_updated_at: string | null;
   technicals_updated_at: string | null;
@@ -155,6 +162,13 @@ const selectColumns = [
   "return_1_month",
   "return_3_month",
   "volatility_30d",
+  "sma_20",
+  "sma_50",
+  "price_above_sma_20",
+  "sma_20_above_sma_50",
+  "bullish_ma_crossover_at",
+  "bullish_ma_crossover_days_ago",
+  "relative_volume",
   "fundamentals_updated_at",
   "technicals_updated_at",
 ].join(",");
@@ -188,6 +202,46 @@ const filterMap: Record<
   },
   maxRsi: {
     column: "rsi_14",
+    operator: "lte",
+  },
+  minReturn1Week: {
+    column: "return_1_week",
+    operator: "gte",
+  },
+  maxReturn1Week: {
+    column: "return_1_week",
+    operator: "lte",
+  },
+  minReturn1Month: {
+    column: "return_1_month",
+    operator: "gte",
+  },
+  maxReturn1Month: {
+    column: "return_1_month",
+    operator: "lte",
+  },
+  minReturn3Month: {
+    column: "return_3_month",
+    operator: "gte",
+  },
+  maxReturn3Month: {
+    column: "return_3_month",
+    operator: "lte",
+  },
+  minRelativeVolume: {
+    column: "relative_volume",
+    operator: "gte",
+  },
+  maxRelativeVolume: {
+    column: "relative_volume",
+    operator: "lte",
+  },
+  minBullishMaCrossoverDays: {
+    column: "bullish_ma_crossover_days_ago",
+    operator: "gte",
+  },
+  maxBullishMaCrossoverDays: {
+    column: "bullish_ma_crossover_days_ago",
     operator: "lte",
   },
 
@@ -513,6 +567,17 @@ const sortMap: Record<string, string> = {
   eps_growth_yoy: "eps_growth_yoy",
   rsi: "rsi_14",
   rsi_14: "rsi_14",
+  return1Week: "return_1_week",
+  return_1_week: "return_1_week",
+  return1Month: "return_1_month",
+  return_1_month: "return_1_month",
+  return3Month: "return_3_month",
+  return_3_month: "return_3_month",
+  relativeVolume: "relative_volume",
+  relative_volume: "relative_volume",
+  bullishMaCrossoverDays: "bullish_ma_crossover_days_ago",
+  bullish_ma_crossover_days_ago:
+    "bullish_ma_crossover_days_ago",
 };
 
 const ascendingByDefault =
@@ -541,6 +606,16 @@ const technicalFilterKeys =
   new Set([
     "minRsi",
     "maxRsi",
+    "minReturn1Week",
+    "maxReturn1Week",
+    "minReturn1Month",
+    "maxReturn1Month",
+    "minReturn3Month",
+    "maxReturn3Month",
+    "minRelativeVolume",
+    "maxRelativeVolume",
+    "minBullishMaCrossoverDays",
+    "maxBullishMaCrossoverDays",
   ]);
 
 function jsonResponse(
@@ -1015,6 +1090,20 @@ function toClientStock(
       row.return_3_month,
     volatility30d:
       row.volatility_30d,
+    sma20:
+      row.sma_20,
+    sma50:
+      row.sma_50,
+    priceAboveSma20:
+      row.price_above_sma_20,
+    sma20AboveSma50:
+      row.sma_20_above_sma_50,
+    bullishMaCrossoverAt:
+      row.bullish_ma_crossover_at,
+    bullishMaCrossoverDaysAgo:
+      row.bullish_ma_crossover_days_ago,
+    relativeVolume:
+      row.relative_volume,
 
     quoteUpdatedAt:
       row.quote_updated_at,
@@ -1209,12 +1298,30 @@ Deno.serve(
         filters.maxPrice,
       ) !== null;
 
+    const hasMomentumFilter =
+      finiteNumber(
+        filters.minReturn1Month,
+      ) !== null ||
+      finiteNumber(
+        filters.minReturn3Month,
+      ) !== null ||
+      finiteNumber(
+        filters.minRelativeVolume,
+      ) !== null ||
+      finiteNumber(
+        filters.maxBullishMaCrossoverDays,
+      ) !== null ||
+      filters.requirePriceAboveSma20 === true ||
+      filters.requireSma20AboveSma50 === true;
+
     const defaultSortColumn =
       hasChangeFilter
         ? "change_percent"
-        : hasPriceFilter
-          ? "price"
-          : "market_cap_b";
+        : hasMomentumFilter
+          ? "return_1_month"
+          : hasPriceFilter
+            ? "price"
+            : "market_cap_b";
 
     const sortColumn =
       sortMap[
@@ -1289,7 +1396,17 @@ Deno.serve(
        * multi-day fundamentals backfill. They only require the
        * quote cache populated by sync-stock-quotes.
        */
+      const requiresPriceAboveSma20 =
+        filters.requirePriceAboveSma20 ===
+        true;
+
+      const requiresSma20AboveSma50 =
+        filters.requireSma20AboveSma50 ===
+        true;
+
       const requiresTechnicals =
+        requiresPriceAboveSma20 ||
+        requiresSma20AboveSma50 ||
         activeFilterKeys.some(
           (filterKey) =>
             technicalFilterKeys.has(
@@ -1349,6 +1466,26 @@ Deno.serve(
             "technicals_updated_at",
             "is",
             null,
+          );
+      }
+
+      if (
+        requiresPriceAboveSma20
+      ) {
+        query =
+          query.eq(
+            "price_above_sma_20",
+            true,
+          );
+      }
+
+      if (
+        requiresSma20AboveSma50
+      ) {
+        query =
+          query.eq(
+            "sma_20_above_sma_50",
+            true,
           );
       }
 
