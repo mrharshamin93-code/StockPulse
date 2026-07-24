@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.sync-stock-universe]
 verify_jwt = false
+
+[functions.contact-support]
+verify_jwt = false
