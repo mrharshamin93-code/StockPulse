@@ -88,7 +88,14 @@ const POPULAR_SCREENS = [
   {
     label: "Strong Momentum",
     filters: {
-      minChangePercent: 5,
+      minReturn1Month: 5,
+      minReturn3Month: 10,
+      minRsi: 55,
+      maxRsi: 75,
+      maxBullishMaCrossoverDays: 20,
+      minRelativeVolume: 1,
+      requirePriceAboveSma20: true,
+      requireSma20AboveSma50: true,
     },
   },
   {
@@ -321,6 +328,77 @@ const METRIC_GROUPS = [
         maxKey: "maxWeek52Change",
         minPlaceholder: "e.g. 10",
         maxPlaceholder: "e.g. 100",
+      },
+    ],
+  },
+  {
+    group: "Technical Momentum",
+    metrics: [
+      {
+        key: "rsi",
+        label: "RSI — 14 Day",
+        desc:
+          "A 14-session momentum oscillator ranging from zero to 100. Values above 50 indicate positive momentum, while very high values may indicate an extended move.",
+        unit: "",
+        minKey: "minRsi",
+        maxKey: "maxRsi",
+        minPlaceholder: "e.g. 55",
+        maxPlaceholder: "e.g. 75",
+      },
+      {
+        key: "return1Week",
+        label: "One-Week Price Return",
+        desc:
+          "The percentage change in closing price over approximately five trading sessions.",
+        unit: "%",
+        minKey: "minReturn1Week",
+        maxKey: "maxReturn1Week",
+        minPlaceholder: "e.g. 2",
+        maxPlaceholder: "e.g. 25",
+      },
+      {
+        key: "return1Month",
+        label: "One-Month Price Return",
+        desc:
+          "The percentage change in closing price over approximately 21 trading sessions.",
+        unit: "%",
+        minKey: "minReturn1Month",
+        maxKey: "maxReturn1Month",
+        minPlaceholder: "e.g. 5",
+        maxPlaceholder: "e.g. 50",
+      },
+      {
+        key: "return3Month",
+        label: "Three-Month Price Return",
+        desc:
+          "The percentage change in closing price over approximately 63 trading sessions.",
+        unit: "%",
+        minKey: "minReturn3Month",
+        maxKey: "maxReturn3Month",
+        minPlaceholder: "e.g. 10",
+        maxPlaceholder: "e.g. 100",
+      },
+      {
+        key: "relativeVolume",
+        label: "Relative Volume",
+        desc:
+          "The latest daily volume divided by the prior 30-session average volume. A value above 1 means trading activity is above normal.",
+        unit: "x",
+        minKey: "minRelativeVolume",
+        maxKey: "maxRelativeVolume",
+        minPlaceholder: "e.g. 1",
+        maxPlaceholder: "e.g. 5",
+      },
+      {
+        key: "bullishMaCrossoverDays",
+        label: "Bullish 20/50 MA Crossover Age",
+        desc:
+          "The number of trading sessions since the 20-day simple moving average most recently crossed above the 50-day simple moving average.",
+        unit: "days",
+        minKey: "minBullishMaCrossoverDays",
+        maxKey: "maxBullishMaCrossoverDays",
+        minPlaceholder: "e.g. 0",
+        maxPlaceholder: "e.g. 20",
       },
     ],
   },
@@ -921,7 +999,7 @@ const QUICK_SCREEN_UI = [
   {
     icon: TrendingUp,
     description:
-      "Stocks showing strong recent momentum",
+      "Fresh 20/50-day bullish trend with strong returns",
     iconClass:
       "bg-gray-100 text-black",
   },
@@ -938,6 +1016,7 @@ const GROUP_ICON_MAP = {
   Valuation: BadgeDollarSign,
   Profitability: CircleDollarSign,
   Growth: TrendingUp,
+  "Technical Momentum": LineChart,
   "Financial Health": ShieldCheck,
   Efficiency: Gauge,
   Dividends: Percent,
