@@ -1,5 +1,8 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+} from "react-router-dom";
 import {
   Banknote,
   Bell,
@@ -32,10 +35,14 @@ import {
 const getDefaultCurrency = () => {
   try {
     const locale =
-      Intl.DateTimeFormat().resolvedOptions().locale || "";
+      Intl.DateTimeFormat()
+        .resolvedOptions()
+        .locale || "";
 
     const region =
-      locale.split("-")[1]?.toUpperCase();
+      locale
+        .split("-")[1]
+        ?.toUpperCase();
 
     const map = {
       US: "USD",
@@ -106,147 +113,151 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (
-      !user?.id ||
-      deletingAccount
-    ) {
-      return;
-    }
-
-    setDeletingAccount(true);
-    setDeleteAccountError("");
-
-    try {
-      const {
-        data: sessionData,
-        error: sessionError,
-      } =
-        await supabase.auth.getSession();
-
-      if (sessionError) {
-        throw sessionError;
-      }
-
-      const accessToken =
-        sessionData.session?.access_token;
-
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Sign in again and retry.",
-        );
-      }
-
-      const supabaseUrl =
-        import.meta.env.VITE_SUPABASE_URL;
-
-      const supabaseAnonKey =
-        import.meta.env
-          .VITE_SUPABASE_ANON_KEY;
-
+  const handleDeleteAccount =
+    async () => {
       if (
-        !supabaseUrl ||
-        !supabaseAnonKey
+        !user?.id ||
+        deletingAccount
       ) {
-        throw new Error(
-          "Supabase is not configured correctly.",
-        );
+        return;
       }
 
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/delete-account`,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-
-            apikey:
-              supabaseAnonKey,
-
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            confirmation:
-              "DELETE_ACCOUNT",
-          }),
-        },
-      );
-
-      let result = null;
+      setDeletingAccount(true);
+      setDeleteAccountError("");
 
       try {
-        result =
-          await response.json();
-      } catch {
-        result = null;
-      }
+        const {
+          data: sessionData,
+          error: sessionError,
+        } =
+          await supabase.auth
+            .getSession();
 
-      if (
-        !response.ok ||
-        !result?.success
-      ) {
-        throw new Error(
-          result?.error ||
-            "The account could not be deleted.",
-        );
-      }
+        if (sessionError) {
+          throw sessionError;
+        }
 
-      /*
-       * The server has now deleted:
-       *
-       * 1. The user's application data.
-       * 2. The Supabase Auth identity.
-       *
-       * Only clear the browser's local session after the
-       * Edge Function confirms success.
-       */
-      const {
-        error: signOutError,
-      } =
-        await supabase.auth.signOut({
-          scope: "local",
-        });
+        const accessToken =
+          sessionData.session
+            ?.access_token;
 
-      if (signOutError) {
+        if (!accessToken) {
+          throw new Error(
+            "Your session has expired. Sign in again and retry.",
+          );
+        }
+
+        const supabaseUrl =
+          import.meta.env
+            .VITE_SUPABASE_URL;
+
+        const supabaseAnonKey =
+          import.meta.env
+            .VITE_SUPABASE_ANON_KEY;
+
+        if (
+          !supabaseUrl ||
+          !supabaseAnonKey
+        ) {
+          throw new Error(
+            "Supabase is not configured correctly.",
+          );
+        }
+
+        const response =
+          await fetch(
+            `${supabaseUrl}/functions/v1/delete-account`,
+            {
+              method: "POST",
+
+              headers: {
+                Authorization:
+                  `Bearer ${accessToken}`,
+
+                apikey:
+                  supabaseAnonKey,
+
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify({
+                confirmation:
+                  "DELETE_ACCOUNT",
+              }),
+            },
+          );
+
+        let result = null;
+
+        try {
+          result =
+            await response.json();
+        } catch {
+          result = null;
+        }
+
+        if (
+          !response.ok ||
+          !result?.success
+        ) {
+          throw new Error(
+            result?.error ||
+              "The account could not be deleted.",
+          );
+        }
+
         /*
-         * Do not show deletion as failed here.
+         * The server has now deleted:
          *
-         * The account has already been permanently deleted.
-         * This error only means local session cleanup did not
-         * complete normally.
+         * 1. The user's application data.
+         * 2. The Supabase Auth identity.
+         *
+         * Only clear the local session after the
+         * Edge Function confirms success.
          */
+        const {
+          error: signOutError,
+        } =
+          await supabase.auth
+            .signOut({
+              scope: "local",
+            });
+
+        if (signOutError) {
+          /*
+           * The account has already been
+           * permanently deleted. This error
+           * only concerns local session cleanup.
+           */
+          console.error(
+            "Account was deleted, but the local session could not be cleared normally:",
+            signOutError,
+          );
+        }
+
+        navigate("/register", {
+          replace: true,
+
+          state: {
+            accountDeleted: true,
+          },
+        });
+      } catch (error) {
         console.error(
-          "Account was deleted, but the local session could not be cleared normally:",
-          signOutError,
+          "Failed to delete account:",
+          error,
         );
+
+        setDeleteAccountError(
+          error instanceof Error
+            ? error.message
+            : "The account could not be deleted.",
+        );
+      } finally {
+        setDeletingAccount(false);
       }
-
-      navigate("/register", {
-        replace: true,
-
-        state: {
-          accountDeleted: true,
-        },
-      });
-    } catch (error) {
-      console.error(
-        "Failed to delete account:",
-        error,
-      );
-
-      setDeleteAccountError(
-        error instanceof Error
-          ? error.message
-          : "The account could not be deleted.",
-      );
-    } finally {
-      setDeletingAccount(false);
-    }
-  };
+    };
 
   return (
     <div
@@ -277,6 +288,7 @@ export default function Settings() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+        {/* Referral */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             Refer
@@ -315,6 +327,7 @@ export default function Settings() {
           </Link>
         </div>
 
+        {/* General */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             General
@@ -386,6 +399,7 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Appearance */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             Appearance
@@ -417,6 +431,7 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Support */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             Support
@@ -448,6 +463,7 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Legal */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             Legal
@@ -461,7 +477,7 @@ export default function Settings() {
             }}
           >
             <Link
-              to="/legal?page=privacy"
+              to="/privacy"
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -478,7 +494,7 @@ export default function Settings() {
             </Link>
 
             <Link
-              to="/legal?page=terms"
+              to="/terms"
               className="w-full flex items-center justify-between px-5 py-4 min-h-[56px] hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -496,6 +512,7 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Account */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             Account
@@ -528,6 +545,7 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Danger Zone */}
         <div>
           <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-3 px-1">
             Danger Zone
@@ -623,7 +641,9 @@ export default function Settings() {
                   </AlertDialogCancel>
 
                   <AlertDialogAction
-                    onClick={(event) => {
+                    onClick={(
+                      event,
+                    ) => {
                       event.preventDefault();
 
                       handleDeleteAccount();
