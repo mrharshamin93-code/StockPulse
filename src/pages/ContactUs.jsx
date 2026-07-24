@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -20,7 +20,6 @@ const MAX_MESSAGE_LENGTH = 5000;
 export default function ContactUs() {
   const { user } = useAuth();
 
-  const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
@@ -31,12 +30,6 @@ export default function ContactUs() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (user?.email) {
-      setEmail((currentEmail) => currentEmail || user.email);
-    }
-  }, [user?.email]);
-
   const backPath = user ? "/settings" : "/login";
 
   const handleSubmit = async (event) => {
@@ -46,13 +39,12 @@ export default function ContactUs() {
       return;
     }
 
-    const cleanEmail = email.trim();
     const cleanSubject = subject.trim();
     const cleanMessage = message.trim();
 
-    if (!cleanEmail || !cleanSubject || !cleanMessage) {
+    if (!cleanSubject || !cleanMessage) {
       setError(
-        "Enter your email address, subject, and message.",
+        "Enter a subject and message.",
       );
 
       return;
@@ -106,7 +98,6 @@ export default function ContactUs() {
           headers,
 
           body: JSON.stringify({
-            email: cleanEmail,
             subject: cleanSubject,
             message: cleanMessage,
             website,
@@ -194,8 +185,8 @@ export default function ContactUs() {
 
               <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">
                 Thank you for contacting StockPulse.
-                We will review your message and reply
-                to the email address you provided.
+                We will review your message as soon as
+                possible.
               </p>
 
               <Button
@@ -263,26 +254,6 @@ export default function ContactUs() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="support-email">
-                    Email address
-                  </Label>
-
-                  <Input
-                    id="support-email"
-                    type="email"
-                    value={email}
-                    onChange={(event) =>
-                      setEmail(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
                   <Label htmlFor="support-subject">
                     Subject
                   </Label>
@@ -290,11 +261,15 @@ export default function ContactUs() {
                   <Input
                     id="support-subject"
                     value={subject}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setSubject(
                         event.target.value,
-                      )
-                    }
+                      );
+
+                      if (error) {
+                        setError("");
+                      }
+                    }}
                     maxLength={
                       MAX_SUBJECT_LENGTH
                     }
@@ -316,11 +291,15 @@ export default function ContactUs() {
                   <textarea
                     id="support-message"
                     value={message}
-                    onChange={(event) =>
+                    onChange={(event) => {
                       setMessage(
                         event.target.value,
-                      )
-                    }
+                      );
+
+                      if (error) {
+                        setError("");
+                      }
+                    }}
                     maxLength={
                       MAX_MESSAGE_LENGTH
                     }
@@ -340,7 +319,6 @@ export default function ContactUs() {
                   className="h-11 w-full bg-gray-900 text-white hover:bg-gray-800"
                   disabled={
                     sending ||
-                    !email.trim() ||
                     !subject.trim() ||
                     !message.trim()
                   }
