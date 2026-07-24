@@ -1,63 +1,547 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const RESULT_LIMIT = 48;
-const DISPLAY_PAGE_SIZE = 12;
+const DEFAULT_PAGE_SIZE = 12;
+const MAX_PAGE_SIZE = 50;
+const DEFAULT_QUOTE_STALE_MINUTES = 5;
+const MAX_QUOTE_STALE_MINUTES = 60;
+const QUOTE_CONCURRENCY = 4;
+const QUOTE_TIMEOUT_MS = 10_000;
 
-const nullableNumber = {
-  type: ["number", "null"],
+type UnknownRecord = Record<string, unknown>;
+
+type ScreenerRow = {
+  symbol: string;
+  company_name: string | null;
+  exchange: string | null;
+  sector: string | null;
+  industry: string | null;
+
+  price: number | null;
+  change_amount: number | null;
+  change_percent: number | null;
+  open_price: number | null;
+  day_high: number | null;
+  day_low: number | null;
+  previous_close: number | null;
+  market_timestamp: string | null;
+  quote_updated_at: string | null;
+
+  market_cap_b: number | null;
+  enterprise_value_b: number | null;
+  pe: number | null;
+  forward_pe: number | null;
+  peg: number | null;
+  pb: number | null;
+  ps: number | null;
+  ev_ebitda: number | null;
+  pcf: number | null;
+  pfcf: number | null;
+
+  gross_margin: number | null;
+  operating_margin: number | null;
+  net_margin: number | null;
+  roe: number | null;
+  roa: number | null;
+  roic: number | null;
+
+  revenue_growth_yoy: number | null;
+  eps_growth_yoy: number | null;
+  ebitda_growth_yoy: number | null;
+  fcf_growth_yoy: number | null;
+
+  debt_to_equity: number | null;
+  current_ratio: number | null;
+  quick_ratio: number | null;
+  interest_coverage: number | null;
+  debt_to_ebitda: number | null;
+
+  asset_turnover: number | null;
+  inventory_turnover: number | null;
+  receivables_turnover: number | null;
+  days_sales_outstanding: number | null;
+
+  dividend_yield: number | null;
+  payout_ratio: number | null;
+  dividend_growth_5y: number | null;
+
+  eps_ttm: number | null;
+  book_value_per_share: number | null;
+  fcf_per_share: number | null;
+
+  rsi_14: number | null;
+  high_52_week: number | null;
+  low_52_week: number | null;
+  week_52_change: number | null;
+  average_volume_30d: number | null;
+  return_1_week: number | null;
+  return_1_month: number | null;
+  return_3_month: number | null;
+  volatility_30d: number | null;
+
+  fundamentals_updated_at: string | null;
+  technicals_updated_at: string | null;
 };
 
-const stockProperties = {
-  ticker: {
-    type: "string",
-  },
-  name: {
-    type: "string",
-  },
-  exchange: {
-    type: "string",
-  },
-  sector: {
-    type: ["string", "null"],
-  },
-
-  price: nullableNumber,
-  changePercent: nullableNumber,
-  week52Change: nullableNumber,
-
-  pe: nullableNumber,
-  eps: nullableNumber,
-  deRatio: nullableNumber,
-  marketCapB: nullableNumber,
-  dividendYield: nullableNumber,
-  pb: nullableNumber,
-  roe: nullableNumber,
+type QuoteUpdate = {
+  symbol: string;
+  ok: boolean;
+  error: string | null;
+  values: Partial<ScreenerRow>;
 };
 
-const screenerSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    stocks: {
-      type: "array",
-      minItems: 0,
-      maxItems: RESULT_LIMIT,
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: stockProperties,
-        required: Object.keys(
-          stockProperties,
-        ),
-      },
-    },
+const selectColumns = [
+  "symbol",
+  "company_name",
+  "exchange",
+  "sector",
+  "industry",
+  "price",
+  "change_amount",
+  "change_percent",
+  "open_price",
+  "day_high",
+  "day_low",
+  "previous_close",
+  "market_timestamp",
+  "quote_updated_at",
+  "market_cap_b",
+  "enterprise_value_b",
+  "pe",
+  "forward_pe",
+  "peg",
+  "pb",
+  "ps",
+  "ev_ebitda",
+  "pcf",
+  "pfcf",
+  "gross_margin",
+  "operating_margin",
+  "net_margin",
+  "roe",
+  "roa",
+  "roic",
+  "revenue_growth_yoy",
+  "eps_growth_yoy",
+  "ebitda_growth_yoy",
+  "fcf_growth_yoy",
+  "debt_to_equity",
+  "current_ratio",
+  "quick_ratio",
+  "interest_coverage",
+  "debt_to_ebitda",
+  "asset_turnover",
+  "inventory_turnover",
+  "receivables_turnover",
+  "days_sales_outstanding",
+  "dividend_yield",
+  "payout_ratio",
+  "dividend_growth_5y",
+  "eps_ttm",
+  "book_value_per_share",
+  "fcf_per_share",
+  "rsi_14",
+  "high_52_week",
+  "low_52_week",
+  "week_52_change",
+  "average_volume_30d",
+  "return_1_week",
+  "return_1_month",
+  "return_3_month",
+  "volatility_30d",
+  "fundamentals_updated_at",
+  "technicals_updated_at",
+].join(",");
+
+const filterMap: Record<
+  string,
+  {
+    column: string;
+    operator: "gte" | "lte";
+  }
+> = {
+  minPrice: {
+    column: "price",
+    operator: "gte",
   },
-  required: ["stocks"],
+  maxPrice: {
+    column: "price",
+    operator: "lte",
+  },
+  minChangePercent: {
+    column: "change_percent",
+    operator: "gte",
+  },
+  maxChangePercent: {
+    column: "change_percent",
+    operator: "lte",
+  },
+  minRsi: {
+    column: "rsi_14",
+    operator: "gte",
+  },
+  maxRsi: {
+    column: "rsi_14",
+    operator: "lte",
+  },
+
+  minPe: {
+    column: "pe",
+    operator: "gte",
+  },
+  maxPe: {
+    column: "pe",
+    operator: "lte",
+  },
+  minForwardPe: {
+    column: "forward_pe",
+    operator: "gte",
+  },
+  maxForwardPe: {
+    column: "forward_pe",
+    operator: "lte",
+  },
+  minPeg: {
+    column: "peg",
+    operator: "gte",
+  },
+  maxPeg: {
+    column: "peg",
+    operator: "lte",
+  },
+  minPb: {
+    column: "pb",
+    operator: "gte",
+  },
+  maxPb: {
+    column: "pb",
+    operator: "lte",
+  },
+  minPs: {
+    column: "ps",
+    operator: "gte",
+  },
+  maxPs: {
+    column: "ps",
+    operator: "lte",
+  },
+  minEvEbitda: {
+    column: "ev_ebitda",
+    operator: "gte",
+  },
+  maxEvEbitda: {
+    column: "ev_ebitda",
+    operator: "lte",
+  },
+  minPcf: {
+    column: "pcf",
+    operator: "gte",
+  },
+  maxPcf: {
+    column: "pcf",
+    operator: "lte",
+  },
+  minPfcf: {
+    column: "pfcf",
+    operator: "gte",
+  },
+  maxPfcf: {
+    column: "pfcf",
+    operator: "lte",
+  },
+
+  minGrossMargin: {
+    column: "gross_margin",
+    operator: "gte",
+  },
+  maxGrossMargin: {
+    column: "gross_margin",
+    operator: "lte",
+  },
+  minOperatingMargin: {
+    column: "operating_margin",
+    operator: "gte",
+  },
+  maxOperatingMargin: {
+    column: "operating_margin",
+    operator: "lte",
+  },
+  minNetMargin: {
+    column: "net_margin",
+    operator: "gte",
+  },
+  maxNetMargin: {
+    column: "net_margin",
+    operator: "lte",
+  },
+  minRoe: {
+    column: "roe",
+    operator: "gte",
+  },
+  maxRoe: {
+    column: "roe",
+    operator: "lte",
+  },
+  minRoa: {
+    column: "roa",
+    operator: "gte",
+  },
+  maxRoa: {
+    column: "roa",
+    operator: "lte",
+  },
+  minRoic: {
+    column: "roic",
+    operator: "gte",
+  },
+  maxRoic: {
+    column: "roic",
+    operator: "lte",
+  },
+
+  minRevenueGrowth: {
+    column: "revenue_growth_yoy",
+    operator: "gte",
+  },
+  maxRevenueGrowth: {
+    column: "revenue_growth_yoy",
+    operator: "lte",
+  },
+  minEpsGrowth: {
+    column: "eps_growth_yoy",
+    operator: "gte",
+  },
+  maxEpsGrowth: {
+    column: "eps_growth_yoy",
+    operator: "lte",
+  },
+  minEbitdaGrowth: {
+    column: "ebitda_growth_yoy",
+    operator: "gte",
+  },
+  maxEbitdaGrowth: {
+    column: "ebitda_growth_yoy",
+    operator: "lte",
+  },
+  minFcfGrowth: {
+    column: "fcf_growth_yoy",
+    operator: "gte",
+  },
+  maxFcfGrowth: {
+    column: "fcf_growth_yoy",
+    operator: "lte",
+  },
+  minWeek52Change: {
+    column: "week_52_change",
+    operator: "gte",
+  },
+  maxWeek52Change: {
+    column: "week_52_change",
+    operator: "lte",
+  },
+
+  minDe: {
+    column: "debt_to_equity",
+    operator: "gte",
+  },
+  maxDe: {
+    column: "debt_to_equity",
+    operator: "lte",
+  },
+  minCurrentRatio: {
+    column: "current_ratio",
+    operator: "gte",
+  },
+  maxCurrentRatio: {
+    column: "current_ratio",
+    operator: "lte",
+  },
+  minQuickRatio: {
+    column: "quick_ratio",
+    operator: "gte",
+  },
+  maxQuickRatio: {
+    column: "quick_ratio",
+    operator: "lte",
+  },
+  minInterestCoverage: {
+    column: "interest_coverage",
+    operator: "gte",
+  },
+  maxInterestCoverage: {
+    column: "interest_coverage",
+    operator: "lte",
+  },
+  minDebtEbitda: {
+    column: "debt_to_ebitda",
+    operator: "gte",
+  },
+  maxDebtEbitda: {
+    column: "debt_to_ebitda",
+    operator: "lte",
+  },
+
+  minAssetTurnover: {
+    column: "asset_turnover",
+    operator: "gte",
+  },
+  maxAssetTurnover: {
+    column: "asset_turnover",
+    operator: "lte",
+  },
+  minInventoryTurnover: {
+    column: "inventory_turnover",
+    operator: "gte",
+  },
+  maxInventoryTurnover: {
+    column: "inventory_turnover",
+    operator: "lte",
+  },
+  minReceivablesTurnover: {
+    column: "receivables_turnover",
+    operator: "gte",
+  },
+  maxReceivablesTurnover: {
+    column: "receivables_turnover",
+    operator: "lte",
+  },
+  minDso: {
+    column: "days_sales_outstanding",
+    operator: "gte",
+  },
+  maxDso: {
+    column: "days_sales_outstanding",
+    operator: "lte",
+  },
+
+  minDividendYield: {
+    column: "dividend_yield",
+    operator: "gte",
+  },
+  maxDividendYield: {
+    column: "dividend_yield",
+    operator: "lte",
+  },
+  minPayoutRatio: {
+    column: "payout_ratio",
+    operator: "gte",
+  },
+  maxPayoutRatio: {
+    column: "payout_ratio",
+    operator: "lte",
+  },
+  minDividendGrowth: {
+    column: "dividend_growth_5y",
+    operator: "gte",
+  },
+  maxDividendGrowth: {
+    column: "dividend_growth_5y",
+    operator: "lte",
+  },
+
+  minMarketCapB: {
+    column: "market_cap_b",
+    operator: "gte",
+  },
+  maxMarketCapB: {
+    column: "market_cap_b",
+    operator: "lte",
+  },
+  minMarketCap: {
+    column: "market_cap_b",
+    operator: "gte",
+  },
+  maxMarketCap: {
+    column: "market_cap_b",
+    operator: "lte",
+  },
+  minEps: {
+    column: "eps_ttm",
+    operator: "gte",
+  },
+  maxEps: {
+    column: "eps_ttm",
+    operator: "lte",
+  },
+  minBookValue: {
+    column: "book_value_per_share",
+    operator: "gte",
+  },
+  maxBookValue: {
+    column: "book_value_per_share",
+    operator: "lte",
+  },
+  minFcfPerShare: {
+    column: "fcf_per_share",
+    operator: "gte",
+  },
+  maxFcfPerShare: {
+    column: "fcf_per_share",
+    operator: "lte",
+  },
 };
+
+const sortMap: Record<string, string> = {
+  ticker: "symbol",
+  symbol: "symbol",
+  name: "company_name",
+  companyName: "company_name",
+  marketCapB: "market_cap_b",
+  market_cap_b: "market_cap_b",
+  price: "price",
+  changePercent: "change_percent",
+  change_percent: "change_percent",
+  week52Change: "week_52_change",
+  week_52_change: "week_52_change",
+  pe: "pe",
+  forwardPe: "forward_pe",
+  peg: "peg",
+  pb: "pb",
+  ps: "ps",
+  dividendYield: "dividend_yield",
+  dividend_yield: "dividend_yield",
+  roe: "roe",
+  revenueGrowth: "revenue_growth_yoy",
+  revenue_growth_yoy: "revenue_growth_yoy",
+  epsGrowth: "eps_growth_yoy",
+  eps_growth_yoy: "eps_growth_yoy",
+  rsi: "rsi_14",
+  rsi_14: "rsi_14",
+};
+
+const ascendingByDefault =
+  new Set([
+    "symbol",
+    "company_name",
+    "pe",
+    "forward_pe",
+    "peg",
+    "pb",
+    "ps",
+    "debt_to_equity",
+    "debt_to_ebitda",
+    "days_sales_outstanding",
+  ]);
+
+const quoteFilterKeys =
+  new Set([
+    "minPrice",
+    "maxPrice",
+    "minChangePercent",
+    "maxChangePercent",
+  ]);
+
+const technicalFilterKeys =
+  new Set([
+    "minRsi",
+    "maxRsi",
+  ]);
 
 function jsonResponse(
   body: unknown,
@@ -70,78 +554,39 @@ function jsonResponse(
       headers: {
         ...corsHeaders,
         "Content-Type":
-          "application/json",
+          "application/json; charset=utf-8",
       },
     },
   );
 }
 
-function extractOutputText(
-  payload: Record<
-    string,
-    unknown
-  >,
-) {
+function finiteNumber(
+  value: unknown,
+): number | null {
   if (
-    typeof payload.output_text ===
-    "string"
+    value === null ||
+    value === undefined ||
+    value === ""
   ) {
-    return payload.output_text;
+    return null;
   }
 
-  const output =
-    Array.isArray(payload.output)
-      ? payload.output
-      : [];
+  const parsed =
+    Number(value);
 
-  for (const item of output) {
-    if (
-      !item ||
-      typeof item !== "object"
-    ) {
-      continue;
-    }
-
-    const contentValue = (
-      item as {
-        content?: unknown;
-      }
-    ).content;
-
-    const content =
-      Array.isArray(contentValue)
-        ? contentValue
-        : [];
-
-    for (const part of content) {
-      if (
-        !part ||
-        typeof part !== "object"
-      ) {
-        continue;
-      }
-
-      const typedPart =
-        part as {
-          type?: string;
-          text?: unknown;
-        };
-
-      if (
-        typedPart.type ===
-          "output_text" &&
-        typeof typedPart.text ===
-          "string"
-      ) {
-        return typedPart.text;
-      }
-    }
-  }
-
-  return "";
+  return Number.isFinite(parsed)
+    ? parsed
+    : null;
 }
 
-function sanitizeFilters(
+function normalizeText(
+  value: unknown,
+) {
+  return String(value ?? "")
+    .trim();
+}
+
+function normalizeFilters(
   value: unknown,
 ) {
   if (
@@ -152,109 +597,431 @@ function sanitizeFilters(
     return {};
   }
 
-  const result: Record<
-    string,
-    string |
-      number |
-      string[]
-  > = {};
-
-  for (
-    const [
-      key,
-      rawValue,
-    ] of Object.entries(value)
-  ) {
-    if (
-      key === "sectors" &&
-      Array.isArray(rawValue)
-    ) {
-      const sectors = [
-        ...new Set(
-          rawValue
-            .filter(
-              (
-                sector,
-              ): sector is string =>
-                typeof sector ===
-                "string",
-            )
-            .map((sector) =>
-              sector
-                .trim()
-                .slice(0, 60),
-            )
-            .filter(Boolean),
-        ),
-      ].slice(0, 10);
-
-      if (sectors.length > 0) {
-        result.sectors =
-          sectors;
-      }
-
-      continue;
-    }
-
-    if (
-      typeof rawValue ===
-      "string"
-    ) {
-      const trimmed =
-        rawValue.trim();
-
-      if (trimmed) {
-        result[key] =
-          trimmed.slice(0, 100);
-      }
-
-      continue;
-    }
-
-    if (
-      typeof rawValue ===
-        "number" &&
-      Number.isFinite(rawValue)
-    ) {
-      result[key] =
-        rawValue;
-    }
-  }
-
-  return result;
+  return value as UnknownRecord;
 }
 
-function normalizeStock(
-  stock: Record<
-    string,
-    unknown
-  >,
+function normalizeSectors(
+  filters: UnknownRecord,
+) {
+  const raw =
+    Array.isArray(
+      filters.sectors,
+    )
+      ? filters.sectors
+      : typeof filters.sector ===
+          "string"
+        ? [filters.sector]
+        : [];
+
+  return [
+    ...new Set(
+      raw
+        .map(
+          normalizeText,
+        )
+        .filter(Boolean),
+    ),
+  ].slice(0, 20);
+}
+
+function isQuoteStale(
+  quoteUpdatedAt: string | null,
+  staleBeforeMs: number,
+) {
+  if (!quoteUpdatedAt) {
+    return true;
+  }
+
+  const timestamp =
+    Date.parse(
+      quoteUpdatedAt,
+    );
+
+  return (
+    !Number.isFinite(timestamp) ||
+    timestamp < staleBeforeMs
+  );
+}
+
+function unixTimestampToIso(
+  value: unknown,
+): string | null {
+  const timestamp =
+    finiteNumber(value);
+
+  if (
+    timestamp === null ||
+    timestamp <= 0
+  ) {
+    return null;
+  }
+
+  const date =
+    new Date(timestamp * 1000);
+
+  return Number.isNaN(
+    date.getTime(),
+  )
+    ? null
+    : date.toISOString();
+}
+
+async function fetchQuote(
+  symbol: string,
+  apiKey: string,
+) {
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(
+      () =>
+        controller.abort(),
+      QUOTE_TIMEOUT_MS,
+    );
+
+  try {
+    const url =
+      new URL(
+        "https://finnhub.io/api/v1/quote",
+      );
+
+    url.searchParams.set(
+      "symbol",
+      symbol,
+    );
+
+    const response =
+      await fetch(
+        url,
+        {
+          headers: {
+            "X-Finnhub-Token":
+              apiKey,
+          },
+          signal:
+            controller.signal,
+        },
+      );
+
+    const payload =
+      await response
+        .json()
+        .catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        `Finnhub quote request failed with status ${response.status}.`,
+      );
+    }
+
+    if (
+      !payload ||
+      typeof payload !==
+        "object"
+    ) {
+      throw new Error(
+        "Finnhub returned an invalid quote payload.",
+      );
+    }
+
+    const quote =
+      payload as UnknownRecord;
+
+    const price =
+      finiteNumber(
+        quote.c,
+      );
+
+    const previousClose =
+      finiteNumber(
+        quote.pc,
+      );
+
+    if (
+      (price === null ||
+        price <= 0) &&
+      (previousClose ===
+        null ||
+        previousClose <= 0)
+    ) {
+      throw new Error(
+        "Finnhub returned no usable quote.",
+      );
+    }
+
+    const now =
+      new Date().toISOString();
+
+    const values:
+      Partial<ScreenerRow> = {
+        quote_updated_at:
+          now,
+      };
+
+    const changeAmount =
+      finiteNumber(
+        quote.d,
+      );
+
+    const changePercent =
+      finiteNumber(
+        quote.dp,
+      );
+
+    const openPrice =
+      finiteNumber(
+        quote.o,
+      );
+
+    const dayHigh =
+      finiteNumber(
+        quote.h,
+      );
+
+    const dayLow =
+      finiteNumber(
+        quote.l,
+      );
+
+    const marketTimestamp =
+      unixTimestampToIso(
+        quote.t,
+      );
+
+    if (price !== null) {
+      values.price =
+        price;
+    }
+
+    if (
+      changeAmount !== null
+    ) {
+      values.change_amount =
+        changeAmount;
+    }
+
+    if (
+      changePercent !== null
+    ) {
+      values.change_percent =
+        changePercent;
+    }
+
+    if (
+      openPrice !== null
+    ) {
+      values.open_price =
+        openPrice;
+    }
+
+    if (
+      dayHigh !== null
+    ) {
+      values.day_high =
+        dayHigh;
+    }
+
+    if (
+      dayLow !== null
+    ) {
+      values.day_low =
+        dayLow;
+    }
+
+    if (
+      previousClose !== null
+    ) {
+      values.previous_close =
+        previousClose;
+    }
+
+    if (marketTimestamp) {
+      values.market_timestamp =
+        marketTimestamp;
+    }
+
+    return values;
+  } finally {
+    clearTimeout(
+      timeout,
+    );
+  }
+}
+
+async function processInBatches<T, R>(
+  values: T[],
+  concurrency: number,
+  worker: (
+    value: T,
+  ) => Promise<R>,
+) {
+  const results: R[] = [];
+
+  for (
+    let index = 0;
+    index < values.length;
+    index += concurrency
+  ) {
+    const batch =
+      values.slice(
+        index,
+        index + concurrency,
+      );
+
+    const batchResults =
+      await Promise.all(
+        batch.map(worker),
+      );
+
+    results.push(
+      ...batchResults,
+    );
+  }
+
+  return results;
+}
+
+function toClientStock(
+  row: ScreenerRow,
 ) {
   return {
-    ...stock,
-
-    ticker: String(
-      stock.ticker || "",
-    )
-      .trim()
-      .toUpperCase(),
-
-    name: String(
-      stock.name || "",
-    ).trim(),
-
-    exchange: String(
-      stock.exchange || "",
-    )
-      .trim()
-      .toUpperCase(),
-
+    ticker:
+      row.symbol,
+    symbol:
+      row.symbol,
+    name:
+      row.company_name ||
+      row.symbol,
+    companyName:
+      row.company_name ||
+      row.symbol,
+    exchange:
+      row.exchange || "",
     sector:
-      stock.sector === null
-        ? null
-        : String(
-            stock.sector || "",
-          ).trim(),
+      row.sector,
+    industry:
+      row.industry,
+
+    price:
+      row.price,
+    changeAmount:
+      row.change_amount,
+    changePercent:
+      row.change_percent,
+    openPrice:
+      row.open_price,
+    dayHigh:
+      row.day_high,
+    dayLow:
+      row.day_low,
+    previousClose:
+      row.previous_close,
+    marketTimestamp:
+      row.market_timestamp,
+
+    marketCapB:
+      row.market_cap_b,
+    enterpriseValueB:
+      row.enterprise_value_b,
+    pe:
+      row.pe,
+    forwardPe:
+      row.forward_pe,
+    peg:
+      row.peg,
+    pb:
+      row.pb,
+    ps:
+      row.ps,
+    evEbitda:
+      row.ev_ebitda,
+    pcf:
+      row.pcf,
+    pfcf:
+      row.pfcf,
+
+    grossMargin:
+      row.gross_margin,
+    operatingMargin:
+      row.operating_margin,
+    netMargin:
+      row.net_margin,
+    roe:
+      row.roe,
+    roa:
+      row.roa,
+    roic:
+      row.roic,
+
+    revenueGrowth:
+      row.revenue_growth_yoy,
+    epsGrowth:
+      row.eps_growth_yoy,
+    ebitdaGrowth:
+      row.ebitda_growth_yoy,
+    fcfGrowth:
+      row.fcf_growth_yoy,
+
+    deRatio:
+      row.debt_to_equity,
+    currentRatio:
+      row.current_ratio,
+    quickRatio:
+      row.quick_ratio,
+    interestCoverage:
+      row.interest_coverage,
+    debtEbitda:
+      row.debt_to_ebitda,
+
+    assetTurnover:
+      row.asset_turnover,
+    inventoryTurnover:
+      row.inventory_turnover,
+    receivablesTurnover:
+      row.receivables_turnover,
+    dso:
+      row.days_sales_outstanding,
+
+    dividendYield:
+      row.dividend_yield,
+    payoutRatio:
+      row.payout_ratio,
+    dividendGrowth:
+      row.dividend_growth_5y,
+
+    eps:
+      row.eps_ttm,
+    bookValuePerShare:
+      row.book_value_per_share,
+    fcfPerShare:
+      row.fcf_per_share,
+
+    rsi:
+      row.rsi_14,
+    high52Week:
+      row.high_52_week,
+    low52Week:
+      row.low_52_week,
+    week52Change:
+      row.week_52_change,
+    averageVolume30d:
+      row.average_volume_30d,
+    return1Week:
+      row.return_1_week,
+    return1Month:
+      row.return_1_month,
+    return3Month:
+      row.return_3_month,
+    volatility30d:
+      row.volatility_30d,
+
+    quoteUpdatedAt:
+      row.quote_updated_at,
+    fundamentalsUpdatedAt:
+      row.fundamentals_updated_at,
+    technicalsUpdatedAt:
+      row.technicals_updated_at,
   };
 }
 
@@ -279,8 +1046,9 @@ Deno.serve(
     ) {
       return jsonResponse(
         {
+          ok: false,
           error:
-            "Method not allowed",
+            "Method not allowed.",
         },
         405,
       );
@@ -299,266 +1067,624 @@ Deno.serve(
     ) {
       return jsonResponse(
         {
+          ok: false,
           error:
-            "Authentication required",
+            "Authentication required.",
         },
         401,
       );
     }
 
-    const apiKey =
+    const supabaseUrl =
       Deno.env.get(
-        "XAI_API_KEY",
+        "SUPABASE_URL",
       );
 
-    if (!apiKey) {
+    const serviceRoleKey =
+      Deno.env.get(
+        "SUPABASE_SERVICE_ROLE_KEY",
+      );
+
+    if (
+      !supabaseUrl ||
+      !serviceRoleKey
+    ) {
       return jsonResponse(
         {
+          ok: false,
           error:
-            "The stock screener model is not configured",
+            "Supabase service credentials are unavailable.",
         },
         503,
       );
     }
 
+    const admin =
+      createClient(
+        supabaseUrl,
+        serviceRoleKey,
+        {
+          auth: {
+            persistSession:
+              false,
+            autoRefreshToken:
+              false,
+          },
+        },
+      );
+
+    const jwt =
+      authorization.slice(
+        "Bearer ".length,
+      );
+
+    const {
+      data: userData,
+      error: userError,
+    } =
+      await admin.auth
+        .getUser(jwt);
+
+    if (
+      userError ||
+      !userData.user
+    ) {
+      return jsonResponse(
+        {
+          ok: false,
+          error:
+            "Invalid or expired session.",
+        },
+        401,
+      );
+    }
+
+    const body =
+      await request
+        .json()
+        .catch(() => ({}));
+
+    const filters =
+      normalizeFilters(
+        body?.filters,
+      );
+
+    const requestedPage =
+      Math.trunc(
+        Number(
+          body?.page,
+        ),
+      );
+
+    const page =
+      Number.isFinite(
+        requestedPage,
+      )
+        ? Math.max(
+            requestedPage,
+            1,
+          )
+        : 1;
+
+    const requestedPageSize =
+      Math.trunc(
+        Number(
+          body?.pageSize,
+        ),
+      );
+
+    const pageSize =
+      Number.isFinite(
+        requestedPageSize,
+      )
+        ? Math.min(
+            Math.max(
+              requestedPageSize,
+              1,
+            ),
+            MAX_PAGE_SIZE,
+          )
+        : DEFAULT_PAGE_SIZE;
+
+    const requestedSortKey =
+      normalizeText(
+        body?.sortBy,
+      );
+
+    const hasChangeFilter =
+      finiteNumber(
+        filters
+          .minChangePercent,
+      ) !== null ||
+      finiteNumber(
+        filters
+          .maxChangePercent,
+      ) !== null;
+
+    const hasPriceFilter =
+      finiteNumber(
+        filters.minPrice,
+      ) !== null ||
+      finiteNumber(
+        filters.maxPrice,
+      ) !== null;
+
+    const defaultSortColumn =
+      hasChangeFilter
+        ? "change_percent"
+        : hasPriceFilter
+          ? "price"
+          : "market_cap_b";
+
+    const sortColumn =
+      sortMap[
+        requestedSortKey
+      ] ||
+      defaultSortColumn;
+
+    const requestedDirection =
+      normalizeText(
+        body?.sortDirection,
+      ).toLowerCase();
+
+    const ascending =
+      requestedDirection ===
+        "asc"
+        ? true
+        : requestedDirection ===
+            "desc"
+          ? false
+          : ascendingByDefault.has(
+              sortColumn,
+            );
+
+    const requestedQuoteStaleMinutes =
+      Number(
+        body
+          ?.quoteStaleMinutes,
+      );
+
+    const quoteStaleMinutes =
+      Number.isFinite(
+        requestedQuoteStaleMinutes,
+      )
+        ? Math.min(
+            Math.max(
+              requestedQuoteStaleMinutes,
+              1,
+            ),
+            MAX_QUOTE_STALE_MINUTES,
+          )
+        : DEFAULT_QUOTE_STALE_MINUTES;
+
+    const start =
+      (page - 1) *
+      pageSize;
+
+    const end =
+      start +
+      pageSize -
+      1;
+
     try {
-      const requestBody =
-        await request.json();
-
-      const filters =
-        sanitizeFilters(
-          requestBody
-            ?.filters,
-        );
-
-      const filtersText =
-        Object.keys(
+      const sectors =
+        normalizeSectors(
           filters,
-        ).length > 0
-          ? JSON.stringify(
-              filters,
-              null,
-              2,
-            )
-          : "No filters were selected.";
-
-      const response =
-        await fetch(
-          "https://api.x.ai/v1/responses",
-          {
-            method:
-              "POST",
-
-            headers: {
-              Authorization:
-                `Bearer ${apiKey}`,
-
-              "Content-Type":
-                "application/json",
-            },
-
-            body:
-              JSON.stringify(
-                {
-                  model:
-                    Deno.env.get(
-                      "XAI_MODEL",
-                    ) ||
-                    "grok-4.3",
-
-                  reasoning: {
-                    effort:
-                      "none",
-                  },
-
-                  store:
-                    false,
-
-                  /*
-                   * Forty-eight structured stock rows need
-                   * more output room than the old 12-row
-                   * response. The returned schema is still
-                   * deliberately limited to the metrics used
-                   * by the results UI.
-                   */
-                  max_output_tokens:
-                    16000,
-
-                  input: [
-                    {
-                      role:
-                        "system",
-
-                      content:
-                        "You are a careful fundamental stock screener. " +
-                        "Return only real, currently publicly traded US-listed common stocks. " +
-                        "Do not invent ticker symbols or companies. " +
-                        "Apply every selected filter as closely as possible. " +
-                        "Treat a sectors array as an OR filter, then combine sectors with all other filters using AND. " +
-                        "Order the strongest and closest matches first. " +
-                        "Financial figures may be approximate because this response is model-generated. " +
-                        "Use null only when a displayed metric cannot reasonably be determined. " +
-                        "All percentages must be returned as percentage numbers, not decimal fractions. " +
-                        "Market capitalization must be returned in billions of US dollars.",
-                    },
-                    {
-                      role:
-                        "user",
-
-                      content:
-                        "Return up to 48 unique real US-listed stocks matching these filters. " +
-                        "Return 48 whenever at least 48 reasonable eligible matches exist; return fewer only when the eligible universe is genuinely smaller.\n\n" +
-                        filtersText +
-                        "\n\nReturn every required field for every stock and no additional fields or commentary. " +
-                        "Use NASDAQ, NYSE, or AMEX for exchange. " +
-                        "Do not include ETFs, funds, preferred shares, warrants, OTC securities, cryptocurrencies, private companies, or duplicate tickers.",
-                    },
-                  ],
-
-                  text: {
-                    format: {
-                      type:
-                        "json_schema",
-
-                      name:
-                        "stock_screener_results",
-
-                      strict:
-                        true,
-
-                      schema:
-                        screenerSchema,
-                    },
-                  },
-                },
-              ),
-          },
         );
 
-      const payload =
-        await response.json();
-
-      if (!response.ok) {
-        console.error(
-          "xAI stock screener response error:",
-          response.status,
-          payload?.error,
+      const activeFilterKeys =
+        Object.keys(
+          filterMap,
+        ).filter(
+          (filterKey) =>
+            finiteNumber(
+              filters[
+                filterKey
+              ],
+            ) !== null,
         );
 
-        return jsonResponse(
-          {
-            error:
-              "Unable to generate stock screener results",
-          },
-          502,
-        );
-      }
-
-      const outputText =
-        extractOutputText(
-          payload,
-        );
-
-      if (!outputText) {
-        return jsonResponse(
-          {
-            error:
-              "The stock screener model returned no results",
-          },
-          502,
-        );
-      }
-
-      const parsed =
-        JSON.parse(
-          outputText,
+      /*
+       * Price and daily-change screens must not wait for the
+       * multi-day fundamentals backfill. They only require the
+       * quote cache populated by sync-stock-quotes.
+       */
+      const requiresTechnicals =
+        activeFilterKeys.some(
+          (filterKey) =>
+            technicalFilterKeys.has(
+              filterKey,
+            ),
         );
 
-      const rawStocks =
-        Array.isArray(
-          parsed?.stocks,
-        )
-          ? parsed.stocks
-          : [];
+      const requiresFundamentals =
+        sectors.length > 0 ||
+        activeFilterKeys.some(
+          (filterKey) =>
+            !quoteFilterKeys.has(
+              filterKey,
+            ) &&
+            !technicalFilterKeys.has(
+              filterKey,
+            ),
+        );
 
-      const seenTickers =
-        new Set<string>();
-
-      const stocks =
-        rawStocks
-          .filter(
-            (
-              stock: unknown,
-            ) =>
-              stock &&
-              typeof stock ===
-                "object",
+      let query =
+        admin
+          .from(
+            "stock_screener_stocks",
           )
-          .map(
-            (
-              stock: Record<
-                string,
-                unknown
-              >,
-            ) =>
-              normalizeStock(
-                stock,
-              ),
-          )
-          .filter(
-            (
-              stock: {
-                ticker:
-                  string;
-              },
-            ) => {
-              if (
-                !/^[A-Z][A-Z0-9.-]{0,9}$/.test(
-                  stock.ticker,
-                )
-              ) {
-                return false;
-              }
-
-              if (
-                seenTickers.has(
-                  stock.ticker,
-                )
-              ) {
-                return false;
-              }
-
-              seenTickers.add(
-                stock.ticker,
-              );
-
-              return true;
+          .select(
+            selectColumns,
+            {
+              count:
+                "exact",
             },
           )
-          .slice(
-            0,
-            RESULT_LIMIT,
+          .eq(
+            "is_active",
+            true,
+          )
+          .eq(
+            "is_common_stock",
+            true,
           );
 
+      if (
+        requiresFundamentals
+      ) {
+        query =
+          query.not(
+            "fundamentals_updated_at",
+            "is",
+            null,
+          );
+      }
+
+      if (
+        requiresTechnicals
+      ) {
+        query =
+          query.not(
+            "technicals_updated_at",
+            "is",
+            null,
+          );
+      }
+
+      if (
+        sectors.length > 0
+      ) {
+        query =
+          query.in(
+            "sector",
+            sectors,
+          );
+      }
+
+      for (
+        const [
+          filterKey,
+          config,
+        ] of Object.entries(
+          filterMap,
+        )
+      ) {
+        const value =
+          finiteNumber(
+            filters[
+              filterKey
+            ],
+          );
+
+        if (
+          value === null
+        ) {
+          continue;
+        }
+
+        query =
+          config.operator ===
+            "gte"
+            ? query.gte(
+                config.column,
+                value,
+              )
+            : query.lte(
+                config.column,
+                value,
+              );
+      }
+
+      query =
+        query
+          .order(
+            sortColumn,
+            {
+              ascending,
+              nullsFirst:
+                false,
+            },
+          )
+          .order(
+            "symbol",
+            {
+              ascending:
+                true,
+            },
+          )
+          .range(
+            start,
+            end,
+          );
+
+      const {
+        data,
+        error,
+        count,
+      } =
+        await query;
+
+      if (error) {
+        throw new Error(
+          error.message,
+        );
+      }
+
+      let rows =
+        (
+          data ??
+          []
+        ) as unknown as ScreenerRow[];
+
+      const finnhubApiKey =
+        Deno.env.get(
+          "FINNHUB_API_KEY",
+        );
+
+      const staleBeforeMs =
+        Date.now() -
+        quoteStaleMinutes *
+          60 *
+          1000;
+
+      const staleRows =
+        finnhubApiKey
+          ? rows.filter(
+              (row) =>
+                isQuoteStale(
+                  row.quote_updated_at,
+                  staleBeforeMs,
+                ),
+            )
+          : [];
+
+      let quoteResults:
+        QuoteUpdate[] = [];
+
+      if (
+        finnhubApiKey &&
+        staleRows.length >
+          0
+      ) {
+        quoteResults =
+          await processInBatches(
+            staleRows,
+            QUOTE_CONCURRENCY,
+            async (
+              row,
+            ): Promise<QuoteUpdate> => {
+              try {
+                const values =
+                  await fetchQuote(
+                    row.symbol,
+                    finnhubApiKey,
+                  );
+
+                const {
+                  error:
+                    updateError,
+                } =
+                  await admin
+                    .from(
+                      "stock_screener_stocks",
+                    )
+                    .update({
+                      ...values,
+                      quote_checked_at:
+                        values
+                          .quote_updated_at,
+                      quote_error:
+                        null,
+                    })
+                    .eq(
+                      "symbol",
+                      row.symbol,
+                    );
+
+                if (
+                  updateError
+                ) {
+                  throw new Error(
+                    updateError.message,
+                  );
+                }
+
+                return {
+                  symbol:
+                    row.symbol,
+                  ok: true,
+                  error: null,
+                  values,
+                };
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Unknown quote refresh error.";
+
+                await admin
+                  .from(
+                    "stock_screener_stocks",
+                  )
+                  .update({
+                    quote_checked_at:
+                      new Date()
+                        .toISOString(),
+                    quote_error:
+                      message.slice(
+                        0,
+                        1000,
+                      ),
+                  })
+                  .eq(
+                    "symbol",
+                    row.symbol,
+                  );
+
+                return {
+                  symbol:
+                    row.symbol,
+                  ok: false,
+                  error:
+                    message,
+                  values: {},
+                };
+              }
+            },
+          );
+
+        const quoteMap =
+          new Map(
+            quoteResults
+              .filter(
+                (result) =>
+                  result.ok,
+              )
+              .map(
+                (result) => [
+                  result.symbol,
+                  result.values,
+                ],
+              ),
+          );
+
+        rows =
+          rows.map(
+            (row) => ({
+              ...row,
+              ...(
+                quoteMap.get(
+                  row.symbol,
+                ) || {}
+              ),
+            }),
+          );
+      }
+
+      const totalResults =
+        count ?? 0;
+
+      const totalPages =
+        totalResults > 0
+          ? Math.ceil(
+              totalResults /
+                pageSize,
+            )
+          : 0;
+
+      const quoteSucceeded =
+        quoteResults.filter(
+          (result) =>
+            result.ok,
+        ).length;
+
+      const quoteFailed =
+        quoteResults.filter(
+          (result) =>
+            !result.ok,
+        ).length;
+
       return jsonResponse({
-        stocks,
+        ok: true,
+        stocks:
+          rows.map(
+            toClientStock,
+          ),
+
+        /*
+         * Legacy fields kept temporarily so the existing
+         * Screener.jsx does not break before Step 5B.
+         */
         total:
-          stocks.length,
-        pageSize:
-          DISPLAY_PAGE_SIZE,
+          totalResults,
+        pageSize,
         hasMore:
-          false,
+          page <
+          totalPages,
+
+        pagination: {
+          page,
+          pageSize,
+          totalResults,
+          totalPages,
+          hasNextPage:
+            page <
+            totalPages,
+          hasPreviousPage:
+            page > 1,
+        },
+
+        sorting: {
+          sortBy:
+            sortColumn,
+          sortDirection:
+            ascending
+              ? "asc"
+              : "desc",
+        },
+
+        quoteRefresh: {
+          staleAfterMinutes:
+            quoteStaleMinutes,
+          requested:
+            staleRows.length,
+          succeeded:
+            quoteSucceeded,
+          failed:
+            quoteFailed,
+        },
+
+        coverage: {
+          fundamentalsRequired:
+            requiresFundamentals,
+          technicalsRequired:
+            requiresTechnicals,
+          quoteCacheRequired:
+            activeFilterKeys.some(
+              (filterKey) =>
+                quoteFilterKeys.has(
+                  filterKey,
+                ),
+            ),
+        },
       });
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unknown database screener error.";
+
       console.error(
-        "stock-screener error:",
+        "stock-screener:",
         error,
       );
 
       return jsonResponse(
         {
+          ok: false,
           error:
-            "Unable to generate stock screener results",
+            message,
         },
         500,
       );
