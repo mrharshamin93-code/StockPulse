@@ -1,3 +1,7 @@
+import {
+  createClient,
+} from "npm:@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
 
@@ -58,6 +62,107 @@ function escapeHtml(
     .replaceAll("'", "&#039;");
 }
 
+async function getAuthenticatedUser(
+  request: Request,
+) {
+  const authorization =
+    request.headers.get(
+      "Authorization",
+    );
+
+  if (
+    !authorization?.startsWith(
+      "Bearer ",
+    )
+  ) {
+    return {
+      email: "",
+      userId: "",
+    };
+  }
+
+  const accessToken =
+    authorization
+      .slice("Bearer ".length)
+      .trim();
+
+  if (!accessToken) {
+    return {
+      email: "",
+      userId: "",
+    };
+  }
+
+  const supabaseUrl =
+    Deno.env.get(
+      "SUPABASE_URL",
+    );
+
+  const supabaseAnonKey =
+    Deno.env.get(
+      "SUPABASE_ANON_KEY",
+    );
+
+  if (
+    !supabaseUrl ||
+    !supabaseAnonKey
+  ) {
+    console.error(
+      "Supabase function environment is missing.",
+    );
+
+    return {
+      email: "",
+      userId: "",
+    };
+  }
+
+  const supabase =
+    createClient(
+      supabaseUrl,
+      supabaseAnonKey,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      },
+    );
+
+  const {
+    data,
+    error,
+  } =
+    await supabase.auth
+      .getUser(accessToken);
+
+  if (error || !data.user) {
+    console.warn(
+      "Unable to identify support user:",
+      error?.message,
+    );
+
+    return {
+      email: "",
+      userId: "",
+    };
+  }
+
+  return {
+    email:
+      cleanText(
+        data.user.email,
+        320,
+      ),
+
+    userId:
+      cleanText(
+        data.user.id,
+        100,
+      ),
+  };
+}
+
 Deno.serve(
   async (
     request: Request,
@@ -95,7 +200,6 @@ Deno.serve(
         await request
           .json()
           .catch(() => null) as {
-            email?: unknown;
             subject?: unknown;
             message?: unknown;
             website?: unknown;
@@ -118,12 +222,6 @@ Deno.serve(
         });
       }
 
-      const email =
-        cleanText(
-          body?.email,
-          320,
-        );
-
       const subject =
         cleanText(
           body?.subject,
@@ -135,18 +233,6 @@ Deno.serve(
           body?.message,
           MAX_MESSAGE_LENGTH,
         );
-
-      if (!isValidEmail(email)) {
-        return jsonResponse(
-          {
-            success: false,
-
-            error:
-              "Enter a valid email address.",
-          },
-          400,
-        );
-      }
 
       if (
         subject.length < 3
@@ -211,8 +297,26 @@ Deno.serve(
         );
       }
 
-      const safeEmail =
-        escapeHtml(email);
+      const authenticatedUser =
+        await getAuthenticatedUser(
+          request,
+        );
+
+      const senderEmail =
+        isValidEmail(
+          authenticatedUser.email,
+        )
+          ? authenticatedUser.email
+          : "";
+
+      const senderLabel =
+        senderEmail ||
+        "Anonymous visitor";
+
+      const safeSender =
+        escapeHtml(
+          senderLabel,
+        );
 
       const safeSubject =
         escapeHtml(subject);
@@ -236,6 +340,68 @@ Deno.serve(
           500,
         );
 
+      const resendPayload:
+        Record<
+          string,
+          unknown
+        > = {
+          from:
+            supportFromEmail,
+
+          to: [
+            supportEmail,
+          ],
+
+          subject:
+            `[StockPulse Support] ${subject}`,
+
+          text: [
+            `Sender: ${senderLabel}`,
+            `User ID: ${authenticatedUser.userId || "Not signed in"}`,
+            `Subject: ${subject}`,
+            `Submitted: ${submittedAt}`,
+            `User agent: ${userAgent || "Not provided"}`,
+            "",
+            message,
+          ].join("\n"),
+
+          html: `
+            <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+              <h2 style="margin-bottom:16px">
+                StockPulse Support Message
+              </h2>
+
+              <p>
+                <strong>Sender:</strong>
+                ${safeSender}
+              </p>
+
+              <p>
+                <strong>Subject:</strong>
+                ${safeSubject}
+              </p>
+
+              <p>
+                <strong>Submitted:</strong>
+                ${submittedAt}
+              </p>
+
+              <hr style="margin:24px 0;border:0;border-top:1px solid #e5e7eb" />
+
+              <p>${safeMessage}</p>
+            </div>
+          `,
+        };
+
+      /*
+       * Replies go directly to the signed-in
+       * user's email when one is available.
+       */
+      if (senderEmail) {
+        resendPayload.reply_to =
+          senderEmail;
+      }
+
       const resendResponse =
         await fetch(
           "https://api.resend.com/emails",
@@ -254,54 +420,9 @@ Deno.serve(
             },
 
             body:
-              JSON.stringify({
-                from:
-                  supportFromEmail,
-
-                to: [
-                  supportEmail,
-                ],
-
-                reply_to:
-                  email,
-
-                subject:
-                  `[StockPulse Support] ${subject}`,
-
-                text: [
-                  `From: ${email}`,
-                  `Subject: ${subject}`,
-                  `Submitted: ${submittedAt}`,
-                  `User agent: ${userAgent || "Not provided"}`,
-                  "",
-                  message,
-                ].join("\n"),
-
-                html: `
-                  <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
-                    <h2 style="margin-bottom:16px">StockPulse Support Message</h2>
-
-                    <p>
-                      <strong>From:</strong>
-                      ${safeEmail}
-                    </p>
-
-                    <p>
-                      <strong>Subject:</strong>
-                      ${safeSubject}
-                    </p>
-
-                    <p>
-                      <strong>Submitted:</strong>
-                      ${submittedAt}
-                    </p>
-
-                    <hr style="margin:24px 0;border:0;border-top:1px solid #e5e7eb" />
-
-                    <p>${safeMessage}</p>
-                  </div>
-                `,
-              }),
+              JSON.stringify(
+                resendPayload,
+              ),
           },
         );
 
