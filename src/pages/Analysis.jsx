@@ -165,20 +165,22 @@ function EmptyStateHero({
 
       <form
         onSubmit={onSubmit}
-        className="relative mt-8 w-full max-w-3xl"
+        className="mt-8 w-full max-w-3xl"
       >
-        <div className="flex min-h-[60px] items-center rounded-[22px] border border-gray-200 bg-white p-1.5 shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
-          <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
-
+        <div className="flex w-full items-stretch gap-3">
           <div className="relative min-w-0 flex-1">
-            <Input
-              placeholder="Enter Ticker"
-              value={query}
-              onChange={onQueryChange}
-              className="h-12 border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
-              autoComplete="off"
-              autoCorrect="off"
-            />
+            <div className="flex h-[60px] items-center rounded-[22px] border border-gray-200 bg-white shadow-[0_12px_35px_rgba(15,23,42,0.08)]">
+              <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
+
+              <Input
+                placeholder="Enter Ticker"
+                value={query}
+                onChange={onQueryChange}
+                className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
+                autoComplete="off"
+                autoCorrect="off"
+              />
+            </div>
 
             {showSuggestions &&
               suggestions.length >
@@ -221,7 +223,7 @@ function EmptyStateHero({
             disabled={
               isLoading
             }
-            className="h-12 shrink-0 rounded-2xl bg-black px-6 text-sm font-semibold text-white hover:bg-gray-800 disabled:bg-gray-400"
+            className="h-[60px] shrink-0 rounded-[22px] bg-black px-5 text-sm font-semibold text-white hover:bg-gray-800 disabled:bg-gray-400 sm:px-6"
           >
             Analyze
             <Sparkles className="ml-1.5 h-4 w-4" />
@@ -739,17 +741,15 @@ export default function Analysis() {
       }}
     >
       <header
-        className="sticky top-0 z-10 border-b border-gray-100 bg-white/95 backdrop-blur-xl"
+        className="sticky top-0 z-10 border-b border-gray-200 bg-background"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
         }}
       >
         <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-1.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-gray-900" />
 
             <h1 className="font-heading text-2xl font-bold tracking-tight text-black">
               Analysis
@@ -824,78 +824,82 @@ export default function Analysis() {
                 onSubmit={
                   handleSubmit
                 }
-                className="relative w-full"
+                className="w-full"
               >
-                <div className="flex min-h-[54px] items-center rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
-                  <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
+                <div className="flex w-full items-stretch gap-3">
+                  <div className="relative min-w-0 flex-1">
+                    <div className="flex h-[54px] items-center rounded-2xl border border-gray-200 bg-white shadow-sm">
+                      <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
 
-                  <Input
-                    placeholder="Enter Ticker"
-                    value={query}
-                    onChange={(
-                      event,
-                    ) => {
-                      setQuery(
-                        event.target
-                          .value,
-                      );
+                      <Input
+                        placeholder="Enter Ticker"
+                        value={query}
+                        onChange={(
+                          event,
+                        ) => {
+                          setQuery(
+                            event.target
+                              .value,
+                          );
 
-                      setError("");
+                          setError("");
 
-                      setShowSuggestions(
-                        true,
-                      );
-                    }}
-                    className="h-11 flex-1 border-0 bg-transparent px-3 uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
-                    autoComplete="off"
-                    autoCorrect="off"
-                  />
+                          setShowSuggestions(
+                            true,
+                          );
+                        }}
+                        className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
+                        autoComplete="off"
+                        autoCorrect="off"
+                      />
+                    </div>
+
+                    {showSuggestions &&
+                      suggestions.length >
+                        0 && (
+                        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
+                          {suggestions.map(
+                            (stock) => (
+                              <button
+                                key={
+                                  stock.ticker
+                                }
+                                type="button"
+                                onClick={() =>
+                                  handleSuggestionSelect(
+                                    stock,
+                                  )
+                                }
+                                className="w-full border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50"
+                              >
+                                <p className="text-sm font-semibold text-black">
+                                  {
+                                    stock.ticker
+                                  }
+                                </p>
+
+                                <p className="text-xs text-gray-500">
+                                  {
+                                    stock.name
+                                  }
+                                </p>
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      )}
+                  </div>
 
                   <Button
                     type="submit"
                     disabled={
                       isLoading
                     }
-                    className="h-11 rounded-xl bg-black px-5 text-white hover:bg-gray-800 disabled:bg-gray-400"
+                    className="h-[54px] shrink-0 rounded-2xl bg-black px-5 text-white hover:bg-gray-800 disabled:bg-gray-400"
                   >
                     Analyze
                   </Button>
                 </div>
-
-                {showSuggestions &&
-                  suggestions.length >
-                    0 && (
-                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-xl">
-                      {suggestions.map(
-                        (stock) => (
-                          <button
-                            key={
-                              stock.ticker
-                            }
-                            type="button"
-                            onClick={() =>
-                              handleSuggestionSelect(
-                                stock,
-                              )
-                            }
-                            className="w-full border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50"
-                          >
-                            <p className="text-sm font-semibold text-black">
-                              {
-                                stock.ticker
-                              }
-                            </p>
-
-                            <p className="text-xs text-gray-500">
-                              {
-                                stock.name
-                              }
-                            </p>
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  )}
 
                 {error && (
                   <p className="mt-2 text-sm text-red-600">
