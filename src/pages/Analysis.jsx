@@ -5,7 +5,6 @@ import React, {
   useState,
 } from "react";
 import {
-  ArrowLeft,
   Database,
   Loader2,
   Newspaper,
@@ -698,36 +697,6 @@ export default function Analysis() {
       );
     };
 
-  const handleBackToAnalysis =
-    () => {
-      requestId.current +=
-        1;
-
-      autoRunTicker.current =
-        "";
-
-      setQuery("");
-      setError("");
-      setAnalysis(null);
-      setNews(null);
-      setQuote(null);
-      setActiveTicker("");
-      setActiveCompany("");
-      setShowSuggestions(
-        false,
-      );
-      setLoadingInsights(
-        false,
-      );
-      setLoadingNews(false);
-
-      window.scrollTo({
-        top: 0,
-        behavior:
-          "smooth",
-      });
-    };
-
   const isLoading =
     loadingInsights ||
     loadingNews;
@@ -851,17 +820,6 @@ export default function Analysis() {
         {!loadingInsights &&
           analysis && (
             <div className="mx-auto max-w-4xl space-y-6 py-3">
-              <button
-                type="button"
-                onClick={
-                  handleBackToAnalysis
-                }
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl px-1 text-sm font-semibold text-gray-700 transition-colors hover:text-black"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Analysis
-              </button>
-
               <form
                 onSubmit={
                   handleSubmit
@@ -964,15 +922,17 @@ export default function Analysis() {
                   </div>
 
                   <Button
+                    type="button"
                     variant="ghost"
-                    size="sm"
+                    size="icon"
                     onClick={
                       handleRefresh
                     }
-                    className="shrink-0 gap-1.5 text-gray-600"
+                    aria-label="Refresh analysis"
+                    title="Refresh analysis"
+                    className="shrink-0 text-gray-600"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Refresh
+                    <RefreshCw className="h-4 w-4" />
                   </Button>
                 </div>
 
