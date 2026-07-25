@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
-import { App } from "@c:contentReference[oaicite:0]{index=0}apacitor/browser";
+import { App } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
 
 import { supabase } from "@/lib/supabase";
 
