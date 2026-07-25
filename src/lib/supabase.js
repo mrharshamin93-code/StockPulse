@@ -11,49 +11,59 @@ const isOAuthCallback =
   window.location.pathname ===
     "/auth/callback";
 
-if (!supabaseUrl || !supabaseAnonKey) {
+if (
+  !supabaseUrl ||
+  !supabaseAnonKey
+) {
   throw new Error(
     "Missing Supabase environment variables. " +
-      "Check VITE_SUPABASE_URL and " +
-      "VITE_SUPABASE_ANON_KEY in Vercel."
+      "Set VITE_SUPABASE_URL and " +
+      "VITE_SUPABASE_ANON_KEY for this build.",
   );
 }
 
-export const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      /*
-       * Keep the user signed in across page reloads
-       * and mobile browser restarts.
-       */
-      persistSession: true,
+export const supabase =
+  createClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      auth: {
+        /*
+         * Keep the user signed in across
+         * browser refreshes and native app
+         * restarts.
+         */
+        persistSession: true,
 
-      /*
-       * Refresh expired access tokens automatically.
-       */
-      autoRefreshToken: true,
+        /*
+         * Refresh expired access tokens
+         * automatically.
+         */
+        autoRefreshToken: true,
 
-      /*
-       * The dedicated callback page exchanges the
-       * one-use OAuth code exactly once. Keeping this
-       * disabled avoids racing the callback component.
-       */
-      detectSessionInUrl: false,
+        /*
+         * OAuth callbacks are handled
+         * explicitly by StockPulse.
+         */
+        detectSessionInUrl: false,
 
-      /*
-       * On the callback page, exchange the new PKCE code
-       * before attempting to recover an older session.
-       * A normal page load still initializes automatically.
-       */
-      skipAutoInitialize:
-        isOAuthCallback,
+        /*
+         * On the web OAuth callback page,
+         * exchange the PKCE code before
+         * recovering an older session.
+         *
+         * Normal web and Capacitor launches
+         * initialize the saved session
+         * automatically.
+         */
+        skipAutoInitialize:
+          isOAuthCallback,
 
-      /*
-       * Use the OAuth authorization-code PKCE flow.
-       */
-      flowType: "pkce",
+        /*
+         * Use OAuth authorization-code
+         * PKCE flow on web and native.
+         */
+        flowType: "pkce",
+      },
     },
-  }
-);
+  );
