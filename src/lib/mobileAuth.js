@@ -7,6 +7,9 @@ import { supabase } from "@/lib/supabase";
 export const IOS_AUTH_CALLBACK =
   "com.stockpulse.app://auth/callback";
 
+export const IOS_RESET_PASSWORD_URL =
+  "com.stockpulse.app://reset-password";
+
 export function isNativeApp() {
   return Capacitor.isNativePlatform();
 }
@@ -22,26 +25,14 @@ export function getAuthCallbackUrl() {
 export async function signInWithGoogle() {
   const native = isNativeApp();
 
-  const {
-    data,
-    error,
-  } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-
-    options: {
-      redirectTo: getAuthCallbackUrl(),
-
-      /*
-       * Web:
-       * Supabase redirects the current browser automatically.
-       *
-       * iOS:
-       * We need the OAuth URL so Capacitor can open
-       * the system browser ourselves.
-       */
-      skipBrowserRedirect: native,
-    },
-  });
+  const { data, error } =
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: getAuthCallbackUrl(),
+        skipBrowserRedirect: native,
+      },
+    });
 
   if (error) {
     throw error;
@@ -60,6 +51,42 @@ export async function signInWithGoogle() {
   }
 }
 
+function getNativePath(url) {
+  if (!url) {
+    return null;
+  }
+
+  if (
+    url.startsWith(
+      IOS_RESET_PASSWORD_URL,
+    )
+  ) {
+    const incomingUrl =
+      new URL(url);
+
+    return {
+      type: "reset-password",
+      search:
+        incomingUrl.search || "",
+      hash:
+        incomingUrl.hash || "",
+    };
+  }
+
+  if (
+    url.startsWith(
+      IOS_AUTH_CALLBACK,
+    )
+  ) {
+    return {
+      type: "auth-callback",
+      url,
+    };
+  }
+
+  return null;
+}
+
 let nativeAuthListener = null;
 let handlingNativeCallback = false;
 
@@ -76,12 +103,21 @@ export async function initializeNativeAuth() {
     await App.addListener(
       "appUrlOpen",
       async ({ url }) => {
+        const nativePath =
+          getNativePath(url);
+
+        if (!nativePath) {
+          return;
+        }
+
         if (
-          !url ||
-          !url.startsWith(
-            IOS_AUTH_CALLBACK,
-          )
+          nativePath.type ===
+          "reset-password"
         ) {
+          window.location.replace(
+            `/reset-password${nativePath.search}${nativePath.hash}`,
+          );
+
           return;
         }
 
@@ -97,7 +133,9 @@ export async function initializeNativeAuth() {
           );
 
           const callbackUrl =
-            new URL(url);
+            new URL(
+              nativePath.url,
+            );
 
           const errorDescription =
             callbackUrl.searchParams.get(
@@ -145,10 +183,6 @@ export async function initializeNativeAuth() {
             );
           }
 
-          /*
-           * The Capacitor WebView is still sitting on the
-           * Login/Register page. Move it into the signed-in app.
-           */
           window.location.replace(
             "/",
           );
