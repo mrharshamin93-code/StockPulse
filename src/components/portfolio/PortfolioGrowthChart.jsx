@@ -365,61 +365,6 @@ async function fetchTickerHistory({
     );
 }
 
-  const payload =
-    await response
-      .json()
-      .catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(
-      payload?.error ||
-        `Unable to load ${ticker} history`,
-    );
-  }
-
-  const candles =
-    Array.isArray(
-      payload?.candles,
-    )
-      ? payload.candles
-      : [];
-
-  return candles
-    .map((candle) => {
-      const timestamp =
-        getValidNumber(
-          candle?.t,
-        );
-
-      const close =
-        getValidNumber(
-          candle?.v ??
-            candle?.c,
-        );
-
-      if (
-        timestamp === null ||
-        close === null ||
-        close <= 0
-      ) {
-        return null;
-      }
-
-      return {
-        timestamp:
-          Math.floor(
-            timestamp,
-          ),
-        price: close,
-      };
-    })
-    .filter(Boolean)
-    .sort(
-      (a, b) =>
-        a.timestamp -
-        b.timestamp,
-    );
-}
 
 async function fetchHistories({
   holdings,
