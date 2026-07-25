@@ -19,6 +19,9 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
+import {
+  finnhubRequest,
+} from "@/lib/finnhub";
 import { POPULAR_TICKERS } from "@/lib/tickers";
 import bullImage from "@/assets/StockPulse.png";
 
@@ -31,28 +34,14 @@ const POPULAR_SEARCHES = [
   "TSLA",
 ];
 
-async function fetchFinnhub(action, ticker) {
-  const params = new URLSearchParams({
+async function fetchFinnhub(
+  action,
+  ticker,
+) {
+  return finnhubRequest({
     action,
     ticker,
   });
-
-  const response = await fetch(
-    `/api/finnhub?${params.toString()}`,
-  );
-
-  const payload = await response
-    .json()
-    .catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(
-      payload?.error ||
-        `Unable to load ${action}`,
-    );
-  }
-
-  return payload;
 }
 
 function isValidAnalysis(result) {
