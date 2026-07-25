@@ -9,8 +9,8 @@ import React, {
 
 import { useAuth } from "@/lib/AuthContext";
 import {
-  getFinnhubApiUrl,
-} from "@/lib/api";
+  getQuotes,
+} from "@/lib/finnhub";
 
 const QUOTE_TTL_MS =
   15000;
@@ -108,32 +108,10 @@ export function MarketDataProvider({
           return {};
         }
 
-        const params =
-          new URLSearchParams({
-            action:
-              "quotes",
-
-            tickers:
-              normalizedTickers.join(
-                ",",
-              ),
-          });
-
-        const response =
-          await fetch(
-            getFinnhubApiUrl(
-              params,
-            ),
-          );
-
-        if (!response.ok) {
-          throw new Error(
-            `Finnhub quotes request failed with status ${response.status}`,
-          );
-        }
-
         const data =
-          await response.json();
+          await getQuotes(
+            normalizedTickers,
+          );
 
         const incomingQuotes =
           Array.isArray(
@@ -237,7 +215,9 @@ export function MarketDataProvider({
             quoteCacheRef.current[
               ticker
             ] = {
-              data: quote,
+              data:
+                quote,
+
               fetchedAt:
                 now,
             };
@@ -503,7 +483,8 @@ export function MarketDataProvider({
         return fetchTickers(
           requestedTickers,
           {
-            force: true,
+            force:
+              true,
           },
         );
       },
@@ -520,7 +501,8 @@ export function MarketDataProvider({
         return fetchTickers(
           tickers,
           {
-            force: false,
+            force:
+              false,
           },
         );
       },
