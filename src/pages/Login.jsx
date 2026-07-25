@@ -1,9 +1,8 @@
-import React, {
-  useState,
-} from "react";
+import React, { useEffect, useState } from "react";
 import {
   Link,
   useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 import {
   BarChart3,
@@ -11,13 +10,23 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import {
+  isNativeApp,
+  signInWithGoogle,
+} from "@/lib/mobileAuth";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function Login() {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
+
+  const [searchParams] =
+    useSearchParams();
+
+  const nativeApp =
+    isNativeApp();
 
   const [email, setEmail] =
     useState("");
@@ -37,6 +46,19 @@ export default function Login() {
 
   const [error, setError] =
     useState("");
+
+  /*
+   * Native OAuth errors are sent back to the
+   * login screen by mobileAuth.js.
+   */
+  useEffect(() => {
+    const callbackError =
+      searchParams.get("error");
+
+    if (callbackError) {
+      setError(callbackError);
+    }
+  }, [searchParams]);
 
   const handleSubmit =
     async (event) => {
@@ -103,62 +125,91 @@ export default function Login() {
 
   const handleGoogleLogin =
     async () => {
+      if (oauthLoading) {
+        return;
+      }
+
       setError("");
+
       setOauthLoading(
         "google",
       );
 
-      const {
-        error:
+      try {
+        await signInWithGoogle();
+
+        /*
+         * Web OAuth redirects away from this
+         * page immediately.
+         *
+         * Native OAuth leaves the app open
+         * while the system browser handles
+         * authentication. The appUrlOpen
+         * listener in mobileAuth.js completes
+         * the login afterward.
+         */
+        if (nativeApp) {
+          setOauthLoading("");
+        }
+      } catch (oauthError) {
+        console.error(
+          "Google sign-in failed:",
           oauthError,
-      } =
-        await supabase.auth
-          .signInWithOAuth({
-            provider:
-              "google",
+        );
 
-            options: {
-              redirectTo:
-                `${window.location.origin}/auth/callback`,
-            },
-          });
-
-      if (oauthError) {
         setError(
-          oauthError.message ||
-            "Google sign-in failed",
+          oauthError instanceof Error
+            ? oauthError.message
+            : "Google sign-in failed.",
         );
 
         setOauthLoading("");
       }
     };
 
+  /*
+   * Apple remains web-only until the native
+   * Apple Developer configuration is ready.
+   */
   const handleAppleLogin =
     async () => {
+      if (
+        nativeApp ||
+        oauthLoading
+      ) {
+        return;
+      }
+
       setError("");
+
       setOauthLoading(
         "apple",
       );
 
-      const {
-        error:
-          oauthError,
-      } =
-        await supabase.auth
-          .signInWithOAuth({
-            provider:
-              "apple",
+      try {
+        const {
+          error:
+            oauthError,
+        } =
+          await supabase.auth
+            .signInWithOAuth({
+              provider:
+                "apple",
 
-            options: {
-              redirectTo:
-                `${window.location.origin}/auth/callback`,
-            },
-          });
+              options: {
+                redirectTo:
+                  `${window.location.origin}/auth/callback`,
+              },
+            });
 
-      if (oauthError) {
+        if (oauthError) {
+          throw oauthError;
+        }
+      } catch (oauthError) {
         setError(
-          oauthError.message ||
-            "Apple sign-in failed",
+          oauthError instanceof Error
+            ? oauthError.message
+            : "Apple sign-in failed.",
         );
 
         setOauthLoading("");
@@ -250,39 +301,41 @@ export default function Login() {
             </span>
           </Button>
 
-          <Button
-            variant="outline"
-            className="flex h-11 w-full items-center justify-center gap-3 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
-            onClick={
-              handleAppleLogin
-            }
-            type="button"
-            disabled={
-              loading ||
-              oauthLoading !==
-                ""
-            }
-          >
-            {oauthLoading ===
-            "apple" ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-            ) : (
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-visible">
-                <svg
-                  className="block h-4 w-4 overflow-visible fill-current"
-                  viewBox="0 0 24 28"
-                  aria-hidden="true"
-                  preserveAspectRatio="xMidYMid meet"
-                >
-                  <path d="M17.05 14.536c-.03-3.223 2.633-4.773 2.754-4.847-1.5-2.19-3.826-2.49-4.644-2.523-1.978-.2-3.86 1.164-4.864 1.164-1.003 0-2.55-1.135-4.195-1.104-2.158.032-4.15 1.256-5.26 3.193-2.246 3.89-.572 9.641 1.614 12.798 1.07 1.553 2.347 3.297 4.02 3.235 1.612-.064 2.22-1.043 4.167-1.043 1.946 0 2.493 1.043 4.196 1.01 1.734-.03 2.83-1.57 3.89-3.128 1.23-1.796 1.736-3.537 1.766-3.628-.038-.012-3.39-1.3-3.424-5.127zM13.87 5.89c.888-1.077 1.488-2.574 1.324-4.07-1.28.052-2.83.853-3.748 1.93-.823.95-1.544 2.47-1.35 3.925 1.43.11 2.886-.727 3.774-1.785z" />
-                </svg>
-              </span>
-            )}
+          {!nativeApp ? (
+            <Button
+              variant="outline"
+              className="flex h-11 w-full items-center justify-center gap-3 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
+              onClick={
+                handleAppleLogin
+              }
+              type="button"
+              disabled={
+                loading ||
+                oauthLoading !==
+                  ""
+              }
+            >
+              {oauthLoading ===
+              "apple" ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              ) : (
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-visible">
+                  <svg
+                    className="block h-4 w-4 overflow-visible fill-current"
+                    viewBox="0 0 24 28"
+                    aria-hidden="true"
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <path d="M17.05 14.536c-.03-3.223 2.633-4.773 2.754-4.847-1.5-2.19-3.826-2.49-4.644-2.523-1.978-.2-3.86 1.164-4.864 1.164-1.003 0-2.55-1.135-4.195-1.104-2.158.032-4.15 1.256-5.26 3.193-2.246 3.89-.572 9.641 1.614 12.798 1.07 1.553 2.347 3.297 4.02 3.235 1.612-.064 2.22-1.043 4.167-1.043 1.946 0 2.493 1.043 4.196 1.01 1.734-.03 2.83-1.57 3.89-3.128 1.23-1.796 1.736-3.537 1.766-3.628-.038-.012-3.39-1.3-3.424-5.127zM13.87 5.89c.888-1.077 1.488-2.574 1.324-4.07-1.28.052-2.83.853-3.748 1.93-.823.95-1.544 2.47-1.35 3.925 1.43.11 2.886-.727 3.774-1.785z" />
+                  </svg>
+                </span>
+              )}
 
-            <span>
-              Continue with Apple
-            </span>
-          </Button>
+              <span>
+                Continue with Apple
+              </span>
+            </Button>
+          ) : null}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
