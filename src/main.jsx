@@ -12,12 +12,29 @@ import {
   initializeNativeAuth,
 } from "@/lib/mobileAuth";
 
+import {
+  installNativeApiFetchBridge,
+} from "@/lib/api";
+
+/*
+ * Install the API bridge before React renders.
+ *
+ * Website:
+ * No change. Requests such as /api/finnhub continue
+ * using the current Vercel origin.
+ *
+ * Capacitor iOS:
+ * /api requests are automatically routed through:
+ * https://stock-pulse-rouge.vercel.app
+ */
+installNativeApiFetchBridge();
+
 initTheme();
 
 /*
  * On web this immediately does nothing.
  * Inside the Capacitor iOS app it starts listening
- * for OAuth/deep-link callbacks.
+ * for OAuth and password-reset deep links.
  */
 initializeNativeAuth().catch(
   (error) => {
