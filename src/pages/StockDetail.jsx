@@ -27,6 +27,9 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
+import {
+  finnhubRequest,
+} from "@/lib/finnhub";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -182,31 +185,22 @@ async function finnhubProxy(
   body,
   signal,
 ) {
-  const response = await fetch(
-    "/api/finnhub",
-    {
-      method: "POST",
+  if (signal?.aborted) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+  }
 
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
+  const payload =
+    await finnhubRequest(
+      body,
+    );
 
-      body:
-        JSON.stringify(body),
-
-      signal,
-    },
-  );
-
-  const payload = await response
-    .json()
-    .catch(() => null);
-
-  if (!response.ok) {
-    throw new Error(
-      payload?.error ||
-        `API request failed with status ${response.status}`,
+  if (signal?.aborted) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError",
     );
   }
 
