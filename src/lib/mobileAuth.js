@@ -7,9 +7,6 @@ import { supabase } from "@/lib/supabase";
 export const IOS_AUTH_CALLBACK =
   "com.stockpulse.app://auth/callback";
 
-export const IOS_CONFIRM_EMAIL_URL =
-  "com.stockpulse.app://auth/confirm";
-
 export const IOS_RESET_PASSWORD_URL =
   "com.stockpulse.app://reset-password";
 
@@ -23,14 +20,6 @@ export function getAuthCallbackUrl() {
   }
 
   return `${window.location.origin}/auth/callback`;
-}
-
-export function getEmailConfirmationUrl() {
-  if (isNativeApp()) {
-    return IOS_CONFIRM_EMAIL_URL;
-  }
-
-  return `${window.location.origin}/auth/confirm`;
 }
 
 export async function signInWithGoogle() {
@@ -115,10 +104,6 @@ async function handleNativeUrl(
     return;
   }
 
-  /*
-   * Prevent the same cold-start URL from being
-   * handled by both getLaunchUrl() and appUrlOpen.
-   */
   if (url === lastHandledUrl) {
     return;
   }
@@ -138,24 +123,6 @@ async function handleNativeUrl(
 
     window.location.replace(
       `/reset-password${search}${hash}`,
-    );
-
-    return;
-  }
-
-  if (
-    url.startsWith(
-      IOS_CONFIRM_EMAIL_URL,
-    )
-  ) {
-    const {
-      search,
-      hash,
-    } =
-      getUrlParts(url);
-
-    window.location.replace(
-      `/auth/confirm${search}${hash}`,
     );
 
     return;
@@ -270,14 +237,6 @@ export async function initializeNativeAuth() {
       },
     );
 
-  /*
-   * appUrlOpen handles links received while
-   * StockPulse is running.
-   *
-   * getLaunchUrl handles the case where the
-   * app was completely closed when the user
-   * tapped the email/OAuth link.
-   */
   const launchData =
     await App.getLaunchUrl();
 
