@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
+import { finnhubRequest } from "@/lib/finnhub";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,26 +160,20 @@ function getCompanyName(ticker, stock, item) {
 }
 
 async function finnhub(body, signal) {
-  const response = await fetch(
-    "/api/finnhub",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      signal,
-    },
-  );
+  if (signal?.aborted) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+  }
 
-  const payload = await response
-    .json()
-    .catch(() => null);
+  const payload =
+    await finnhubRequest(body);
 
-  if (!response.ok) {
-    throw new Error(
-      payload?.error ||
-        `Market-data request failed with status ${response.status}`,
+  if (signal?.aborted) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError",
     );
   }
 
@@ -2659,7 +2654,9 @@ export default function Watchlist() {
       <button
         type="button"
         aria-label="Add stock to watchlist"
-        onClick={() => setAddDialogOpen(true)}
+        onClick={() =>
+          setAddDialogOpen(true)
+        }
         className="fixed left-1/2 z-50 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border border-white/60 bg-white/80 shadow-lg backdrop-blur-md transition-transform active:scale-95"
         style={{
           bottom:
