@@ -901,7 +901,7 @@ export default function Analysis() {
                 </p>
 
                 <p className="mt-3 text-[10px] text-gray-400">
-                  AI-generated insights · Not financial advice · For informational purposes only
+                · Not financial advice
                 </p>
               </div>
 
