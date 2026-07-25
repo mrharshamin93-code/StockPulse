@@ -32,7 +32,8 @@
     --font-heading: ui-sans-serif, system-ui, sans-serif;
     --font-body: ui-sans-serif, system-ui, sans-serif;
     --font-display: ui-sans-serif, system-ui, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -79,8 +80,6 @@
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -93,7 +92,9 @@
     overscroll-behavior-y: none;
   }
 
-  button, a, [role="button"] {
+  button,
+  a,
+  [role="button"] {
     user-select: none;
     -webkit-user-select: none;
   }
@@ -105,11 +106,24 @@
   }
 }
 
+/*
+ * Apple recommends a minimum touch target of 44 × 44 points.
+ *
+ * This increases the tappable area of every back button that uses
+ * Lucide's ArrowLeft icon without increasing the visible icon size.
+ */
+button:has(> .lucide-arrow-left),
+a:has(> .lucide-arrow-left) {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 /* Hide scrollbars on horizontal scroll areas */
 .overflow-x-auto::-webkit-scrollbar,
 [class*="overflow-x"]::-webkit-scrollbar {
   display: none;
 }
+
 .overflow-x-auto,
 [class*="overflow-x"] {
   -ms-overflow-style: none;
@@ -164,8 +178,14 @@
   border-color: hsl(var(--border));
 }
 
-:root[data-stockpulse-theme] .divide-gray-50 > :not([hidden]) ~ :not([hidden]),
-:root[data-stockpulse-theme] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+:root[data-stockpulse-theme]
+  .divide-gray-50
+  > :not([hidden])
+  ~ :not([hidden]),
+:root[data-stockpulse-theme]
+  .divide-gray-100
+  > :not([hidden])
+  ~ :not([hidden]) {
   border-color: hsl(var(--border));
 }
 
