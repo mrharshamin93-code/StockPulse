@@ -12,11 +12,19 @@ import {
 import {
   passwordRecoverySupabase,
 } from "@/lib/passwordRecoverySupabase";
+import {
+  IOS_RESET_PASSWORD_URL,
+  isNativeApp,
+} from "@/lib/mobileAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 function getResetRedirectUrl() {
+  if (isNativeApp()) {
+    return IOS_RESET_PASSWORD_URL;
+  }
+
   return new URL(
     "/reset-password",
     window.location.origin,
@@ -123,8 +131,9 @@ export default function ForgotPassword() {
       }
 
       /*
-       * Keep the response generic so the page does not
-       * reveal whether the email address is registered.
+       * Keep the response generic so the page
+       * does not reveal whether the email
+       * address is registered.
        */
       setSent(true);
     } catch (
@@ -193,11 +202,13 @@ export default function ForgotPassword() {
                 <span className="font-medium text-gray-900">
                   {email.trim()}
                 </span>
-                , you&apos;ll receive a password reset link shortly.
+                , you&apos;ll receive a
+                password reset link shortly.
               </p>
 
               <p className="mt-2 text-xs leading-5 text-gray-400">
-                Check your spam folder if the email does not appear.
+                Check your spam folder if
+                the email does not appear.
               </p>
 
               <Button
