@@ -18,7 +18,6 @@ import {
 import { supabase } from "@/lib/supabase";
 
 import {
-  getEmailConfirmationUrl,
   isNativeApp,
   signInWithGoogle,
 } from "@/lib/mobileAuth";
@@ -130,6 +129,7 @@ export default function Register() {
             .toLowerCase();
 
         const {
+          data,
           error:
             signUpError,
         } =
@@ -139,23 +139,20 @@ export default function Register() {
                 normalizedEmail,
 
               password,
-
-              options: {
-                emailRedirectTo:
-                  getEmailConfirmationUrl(),
-              },
             });
 
         if (signUpError) {
           throw signUpError;
         }
 
-        window.alert(
-          "Account created! Please check your email to confirm your account.",
-        );
+        if (!data?.session?.user) {
+          throw new Error(
+            "Account created, but no login session was returned. Make sure Confirm email is disabled in Supabase.",
+          );
+        }
 
         navigate(
-          "/login",
+          "/",
           {
             replace: true,
           },
