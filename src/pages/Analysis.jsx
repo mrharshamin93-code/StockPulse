@@ -900,7 +900,7 @@ export default function Analysis() {
                   {analysis.summary}
                 </p>
 
-                <p className="mt-3 text-[10px] text-gray-400">
+                <p className="mt-3 text-[10px] text-gray-300">
                 · Not financial advice
                 </p>
               </div>
