@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * Shared sub-page header with a centered title and
- * the same minimal back button used on Stock Detail.
+ * a minimum 44 × 44 point iPhone-friendly back-button touch target.
  *
  * @param {string} title - Page title shown in the center.
  * @param {string} [backPath] - Optional route to navigate to.
@@ -37,7 +37,7 @@ export default function SubPageHeader({
           type="button"
           onClick={handleBack}
           aria-label="Go back"
-          className="inline-flex min-h-[36px] min-w-[64px] items-center gap-1.5 px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
+          className="inline-flex min-h-[44px] min-w-[64px] items-center gap-1.5 px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
         >
           <ArrowLeft
             className="h-4 w-4 shrink-0"
