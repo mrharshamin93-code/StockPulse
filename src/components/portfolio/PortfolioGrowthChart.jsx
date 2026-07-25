@@ -17,6 +17,9 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import {
+  getCandlesRange,
+} from "@/lib/finnhub";
 
 const PERIODS = [
   "1D",
@@ -294,25 +297,73 @@ async function fetchTickerHistory({
   to,
   signal,
 }) {
-  const response = await fetch(
-    "/api/finnhub",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify({
-        action:
-          "candles_range",
-        ticker,
-        resolution,
-        from,
-        to,
-      }),
-      signal,
-    },
-  );
+  if (signal?.aborted) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+  }
+
+  const payload =
+    await getCandlesRange({
+      ticker,
+      resolution,
+      from,
+      to,
+    });
+
+  if (signal?.aborted) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError",
+    );
+  }
+
+  const candles =
+    Array.isArray(
+      payload?.candles,
+    )
+      ? payload.candles
+      : [];
+
+  return candles
+    .map((candle) => {
+      const timestamp =
+        getValidNumber(
+          candle?.t,
+        );
+
+      const close =
+        getValidNumber(
+          candle?.v ??
+            candle?.c,
+        );
+
+      if (
+        timestamp === null ||
+        close === null ||
+        close <= 0
+      ) {
+        return null;
+      }
+
+      return {
+        timestamp:
+          Math.floor(
+            timestamp,
+          ),
+
+        price:
+          close,
+      };
+    })
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        a.timestamp -
+        b.timestamp,
+    );
+}
 
   const payload =
     await response
