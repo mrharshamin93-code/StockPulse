@@ -1,609 +1,289 @@
-import React, {
-  useState,
-} from "react";
-
-import {
-  Link,
-  useNavigate,
-} from "react-router-dom";
-
-import {
-  BarChart2,
-  Loader2,
-  ShieldCheck,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
 
 import { supabase } from "@/lib/supabase";
 
-import {
-  isNativeApp,
-  signInWithGoogle,
-} from "@/lib/mobileAuth";
+export const IOS_AUTH_CALLBACK =
+  "com.stockpulse.app://auth/callback";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+export const IOS_CONFIRM_EMAIL_URL =
+  "com.stockpulse.app://auth/confirm";
 
-const FEATURES = [
-  {
-    icon: BarChart2,
-    label: "Track your portfolio",
-    desc: "Monitor all your holdings in one place",
-  },
-  {
-    icon: TrendingUp,
-    label: "Market insights",
-    desc: "AI-powered stock analysis and news",
-  },
-  {
-    icon: Zap,
-    label: "Stock screener",
-    desc: "Filter stocks by fundamentals and metrics",
-  },
-  {
-    icon: ShieldCheck,
-    label: "Secure & private",
-    desc: "Your account and portfolio data are protected",
-  },
-];
+export const IOS_RESET_PASSWORD_URL =
+  "com.stockpulse.app://reset-password";
 
-export default function Register() {
-  const navigate =
-    useNavigate();
+export function isNativeApp() {
+  return Capacitor.isNativePlatform();
+}
 
-  const nativeApp =
-    isNativeApp();
+export function getAuthCallbackUrl() {
+  if (isNativeApp()) {
+    return IOS_AUTH_CALLBACK;
+  }
 
-  const [email, setEmail] =
-    useState("");
+  return `${window.location.origin}/auth/callback`;
+}
 
-  const [
-    password,
-    setPassword,
-  ] = useState("");
+export function getEmailConfirmationUrl() {
+  if (isNativeApp()) {
+    return IOS_CONFIRM_EMAIL_URL;
+  }
 
-  const [
-    confirmPassword,
-    setConfirmPassword,
-  ] = useState("");
+  return `${window.location.origin}/auth/confirm`;
+}
 
-  const [loading, setLoading] =
-    useState(false);
+export async function signInWithGoogle() {
+  const native = isNativeApp();
 
-  const [
-    oauthLoading,
-    setOauthLoading,
-  ] = useState("");
+  const {
+    data,
+    error,
+  } = await supabase.auth.signInWithOAuth({
+    provider: "google",
 
-  const [error, setError] =
-    useState("");
+    options: {
+      redirectTo:
+        getAuthCallbackUrl(),
 
-  const handleRegister =
-    async (event) => {
-      event.preventDefault();
+      skipBrowserRedirect:
+        native,
+    },
+  });
 
-      if (
-        password !==
-        confirmPassword
-      ) {
-        setError(
-          "Passwords do not match",
-        );
+  if (error) {
+    throw error;
+  }
 
-        return;
-      }
+  if (!native) {
+    return;
+  }
 
-      if (
-        password.length < 6
-      ) {
-        setError(
-          "Password must be at least 6 characters",
-        );
+  if (!data?.url) {
+    throw new Error(
+      "Google sign-in could not be started.",
+    );
+  }
 
-        return;
-      }
+  await Browser.open({
+    url: data.url,
+  });
+}
 
-      setLoading(true);
-      setError("");
+function decodeError(
+  rawValue,
+) {
+  if (!rawValue) {
+    return "";
+  }
 
-      try {
-        const {
-          error:
-            signUpError,
-        } =
-          await supabase.auth
-            .signUp({
-              email:
-                email.trim(),
+  try {
+    return decodeURIComponent(
+      String(rawValue).replace(
+        /\+/g,
+        " ",
+      ),
+    );
+  } catch {
+    return String(rawValue);
+  }
+}
 
-              password,
+function getUrlParts(
+  incomingUrl,
+) {
+  const parsed =
+    new URL(incomingUrl);
 
-              /*
-               * We will convert email confirmation
-               * into a native deep link in the next
-               * phase.
-               *
-               * For now web registration remains
-               * unchanged.
-               */
-              options: {
-                emailRedirectTo:
-                  `${window.location.origin}/`,
-              },
-            });
+  return {
+    search:
+      parsed.search || "",
 
-        if (signUpError) {
-          throw signUpError;
-        }
+    hash:
+      parsed.hash || "",
+  };
+}
 
-        alert(
-          "Account created! Please check your email to confirm your account.",
-        );
+let nativeAuthListener = null;
+let handlingOAuth = false;
+let lastHandledUrl = "";
 
-        navigate(
-          "/login",
-        );
-      } catch (registerError) {
-        setError(
-          registerError instanceof Error
-            ? registerError.message
-            : "Registration failed. Please try again.",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-  const handleGoogleLogin =
-    async () => {
-      if (oauthLoading) {
-        return;
-      }
-
-      setError("");
-
-      setOauthLoading(
-        "google",
-      );
-
-      try {
-        await signInWithGoogle();
-
-        if (nativeApp) {
-          setOauthLoading("");
-        }
-      } catch (oauthError) {
-        console.error(
-          "Google registration failed:",
-          oauthError,
-        );
-
-        setError(
-          oauthError instanceof Error
-            ? oauthError.message
-            : "Google sign-in failed.",
-        );
-
-        setOauthLoading("");
-      }
-    };
+async function handleNativeUrl(
+  url,
+) {
+  if (!url) {
+    return;
+  }
 
   /*
-   * Apple remains available on the web.
-   * Native Apple login will be added once the
-   * Apple Developer account is ready.
+   * Prevent the same cold-start URL from being
+   * handled by both getLaunchUrl() and appUrlOpen.
    */
-  const handleAppleLogin =
-    async () => {
-      if (
-        nativeApp ||
-        oauthLoading
-      ) {
-        return;
-      }
+  if (url === lastHandledUrl) {
+    return;
+  }
 
-      setError("");
+  lastHandledUrl = url;
 
-      setOauthLoading(
-        "apple",
+  if (
+    url.startsWith(
+      IOS_RESET_PASSWORD_URL,
+    )
+  ) {
+    const {
+      search,
+      hash,
+    } =
+      getUrlParts(url);
+
+    window.location.replace(
+      `/reset-password${search}${hash}`,
+    );
+
+    return;
+  }
+
+  if (
+    url.startsWith(
+      IOS_CONFIRM_EMAIL_URL,
+    )
+  ) {
+    const {
+      search,
+      hash,
+    } =
+      getUrlParts(url);
+
+    window.location.replace(
+      `/auth/confirm${search}${hash}`,
+    );
+
+    return;
+  }
+
+  if (
+    !url.startsWith(
+      IOS_AUTH_CALLBACK,
+    )
+  ) {
+    return;
+  }
+
+  if (handlingOAuth) {
+    return;
+  }
+
+  handlingOAuth = true;
+
+  try {
+    await Browser.close().catch(
+      () => {},
+    );
+
+    const callbackUrl =
+      new URL(url);
+
+    const rawError =
+      callbackUrl.searchParams.get(
+        "error_description",
+      ) ||
+      callbackUrl.searchParams.get(
+        "error",
       );
 
-      try {
-        const {
-          error:
-            oauthError,
-        } =
-          await supabase.auth
-            .signInWithOAuth({
-              provider:
-                "apple",
+    if (rawError) {
+      throw new Error(
+        decodeError(rawError),
+      );
+    }
 
-              options: {
-                redirectTo:
-                  `${window.location.origin}/auth/callback`,
-              },
-            });
+    const code =
+      callbackUrl.searchParams.get(
+        "code",
+      );
 
-        if (oauthError) {
-          throw oauthError;
-        }
-      } catch (oauthError) {
-        setError(
-          oauthError instanceof Error
-            ? oauthError.message
-            : "Apple sign-in failed.",
+    if (!code) {
+      throw new Error(
+        "No authentication code was returned.",
+      );
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await supabase.auth
+        .exchangeCodeForSession(
+          code,
         );
 
-        setOauthLoading("");
-      }
-    };
+    if (error) {
+      throw error;
+    }
 
-  return (
-    <div
-      className="flex min-h-screen flex-col bg-gray-50 lg:flex-row"
-      style={{
-        paddingTop:
-          "env(safe-area-inset-top)",
+    if (!data?.session?.user) {
+      throw new Error(
+        "Authentication completed but no session was created.",
+      );
+    }
 
-        paddingBottom:
-          "env(safe-area-inset-bottom)",
-      }}
-    >
-      <div className="hidden lg:flex lg:w-1/2 lg:flex-col lg:justify-between bg-foreground p-12">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-            <TrendingUp className="h-5 w-5 text-white" />
-          </div>
+    window.location.replace(
+      "/",
+    );
+  } catch (error) {
+    console.error(
+      "Native OAuth callback failed:",
+      error,
+    );
 
-          <span className="font-heading text-xl font-bold text-white">
-            StockPulse
-          </span>
-        </div>
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Google sign-in failed.";
 
-        <div>
-          <h2 className="mb-4 font-heading text-4xl font-bold leading-tight text-white">
-            Your portfolio,
-            <br />
-            intelligently tracked.
-          </h2>
+    window.location.replace(
+      `/login?error=${encodeURIComponent(
+        message,
+      )}`,
+    );
+  } finally {
+    handlingOAuth = false;
+  }
+}
 
-          <p className="mb-10 text-base text-white/60">
-            Track your portfolio,
-            follow market activity,
-            and access intelligent
-            investing tools in one
-            place.
-          </p>
+export async function initializeNativeAuth() {
+  if (!isNativeApp()) {
+    return;
+  }
 
-          <div className="space-y-5">
-            {FEATURES.map(
-              ({
-                icon: Icon,
-                label,
-                desc,
-              }) => (
-                <div
-                  key={label}
-                  className="flex items-start gap-4"
-                >
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10">
-                    <Icon className="h-4 w-4 text-white" />
-                  </div>
+  if (nativeAuthListener) {
+    return;
+  }
 
-                  <div>
-                    <p className="text-sm font-semibold text-white">
-                      {label}
-                    </p>
+  nativeAuthListener =
+    await App.addListener(
+      "appUrlOpen",
+      async ({ url }) => {
+        await handleNativeUrl(
+          url,
+        );
+      },
+    );
 
-                    <p className="mt-0.5 text-xs text-white/50">
-                      {desc}
-                    </p>
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
-        </div>
+  /*
+   * appUrlOpen handles links received while
+   * StockPulse is running.
+   *
+   * getLaunchUrl handles the case where the
+   * app was completely closed when the user
+   * tapped the email/OAuth link.
+   */
+  const launchData =
+    await App.getLaunchUrl();
 
-        <p className="text-xs text-white/30">
-          © 2026 StockPulse. All
-          rights reserved.
-        </p>
-      </div>
-
-      <div className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
-          <div className="mb-8">
-            <h1 className="font-heading text-2xl font-bold text-gray-900">
-              Create Your Account
-            </h1>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Start tracking your
-              portfolio in minutes
-            </p>
-          </div>
-
-          <div className="space-y-5">
-            {error ? (
-              <p
-                role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600"
-              >
-                {error}
-              </p>
-            ) : null}
-
-            <div
-              className={
-                nativeApp
-                  ? "grid grid-cols-1 gap-3"
-                  : "grid grid-cols-2 gap-3"
-              }
-            >
-              {!nativeApp ? (
-                <Button
-                  variant="outline"
-                  className="h-11 w-full gap-2 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
-                  onClick={
-                    handleAppleLogin
-                  }
-                  type="button"
-                  disabled={
-                    loading ||
-                    oauthLoading !==
-                      ""
-                  }
-                >
-                  {oauthLoading ===
-                  "apple" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      aria-hidden="true"
-                    >
-                      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.4c1.3.07 2.2.73 2.98.75.82-.17 1.61-.87 2.99-.79 1.67.1 2.93.8 3.72 2.02-3.33 2.02-2.8 6.47.62 7.77-.62 1.52-1.44 3.04-2.31 3.13zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-                    </svg>
-                  )}
-
-                  Apple
-                </Button>
-              ) : null}
-
-              <Button
-                variant="outline"
-                className="h-11 w-full gap-2 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
-                onClick={
-                  handleGoogleLogin
-                }
-                type="button"
-                disabled={
-                  loading ||
-                  oauthLoading !==
-                    ""
-                }
-              >
-                {oauthLoading ===
-                "google" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                      fill="#4285F4"
-                    />
-
-                    <path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-
-                    <path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      fill="#FBBC05"
-                    />
-
-                    <path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
-                  </svg>
-                )}
-
-                Google
-              </Button>
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-gray-50 px-2 text-gray-400">
-                  or
-                </span>
-              </div>
-            </div>
-
-            <form
-              onSubmit={
-                handleRegister
-              }
-              className="space-y-4"
-            >
-              <div className="space-y-1.5">
-                <Label htmlFor="register-email">
-                  Email
-                </Label>
-
-                <Input
-                  id="register-email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(
-                    event,
-                  ) =>
-                    setEmail(
-                      event.target
-                        .value,
-                    )
-                  }
-                  required
-                  autoComplete="email"
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="register-password">
-                  Password
-                </Label>
-
-                <Input
-                  id="register-password"
-                  type="password"
-                  placeholder="Create a password (min 6 characters)"
-                  value={password}
-                  onChange={(
-                    event,
-                  ) =>
-                    setPassword(
-                      event.target
-                        .value,
-                    )
-                  }
-                  required
-                  autoComplete="new-password"
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="register-confirm-password">
-                  Confirm Password
-                </Label>
-
-                <Input
-                  id="register-confirm-password"
-                  type="password"
-                  placeholder="Repeat your password"
-                  value={
-                    confirmPassword
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    setConfirmPassword(
-                      event.target
-                        .value,
-                    )
-                  }
-                  required
-                  autoComplete="new-password"
-                  className="h-11"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                className="h-11 w-full bg-gray-900 text-white hover:bg-gray-800"
-                disabled={
-                  loading ||
-                  oauthLoading !==
-                    ""
-                }
-              >
-                {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-
-                Create Account
-              </Button>
-            </form>
-
-            <p className="text-center text-xs leading-relaxed text-gray-400">
-              By creating an account,
-              you agree to the{" "}
-              <Link
-                to="/terms"
-                className="underline hover:text-gray-600"
-              >
-                Terms
-              </Link>{" "}
-              and acknowledge the{" "}
-              <Link
-                to="/privacy"
-                className="underline hover:text-gray-600"
-              >
-                Privacy Policy
-              </Link>
-              .
-            </p>
-
-            <p className="text-center text-sm text-gray-500">
-              Already have an
-              account?{" "}
-              <Link
-                to="/login"
-                className="font-semibold text-gray-900 hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
-
-            <nav
-              aria-label="Legal and support"
-              className="flex items-center justify-center gap-3 text-[11px] text-gray-500"
-            >
-              <Link
-                to="/privacy"
-                className="transition-colors hover:text-gray-900 hover:underline"
-              >
-                Privacy
-              </Link>
-
-              <span
-                aria-hidden="true"
-                className="text-gray-300"
-              >
-                •
-              </span>
-
-              <Link
-                to="/terms"
-                className="transition-colors hover:text-gray-900 hover:underline"
-              >
-                Terms
-              </Link>
-
-              <span
-                aria-hidden="true"
-                className="text-gray-300"
-              >
-                •
-              </span>
-
-              <Link
-                to="/contact-us"
-                className="transition-colors hover:text-gray-900 hover:underline"
-              >
-                Contact Us
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  if (launchData?.url) {
+    await handleNativeUrl(
+      launchData.url,
+    );
+  }
 }
