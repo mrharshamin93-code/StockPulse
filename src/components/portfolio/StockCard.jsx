@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +23,9 @@ import { Label } from "@/components/ui/label";
 function getValidNumber(value) {
   const numericValue = Number(value);
 
-  return Number.isFinite(numericValue)
+  return Number.isFinite(
+    numericValue,
+  )
     ? numericValue
     : null;
 }
@@ -34,6 +38,54 @@ function formatCurrency(value) {
       maximumFractionDigits: 2,
     },
   )}`;
+}
+
+/*
+ * Transaction history should never block a real
+ * portfolio update.
+ *
+ * If the transaction table has a schema/RLS issue,
+ * buying/selling can still succeed.
+ */
+async function recordTransaction({
+  userId,
+  stock,
+  type,
+  quantity,
+  price,
+}) {
+  try {
+    const { error } = await supabase
+      .from("stock_transactions")
+      .insert({
+        user_id: userId,
+        ticker:
+          String(
+            stock?.ticker || "",
+          ).toUpperCase(),
+
+        company_name:
+          stock?.company_name || "",
+
+        type,
+        quantity,
+        price,
+        total:
+          quantity * price,
+      });
+
+    if (error) {
+      console.warn(
+        `${type} transaction history insert failed:`,
+        error,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `${type} transaction history insert failed:`,
+      error,
+    );
+  }
 }
 
 function BuyDialog({
@@ -104,8 +156,13 @@ function BuyDialog({
         data: {
           user: currentUser,
         },
+        error: userError,
       } =
         await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
 
       if (!currentUser) {
         throw new Error(
@@ -129,15 +186,19 @@ function BuyDialog({
 
       const newAverageCost =
         newQuantity > 0
-          ? (existingAverageCost *
-              existingQuantity +
+          ? (
+              existingAverageCost *
+                existingQuantity +
               priceValue *
-                quantityValue) /
+                quantityValue
+            ) /
             newQuantity
           : priceValue;
 
       const updatePayload = {
-        quantity: newQuantity,
+        quantity:
+          +newQuantity.toFixed(6),
+
         purchase_price:
           +newAverageCost.toFixed(4),
       };
@@ -150,6 +211,9 @@ function BuyDialog({
           currentPrice;
       }
 
+      /*
+       * Update the actual holding FIRST.
+       */
       const { error: updateError } =
         await supabase
           .from("stocks")
@@ -164,36 +228,20 @@ function BuyDialog({
         throw updateError;
       }
 
-      const {
-        error: transactionError,
-      } = await supabase
-        .from(
-          "stock_transactions",
-        )
-        .insert({
-          user_id:
-            currentUser.id,
-          ticker:
-            stock.ticker.toUpperCase(),
-          company_name:
-            stock.company_name || "",
-          type: "buy",
-          quantity:
-            quantityValue,
-          price: priceValue,
-          total:
-            quantityValue *
-            priceValue,
-        });
-
-      if (transactionError) {
-        console.warn(
-          "Transaction insert failed:",
-          transactionError,
-        );
-      }
+      /*
+       * Transaction logging is secondary.
+       * It must not undo/block the buy.
+       */
+      await recordTransaction({
+        userId: currentUser.id,
+        stock,
+        type: "buy",
+        quantity: quantityValue,
+        price: priceValue,
+      });
 
       await onDone?.();
+
       onOpenChange(false);
       setQuantity("");
     } catch (error) {
@@ -203,7 +251,8 @@ function BuyDialog({
       );
 
       window.alert(
-        "Failed to buy shares. Please try again.",
+        error?.message ||
+          "Failed to buy shares. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -233,7 +282,9 @@ function BuyDialog({
         >
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor={`buy-shares-${stock?.id}`}>
+              <Label
+                htmlFor={`buy-shares-${stock?.id}`}
+              >
                 Shares
               </Label>
 
@@ -253,7 +304,9 @@ function BuyDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor={`buy-price-${stock?.id}`}>
+              <Label
+                htmlFor={`buy-price-${stock?.id}`}
+              >
                 Purchase Price
               </Label>
 
@@ -334,7 +387,7 @@ function SellDialog({
 
     const currentPrice =
       getValidNumber(
-        stock.current_price,
+        stock?.current_price,
       );
 
     if (
@@ -355,8 +408,13 @@ function SellDialog({
         data: {
           user: currentUser,
         },
+        error: userError,
       } =
         await supabase.auth.getUser();
+
+      if (userError) {
+        throw userError;
+      }
 
       if (!currentUser) {
         throw new Error(
@@ -364,82 +422,109 @@ function SellDialog({
         );
       }
 
-      const {
-        error: transactionError,
-      } = await supabase
-        .from(
-          "stock_transactions",
-        )
-        .insert({
-          user_id:
-            currentUser.id,
-          ticker:
-            stock.ticker.toUpperCase(),
-          company_name:
-            stock.company_name || "",
-          type: "sell",
-          quantity:
+      /*
+       * Avoid floating-point issues around a full sale.
+       *
+       * Example:
+       * 9.999999999 versus 10
+       */
+      const remainingQuantity =
+        Math.max(
+          0,
+          maximumQuantity -
             sellQuantity,
-          price: currentPrice,
-          total:
-            sellQuantity *
-            currentPrice,
-        });
+        );
 
-      if (transactionError) {
-        throw transactionError;
-      }
+      const fullSale =
+        remainingQuantity <=
+        0.0000001;
 
-      if (
-        sellQuantity >=
-        maximumQuantity
-      ) {
-        const { error } =
-          await supabase
-            .from("stocks")
-            .delete()
-            .eq("id", stock.id)
-            .eq(
-              "user_id",
-              currentUser.id,
-            );
+      if (fullSale) {
+        /*
+         * FULL SALE
+         *
+         * Delete the stocks record completely.
+         *
+         * The Watchlist uses the existence of this
+         * record to determine whether its star is
+         * highlighted.
+         *
+         * Therefore deleting it automatically means:
+         *
+         * Portfolio -> removed
+         * Watchlist star -> unhighlighted
+         */
+        const {
+          error: deleteError,
+        } = await supabase
+          .from("stocks")
+          .delete()
+          .eq("id", stock.id)
+          .eq(
+            "user_id",
+            currentUser.id,
+          );
 
-        if (error) {
-          throw error;
+        if (deleteError) {
+          throw deleteError;
         }
       } else {
-        const { error } =
-          await supabase
-            .from("stocks")
-            .update({
-              quantity:
-                +(
-                  maximumQuantity -
-                  sellQuantity
-                ).toFixed(6),
-            })
-            .eq("id", stock.id)
-            .eq(
-              "user_id",
-              currentUser.id,
-            );
+        /*
+         * PARTIAL SALE
+         *
+         * Keep the stocks record, so the stock remains
+         * in Portfolio and the Watchlist star remains
+         * highlighted.
+         */
+        const {
+          error: updateError,
+        } = await supabase
+          .from("stocks")
+          .update({
+            quantity:
+              +remainingQuantity.toFixed(
+                6,
+              ),
+          })
+          .eq("id", stock.id)
+          .eq(
+            "user_id",
+            currentUser.id,
+          );
 
-        if (error) {
-          throw error;
+        if (updateError) {
+          throw updateError;
         }
       }
 
+      /*
+       * Record the transaction AFTER the actual
+       * holding has successfully changed.
+       *
+       * A transaction-history error must NOT make
+       * the app tell the user the sale failed.
+       */
+      await recordTransaction({
+        userId: currentUser.id,
+        stock,
+        type: "sell",
+        quantity: sellQuantity,
+        price: currentPrice,
+      });
+
       await onDone?.();
+
       onOpenChange(false);
       setQuantity("");
     } catch (error) {
       console.error(
-        "Sell error:",
+        "Sell error details:",
         error,
       );
 
       window.alert(
-        "Failed to sell shares. Please try again.",
+        error?.message ||
+          "Failed to sell shares. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -468,7 +553,9 @@ function SellDialog({
           className="space-y-5 pt-2"
         >
           <div className="space-y-2">
-            <Label htmlFor={`sell-shares-${stock?.id}`}>
+            <Label
+              htmlFor={`sell-shares-${stock?.id}`}
+            >
               Shares to Sell
             </Label>
 
@@ -487,7 +574,7 @@ function SellDialog({
                     event.target.value,
                   )
                 }
-                className="pr-12"
+                className="pr-14"
                 required
               />
 
@@ -500,7 +587,7 @@ function SellDialog({
                     ),
                   )
                 }
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                className="absolute right-1 top-1/2 flex min-h-[44px] min-w-[44px] -translate-y-1/2 items-center justify-center px-2 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
               >
                 all
               </button>
@@ -513,7 +600,10 @@ function SellDialog({
             disabled={
               loading ||
               !quantity ||
-              Number(quantity) <= 0
+              Number(quantity) <=
+                0 ||
+              Number(quantity) >
+                maximumQuantity
             }
           >
             {loading && (
@@ -580,7 +670,8 @@ export default function StockCard({
   const gain =
     totalValue !== null &&
     totalCost !== null
-      ? totalValue - totalCost
+      ? totalValue -
+        totalCost
       : null;
 
   const gainPct =
@@ -637,7 +728,7 @@ export default function StockCard({
               onClick={() =>
                 setBuyOpen(true)
               }
-              className="h-8 rounded-md bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-95"
+              className="flex min-h-[44px] items-center rounded-md bg-black px-3 text-xs font-semibold text-white transition-all hover:bg-gray-800 active:scale-95"
             >
               Buy
             </button>
@@ -647,14 +738,16 @@ export default function StockCard({
               onClick={() =>
                 setSellOpen(true)
               }
-              className="h-8 rounded-md border border-gray-200 bg-white px-3 text-xs font-semibold text-black transition-all hover:bg-gray-50 active:scale-95"
+              className="flex min-h-[44px] items-center rounded-md border border-gray-200 bg-white px-3 text-xs font-semibold text-black transition-all hover:bg-gray-50 active:scale-95"
             >
               Sell
             </button>
           </div>
         </div>
 
-        <Link to={`/stock/${stock.id}`}>
+        <Link
+          to={`/stock/${stock.id}`}
+        >
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="mb-0.5 text-[10px] uppercase tracking-wider text-gray-400">
@@ -737,7 +830,10 @@ export default function StockCard({
                     {isPositive
                       ? "+"
                       : ""}
-                    {gainPct.toFixed(1)}
+
+                    {gainPct.toFixed(
+                      1,
+                    )}
                     %
                   </div>
                 )}
