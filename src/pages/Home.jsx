@@ -46,9 +46,7 @@ function hasSeenPortfolioOnboarding(user) {
   }
 }
 
-async function markPortfolioOnboardingSeen(
-  userId,
-) {
+async function markPortfolioOnboardingSeen(userId) {
   try {
     window.localStorage.setItem(
       onboardingStorageKey(userId),
@@ -94,8 +92,8 @@ function EmptyPortfolio() {
       </h2>
 
       <p className="mt-2 text-sm text-gray-500">
-        Tap the <strong>+</strong> button below
-        to add a stock.
+        Star a stock in your Watchlist to add it
+        to your Portfolio.
       </p>
     </div>
   );
@@ -134,35 +132,86 @@ export default function Home() {
   const onboardingMarked =
     useRef(false);
 
+  /*
+   * Portfolio source of truth:
+   *
+   * A stock must:
+   * 1. Exist in the stocks table (highlighted/starred)
+   * 2. Still exist in at least one Watchlist
+   *
+   * This prevents orphaned holdings from appearing
+   * in Portfolio when the ticker is no longer in
+   * any Watchlist.
+   */
   const loadStocks =
     useCallback(async () => {
       if (!user?.id) {
+        setStocks([]);
         setLoading(false);
         return;
       }
 
       try {
-        const { data, error } =
-          await supabase
+        const [
+          stocksResult,
+          watchlistResult,
+        ] = await Promise.all([
+          supabase
             .from("stocks")
             .select("*")
             .eq("user_id", user.id)
             .order("created_at", {
               ascending: false,
-            });
+            }),
 
-        if (error) {
-          console.error(
-            "Error loading stocks:",
-            error,
-          );
+          supabase
+            .from("watchlist_items")
+            .select("ticker")
+            .eq("user_id", user.id),
+        ]);
 
-          setStocks([]);
-          return;
+        if (stocksResult.error) {
+          throw stocksResult.error;
         }
 
+        if (watchlistResult.error) {
+          throw watchlistResult.error;
+        }
+
+        const watchlistTickers =
+          new Set(
+            (watchlistResult.data || [])
+              .map((item) =>
+                String(
+                  item?.ticker || "",
+                )
+                  .trim()
+                  .toUpperCase(),
+              )
+              .filter(Boolean),
+          );
+
+        /*
+         * The stocks table represents highlighted stars.
+         * The Watchlist table confirms that ticker still
+         * belongs to one of the user's Watchlists.
+         */
         const nextStocks =
-          data || [];
+          (stocksResult.data || [])
+            .filter(
+              (stock) =>
+                stock?.id &&
+                stock.id !== "undefined",
+            )
+            .filter((stock) =>
+              watchlistTickers.has(
+                String(
+                  stock?.ticker || "",
+                )
+                  .trim()
+                  .toUpperCase(),
+              ),
+            );
 
         const alreadySeen =
           hasSeenPortfolioOnboarding(
@@ -213,7 +262,7 @@ export default function Home() {
         }
       } catch (error) {
         console.error(
-          "Unexpected error:",
+          "Error loading portfolio:",
           error,
         );
 
@@ -233,6 +282,13 @@ export default function Home() {
     setShowPortfolioOnboarding(false);
   }, [user?.id]);
 
+  /*
+   * Reload Portfolio whenever:
+   *
+   * - A stock is starred/unstarred
+   * - Shares are bought/sold
+   * - A Watchlist ticker is added/removed
+   */
   useEffect(() => {
     loadStocks();
 
@@ -253,12 +309,28 @@ export default function Home() {
           filter:
             `user_id=eq.${user.id}`,
         },
-        () => loadStocks(),
+        () => {
+          void loadStocks();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "watchlist_items",
+          filter:
+            `user_id=eq.${user.id}`,
+        },
+        () => {
+          void loadStocks();
+        },
       )
       .subscribe();
 
-    return () =>
+    return () => {
       supabase.removeChannel(channel);
+    };
   }, [
     user?.id,
     loadStocks,
@@ -366,6 +438,10 @@ export default function Home() {
                 refreshing
                   ? "text-gray-900"
                   : "text-gray-400"
+              } ${
+                refreshing
+                  ? "animate-spin"
+                  : ""
               }`}
             />
           </motion.div>
