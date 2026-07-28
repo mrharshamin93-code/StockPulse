@@ -25,29 +25,49 @@ export function getAuthCallbackUrl() {
 export async function signInWithGoogle() {
   const native = isNativeApp();
 
-  const {
-    data,
-    error,
-  } = await supabase.auth.signInWithOAuth({
-    provider: "google",
+  const { data, error } =
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
 
-    options: {
-      redirectTo:
-        getAuthCallbackUrl(),
+      options: {
+        redirectTo: getAuthCallbackUrl(),
 
-      skipBrowserRedirect:
-        native,
-    },
-  });
+        /*
+         * Explicitly request the Google identity/email scopes.
+         * This improves compatibility with new Google accounts
+         * and Google Workspace accounts where the email may not
+         * otherwise be returned as expected.
+         */
+        scopes:
+          "openid email profile https://www.googleapis.com/auth/userinfo.email",
+
+        /*
+         * On iOS/Capacitor we open the OAuth URL ourselves
+         * using Capacitor Browser.
+         *
+         * On the web, Supabase performs the redirect normally.
+         */
+        skipBrowserRedirect: native,
+      },
+    });
 
   if (error) {
     throw error;
   }
 
+  /*
+   * Web:
+   * Supabase redirects the browser to Google automatically.
+   */
   if (!native) {
     return;
   }
 
+  /*
+   * Native:
+   * Supabase returns the Google OAuth URL and we open it
+   * in the system browser.
+   */
   if (!data?.url) {
     throw new Error(
       "Google sign-in could not be started.",
@@ -59,9 +79,7 @@ export async function signInWithGoogle() {
   });
 }
 
-function decodeError(
-  rawValue,
-) {
+function decodeError(rawValue) {
   if (!rawValue) {
     return "";
   }
@@ -78,18 +96,13 @@ function decodeError(
   }
 }
 
-function getUrlParts(
-  incomingUrl,
-) {
+function getUrlParts(incomingUrl) {
   const parsed =
     new URL(incomingUrl);
 
   return {
-    search:
-      parsed.search || "",
-
-    hash:
-      parsed.hash || "",
+    search: parsed.search || "",
+    hash: parsed.hash || "",
   };
 }
 
@@ -97,28 +110,29 @@ let nativeAuthListener = null;
 let handlingOAuth = false;
 let lastHandledUrl = "";
 
-async function handleNativeUrl(
-  url,
-) {
+async function handleNativeUrl(url) {
   if (!url) {
     return;
   }
 
+  /*
+   * Prevent the same deep link from being processed twice.
+   */
   if (url === lastHandledUrl) {
     return;
   }
 
   lastHandledUrl = url;
 
+  /*
+   * Password-reset deep link.
+   */
   if (
     url.startsWith(
       IOS_RESET_PASSWORD_URL,
     )
   ) {
-    const {
-      search,
-      hash,
-    } =
+    const { search, hash } =
       getUrlParts(url);
 
     window.location.replace(
@@ -128,6 +142,9 @@ async function handleNativeUrl(
     return;
   }
 
+  /*
+   * Ignore unrelated deep links.
+   */
   if (
     !url.startsWith(
       IOS_AUTH_CALLBACK,
@@ -136,6 +153,10 @@ async function handleNativeUrl(
     return;
   }
 
+  /*
+   * Prevent multiple OAuth exchanges from running
+   * simultaneously.
+   */
   if (handlingOAuth) {
     return;
   }
@@ -143,6 +164,10 @@ async function handleNativeUrl(
   handlingOAuth = true;
 
   try {
+    /*
+     * Close the system OAuth browser after StockPulse
+     * receives the callback.
+     */
     await Browser.close().catch(
       () => {},
     );
@@ -150,6 +175,9 @@ async function handleNativeUrl(
     const callbackUrl =
       new URL(url);
 
+    /*
+     * Surface any error returned by Google/Supabase.
+     */
     const rawError =
       callbackUrl.searchParams.get(
         "error_description",
@@ -164,6 +192,9 @@ async function handleNativeUrl(
       );
     }
 
+    /*
+     * Supabase PKCE OAuth returns a one-time code.
+     */
     const code =
       callbackUrl.searchParams.get(
         "code",
@@ -175,10 +206,11 @@ async function handleNativeUrl(
       );
     }
 
-    const {
-      data,
-      error,
-    } =
+    /*
+     * Exchange the one-time OAuth code for the user's
+     * persistent Supabase session.
+     */
+    const { data, error } =
       await supabase.auth
         .exchangeCodeForSession(
           code,
@@ -194,9 +226,10 @@ async function handleNativeUrl(
       );
     }
 
-    window.location.replace(
-      "/",
-    );
+    /*
+     * Authentication succeeded.
+     */
+    window.location.replace("/");
   } catch (error) {
     console.error(
       "Native OAuth callback failed:",
@@ -219,10 +252,16 @@ async function handleNativeUrl(
 }
 
 export async function initializeNativeAuth() {
+  /*
+   * Web OAuth is handled by /auth/callback.
+   */
   if (!isNativeApp()) {
     return;
   }
 
+  /*
+   * Only register one native deep-link listener.
+   */
   if (nativeAuthListener) {
     return;
   }
@@ -231,12 +270,14 @@ export async function initializeNativeAuth() {
     await App.addListener(
       "appUrlOpen",
       async ({ url }) => {
-        await handleNativeUrl(
-          url,
-        );
+        await handleNativeUrl(url);
       },
     );
 
+  /*
+   * Also handle the case where StockPulse was completely
+   * closed when the OAuth/reset-password deep link opened it.
+   */
   const launchData =
     await App.getLaunchUrl();
 
