@@ -2949,29 +2949,41 @@ export default function StockDetail() {
                 : "—"}
             </p>
 
-            <div
-              className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
-                displayPositive
-                  ? "bg-emerald-50 text-emerald-600"
-                  : "bg-red-50 text-red-600"
-              }`}
-            >
-              {hasDailyReturn &&
-                (displayPositive ? (
-                  <TrendingUp className="h-4 w-4" />
-                ) : (
-                  <TrendingDown className="h-4 w-4" />
-                ))}
+            <div className="flex items-end gap-3">
+              <div
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
+                  displayPositive
+                    ? "bg-emerald-50 text-emerald-600"
+                    : "bg-red-50 text-red-600"
+                }`}
+              >
+                {hasDailyReturn &&
+                  (displayPositive ? (
+                    <TrendingUp className="h-4 w-4" />
+                  ) : (
+                    <TrendingDown className="h-4 w-4" />
+                  ))}
 
-              {hasDailyReturn
-                ? `${
-                    displayPositive
-                      ? "+"
-                      : ""
-                  }${displayReturn.toFixed(
-                    2,
-                  )}%`
-                : "—"}
+                {hasDailyReturn
+                  ? `${
+                      displayPositive
+                        ? "+"
+                        : ""
+                    }${displayReturn.toFixed(
+                      2,
+                    )}%`
+                  : "—"}
+              </div>
+
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-medium leading-none text-gray-400">
+                  After-hours
+                </span>
+
+                <span className="text-sm font-semibold leading-none text-gray-400">
+                  N/A
+                </span>
+              </div>
             </div>
           </div>
 
