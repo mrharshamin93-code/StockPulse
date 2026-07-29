@@ -38,22 +38,6 @@ import {
 
 const sparklineCache = new Map();
 const SPARKLINE_TTL = 5 * 60 * 1000;
-const WATCHLIST_SORT_KEY = "stockpulse:watchlist-sort";
-
-function getStoredSortMode() {
-  try {
-    const stored =
-      window.localStorage.getItem(
-        WATCHLIST_SORT_KEY,
-      );
-
-    return stored === "price"
-      ? "price"
-      : "percentage";
-  } catch {
-    return "percentage";
-  }
-}
 
 function getStoredWatchlistId(userId) {
   if (!userId) {
@@ -1355,7 +1339,12 @@ function WatchlistCard({
 }
 
 export default function Watchlist() {
-  const { user } = useAuth();
+  const {
+    user,
+    preferences,
+    updatePreference,
+    isLoadingPreferences,
+  } = useAuth();
 
   const {
     quotes = {},
@@ -1391,8 +1380,19 @@ export default function Watchlist() {
     setWatchlistSaving,
   ] = useState(false);
 
-  const [sortMode, setSortMode] =
-    useState(getStoredSortMode);
+  const sortMode =
+    preferences?.watchlist_sort ||
+    "percentage";
+
+  const [
+    sortPreferenceSaving,
+    setSortPreferenceSaving,
+  ] = useState(false);
+
+  const [
+    sortPreferenceError,
+    setSortPreferenceError,
+  ] = useState("");
 
   const [loading, setLoading] =
     useState(true);
@@ -1850,7 +1850,7 @@ export default function Watchlist() {
     refreshWatchlistQuotes,
   ]);
 
-  function changeSortMode(
+  async function changeSortMode(
     nextMode,
   ) {
     const normalizedMode =
@@ -1858,17 +1858,32 @@ export default function Watchlist() {
         ? "price"
         : "percentage";
 
-    setSortMode(
-      normalizedMode,
-    );
+    if (
+      sortPreferenceSaving ||
+      normalizedMode === sortMode
+    ) {
+      return;
+    }
+
+    setSortPreferenceSaving(true);
+    setSortPreferenceError("");
 
     try {
-      window.localStorage.setItem(
-        WATCHLIST_SORT_KEY,
+      await updatePreference(
+        "watchlist_sort",
         normalizedMode,
       );
-    } catch {
-      // The in-memory preference still applies.
+    } catch (error) {
+      console.error(
+        "Unable to save Watchlist sorting preference:",
+        error,
+      );
+
+      setSortPreferenceError(
+        "Unable to save your sorting preference.",
+      );
+    } finally {
+      setSortPreferenceSaving(false);
     }
   }
 
@@ -2382,48 +2397,84 @@ export default function Watchlist() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    changeSortMode(
+                  onClick={() => {
+                    void changeSortMode(
                       "percentage",
-                    )
+                    );
+                  }}
+                  disabled={
+                    isLoadingPreferences ||
+                    sortPreferenceSaving
                   }
-                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                  aria-pressed={
+                    sortMode ===
+                    "percentage"
+                  }
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     sortMode ===
                     "percentage"
                       ? "border-gray-900 bg-gray-900 text-white"
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  Percentage
+                  <span>
+                    {sortPreferenceSaving &&
+                    sortMode !==
+                      "percentage"
+                      ? "Saving..."
+                      : "Percentage"}
+                  </span>
 
                   {sortMode ===
-                    "percentage" && (
+                  "percentage" ? (
                     <Check className="h-4 w-4" />
-                  )}
+                  ) : null}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    changeSortMode(
+                  onClick={() => {
+                    void changeSortMode(
                       "price",
-                    )
+                    );
+                  }}
+                  disabled={
+                    isLoadingPreferences ||
+                    sortPreferenceSaving
                   }
-                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                  aria-pressed={
+                    sortMode ===
+                    "price"
+                  }
+                  className={`flex min-h-[44px] items-center justify-between rounded-xl border px-3 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     sortMode ===
                     "price"
                       ? "border-gray-900 bg-gray-900 text-white"
                       : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  Price
+                  <span>
+                    {sortPreferenceSaving &&
+                    sortMode !== "price"
+                      ? "Saving..."
+                      : "Price"}
+                  </span>
 
                   {sortMode ===
-                    "price" && (
+                  "price" ? (
                     <Check className="h-4 w-4" />
-                  )}
+                  ) : null}
                 </button>
               </div>
+
+              {sortPreferenceError ? (
+                <p
+                  role="alert"
+                  className="mt-2 text-xs font-medium text-red-600"
+                >
+                  {sortPreferenceError}
+                </p>
+              ) : null}
             </section>
 
             <section>
