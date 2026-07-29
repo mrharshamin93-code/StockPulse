@@ -1,5 +1,12 @@
-import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, {
+  useState,
+} from "react";
+
+import {
+  Link,
+  useNavigate,
+} from "react-router-dom";
+
 import {
   Banknote,
   Bell,
@@ -16,6 +23,7 @@ import {
 
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,44 +36,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-const getDefaultCurrency = () => {
-  try {
-    const locale = Intl.DateTimeFormat().resolvedOptions().locale || "";
-    const region = locale.split("-")[1]?.toUpperCase();
-
-    const map = {
-      US: "USD",
-      CA: "CAD",
-      GB: "GBP",
-      DE: "EUR",
-      FR: "EUR",
-      IT: "EUR",
-      ES: "EUR",
-      JP: "JPY",
-      AU: "AUD",
-      CH: "CHF",
-      IN: "INR",
-      CN: "CNY",
-      BR: "BRL",
-      MX: "MXN",
-      KR: "KRW",
-      SG: "SGD",
-      HK: "HKD",
-      NO: "NOK",
-      SE: "SEK",
-      NZ: "NZD",
-    };
-
-    return map[region] || "USD";
-  } catch {
-    return "USD";
-  }
-};
-
-const getCurrency = () =>
-  localStorage.getItem("currency") || getDefaultCurrency();
-
-function SettingsLink({ to, icon: Icon, iconClassName, iconBackground, label, trailing }) {
+function SettingsLink({
+  to,
+  icon: Icon,
+  iconClassName,
+  iconBackground,
+  label,
+  trailing,
+}) {
   return (
     <Link
       to={to}
@@ -75,14 +53,19 @@ function SettingsLink({ to, icon: Icon, iconClassName, iconBackground, label, tr
         <div
           className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconBackground}`}
         >
-          <Icon className={`h-4 w-4 ${iconClassName}`} />
+          <Icon
+            className={`h-4 w-4 ${iconClassName}`}
+          />
         </div>
 
-        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-medium">
+          {label}
+        </span>
       </div>
 
       <div className="flex items-center gap-2">
         {trailing}
+
         <ChevronRight className="h-4 w-4 text-gray-400" />
       </div>
     </Link>
@@ -91,118 +74,200 @@ function SettingsLink({ to, icon: Icon, iconClassName, iconBackground, label, tr
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
 
-  const [deletingAccount, setDeletingAccount] = useState(false);
-  const [deleteAccountError, setDeleteAccountError] = useState("");
-  const [currency] = useState(getCurrency);
+  const {
+    user,
+    logout,
+    preferences,
+    isLoadingPreferences,
+  } = useAuth();
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate("/login", { replace: true });
-    } catch (error) {
-      console.error("Failed to sign out:", error);
-    }
-  };
+  const [
+    deletingAccount,
+    setDeletingAccount,
+  ] = useState(false);
 
-  const handleDeleteAccount = async () => {
-    if (!user?.id || deletingAccount) {
-      return;
-    }
+  const [
+    deleteAccountError,
+    setDeleteAccountError,
+  ] = useState("");
 
-    setDeletingAccount(true);
-    setDeleteAccountError("");
+  const currency =
+    preferences?.currency ||
+    "USD";
 
-    try {
-      const {
-        data: sessionData,
-        error: sessionError,
-      } = await supabase.auth.getSession();
+  const handleLogout =
+    async () => {
+      try {
+        await logout();
 
-      if (sessionError) {
-        throw sessionError;
-      }
-
-      const accessToken = sessionData.session?.access_token;
-
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Sign in again and retry.",
-        );
-      }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error("Supabase is not configured correctly.");
-      }
-
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/delete-account`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            apikey: supabaseAnonKey,
-            "Content-Type": "application/json",
+        navigate(
+          "/login",
+          {
+            replace: true,
           },
-          body: JSON.stringify({
-            confirmation: "DELETE_ACCOUNT",
-          }),
-        },
-      );
-
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || !result?.success) {
-        throw new Error(
-          result?.error || "The account could not be deleted.",
         );
-      }
-
-      const { error: signOutError } = await supabase.auth.signOut({
-        scope: "local",
-      });
-
-      if (signOutError) {
+      } catch (error) {
         console.error(
-          "Account was deleted, but the local session could not be cleared normally:",
-          signOutError,
+          "Failed to sign out:",
+          error,
         );
       }
+    };
 
-      navigate("/register", {
-        replace: true,
-        state: { accountDeleted: true },
-      });
-    } catch (error) {
-      console.error("Failed to delete account:", error);
+  const handleDeleteAccount =
+    async () => {
+      if (
+        !user?.id ||
+        deletingAccount
+      ) {
+        return;
+      }
 
-      setDeleteAccountError(
-        error instanceof Error
-          ? error.message
-          : "The account could not be deleted.",
-      );
-    } finally {
-      setDeletingAccount(false);
-    }
-  };
+      setDeletingAccount(true);
+      setDeleteAccountError("");
+
+      try {
+        const {
+          data: sessionData,
+          error: sessionError,
+        } =
+          await supabase.auth
+            .getSession();
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        const accessToken =
+          sessionData.session
+            ?.access_token;
+
+        if (!accessToken) {
+          throw new Error(
+            "Your session has expired. Sign in again and retry.",
+          );
+        }
+
+        const supabaseUrl =
+          import.meta.env
+            .VITE_SUPABASE_URL;
+
+        const supabaseAnonKey =
+          import.meta.env
+            .VITE_SUPABASE_ANON_KEY;
+
+        if (
+          !supabaseUrl ||
+          !supabaseAnonKey
+        ) {
+          throw new Error(
+            "Supabase is not configured correctly.",
+          );
+        }
+
+        const response =
+          await fetch(
+            `${supabaseUrl}/functions/v1/delete-account`,
+            {
+              method: "POST",
+
+              headers: {
+                Authorization:
+                  `Bearer ${accessToken}`,
+
+                apikey:
+                  supabaseAnonKey,
+
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify({
+                confirmation:
+                  "DELETE_ACCOUNT",
+              }),
+            },
+          );
+
+        const result =
+          await response
+            .json()
+            .catch(() => null);
+
+        if (
+          !response.ok ||
+          !result?.success
+        ) {
+          throw new Error(
+            result?.error ||
+              "The account could not be deleted.",
+          );
+        }
+
+        const {
+          error: signOutError,
+        } =
+          await supabase.auth
+            .signOut({
+              scope: "local",
+            });
+
+        if (signOutError) {
+          console.error(
+            "Account was deleted, but the local session could not be cleared normally:",
+            signOutError,
+          );
+        }
+
+        navigate(
+          "/register",
+          {
+            replace: true,
+
+            state: {
+              accountDeleted:
+                true,
+            },
+          },
+        );
+      } catch (error) {
+        console.error(
+          "Failed to delete account:",
+          error,
+        );
+
+        setDeleteAccountError(
+          error instanceof Error
+            ? error.message
+            : "The account could not be deleted.",
+        );
+      } finally {
+        setDeletingAccount(
+          false,
+        );
+      }
+    };
 
   return (
     <div
       className="min-h-screen"
       style={{
-        paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)",
-        backgroundColor: "hsl(var(--background))",
+        paddingBottom:
+          "calc(env(safe-area-inset-bottom) + 64px)",
+
+        backgroundColor:
+          "hsl(var(--background))",
       }}
     >
       <header
         className="border-b border-gray-100"
         style={{
-          paddingTop: "env(safe-area-inset-top)",
-          backgroundColor: "hsl(var(--background))",
+          paddingTop:
+            "env(safe-area-inset-top)",
+
+          backgroundColor:
+            "hsl(var(--background))",
         }}
       >
         <div className="mx-auto max-w-2xl px-4 py-5 text-center sm:px-6">
@@ -220,7 +285,10 @@ export default function Settings() {
 
           <div
             className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-100 shadow-sm"
-            style={{ backgroundColor: "hsl(var(--card))" }}
+            style={{
+              backgroundColor:
+                "hsl(var(--card))",
+            }}
           >
             <SettingsLink
               to="/price-alerts"
@@ -246,7 +314,9 @@ export default function Settings() {
               label="Currency"
               trailing={
                 <span className="text-sm font-medium text-gray-500">
-                  {currency}
+                  {isLoadingPreferences
+                    ? "…"
+                    : currency}
                 </span>
               }
             />
@@ -260,7 +330,10 @@ export default function Settings() {
 
           <div
             className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm"
-            style={{ backgroundColor: "hsl(var(--card))" }}
+            style={{
+              backgroundColor:
+                "hsl(var(--card))",
+            }}
           >
             <SettingsLink
               to="/settings/theme"
@@ -279,7 +352,10 @@ export default function Settings() {
 
           <div
             className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm"
-            style={{ backgroundColor: "hsl(var(--card))" }}
+            style={{
+              backgroundColor:
+                "hsl(var(--card))",
+            }}
           >
             <SettingsLink
               to="/contact-us"
@@ -298,7 +374,10 @@ export default function Settings() {
 
           <div
             className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-100 shadow-sm"
-            style={{ backgroundColor: "hsl(var(--card))" }}
+            style={{
+              backgroundColor:
+                "hsl(var(--card))",
+            }}
           >
             <SettingsLink
               to="/privacy"
@@ -325,11 +404,16 @@ export default function Settings() {
 
           <div
             className="divide-y divide-gray-100 overflow-hidden rounded-2xl border border-gray-100 shadow-sm"
-            style={{ backgroundColor: "hsl(var(--card))" }}
+            style={{
+              backgroundColor:
+                "hsl(var(--card))",
+            }}
           >
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={
+                handleLogout
+              }
               className="flex min-h-[56px] w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-gray-50"
             >
               <div className="flex items-center gap-3">
@@ -354,19 +438,33 @@ export default function Settings() {
 
           <div
             className="overflow-hidden rounded-2xl border border-red-200 shadow-sm"
-            style={{ backgroundColor: "hsl(var(--card))" }}
+            style={{
+              backgroundColor:
+                "hsl(var(--card))",
+            }}
           >
             <AlertDialog
-              onOpenChange={(open) => {
-                if (open && !deletingAccount) {
-                  setDeleteAccountError("");
+              onOpenChange={(
+                open,
+              ) => {
+                if (
+                  open &&
+                  !deletingAccount
+                ) {
+                  setDeleteAccountError(
+                    "",
+                  );
                 }
               }}
             >
-              <AlertDialogTrigger asChild>
+              <AlertDialogTrigger
+                asChild
+              >
                 <button
                   type="button"
-                  disabled={deletingAccount}
+                  disabled={
+                    deletingAccount
+                  }
                   className="flex min-h-[56px] w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <div className="flex items-center gap-3">
@@ -380,7 +478,9 @@ export default function Settings() {
                       </span>
 
                       <p className="mt-0.5 text-xs text-gray-500">
-                        Permanently remove your account and all data
+                        Permanently remove
+                        your account and
+                        all data
                       </p>
                     </div>
                   </div>
@@ -391,12 +491,23 @@ export default function Settings() {
 
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    Delete your
+                    account?
+                  </AlertDialogTitle>
 
                   <AlertDialogDescription>
-                    This will permanently delete your account, portfolio,
-                    watchlist, saved screens, alerts, transactions and all
-                    associated StockPulse data. This action cannot be undone.
+                    This will
+                    permanently delete
+                    your account,
+                    portfolio,
+                    watchlist, saved
+                    screens, alerts,
+                    transactions and
+                    all associated
+                    StockPulse data.
+                    This action cannot
+                    be undone.
                   </AlertDialogDescription>
 
                   {deleteAccountError ? (
@@ -404,22 +515,33 @@ export default function Settings() {
                       role="alert"
                       className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm leading-relaxed text-red-700"
                     >
-                      {deleteAccountError}
+                      {
+                        deleteAccountError
+                      }
                     </div>
                   ) : null}
                 </AlertDialogHeader>
 
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={deletingAccount}>
+                  <AlertDialogCancel
+                    disabled={
+                      deletingAccount
+                    }
+                  >
                     Cancel
                   </AlertDialogCancel>
 
                   <AlertDialogAction
-                    onClick={(event) => {
+                    onClick={(
+                      event,
+                    ) => {
                       event.preventDefault();
-                      handleDeleteAccount();
+
+                      void handleDeleteAccount();
                     }}
-                    disabled={deletingAccount}
+                    disabled={
+                      deletingAccount
+                    }
                     className="bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {deletingAccount ? (
@@ -438,7 +560,8 @@ export default function Settings() {
         </section>
 
         <p className="pt-4 text-center text-xs text-gray-400">
-          StockPulse · Stock Portfolio
+          StockPulse · Stock
+          Portfolio
         </p>
       </main>
     </div>
