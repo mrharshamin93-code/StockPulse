@@ -1,316 +1,241 @@
-import { useEffect } from "react";
-import { Toaster } from "@/components/ui/toaster";
-import { QueryClientProvider } from "@tanstack/react-query";
-import {
-  BrowserRouter as Router,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-import { queryClientInstance } from "@/lib/query-client";
-import {
-  AuthProvider,
-  useAuth,
-} from "@/lib/AuthContext";
-import { MarketDataProvider } from "@/lib/MarketDataContext";
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --font-heading: ui-sans-serif, system-ui, sans-serif;
+    --font-body: ui-sans-serif, system-ui, sans-serif;
+    --font-display: ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
 
-import { applyTheme } from "@/components/settings/ThemeSection.jsx";
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
 
-import PageNotFound from "./lib/PageNotFound";
-import ScrollToTop from "./components/ScrollToTop";
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-import ProtectedRoute from "@/components/ProtectedRoute";
-import UserNotRegisteredError from "@/components/UserNotRegisteredError";
-import NavigationLayout from "@/components/NavigationLayout";
+  body {
+    @apply font-body;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    overscroll-behavior-y: none;
+  }
 
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
-import ForgotPassword from "@/pages/ForgotPassword";
-import ResetPassword from "@/pages/ResetPassword";
-import AuthCallback from "@/pages/auth/callback";
+  button,
+  a,
+  [role="button"] {
+    user-select: none;
+    -webkit-user-select: none;
+  }
 
-import Home from "@/pages/Home";
-import Onboarding from "@/pages/Onboarding";
-import StockDetail from "@/pages/StockDetail";
-import Analysis from "@/pages/Analysis";
-import Watchlist from "@/pages/Watchlist";
-import Screener from "@/pages/Screener";
-import ScreenerResults from "@/pages/ScreenerResults";
-import Settings from "@/pages/Settings";
-import PriceAlerts from "@/pages/PriceAlerts";
-import ThemeSettings from "@/pages/ThemeSettings";
-import CurrencySettings from "@/pages/CurrencySettings";
-import Legal from "@/pages/Legal";
-import MonthlyReport from "@/pages/MonthlyReport";
-import ReferralPage from "@/pages/ReferralPage";
-import ContactUs from "@/pages/ContactUs";
-
-const PUBLIC_PATHS = new Set([
-  "/login",
-  "/register",
-  "/forgot-password",
-  "/reset-password",
-  "/auth/callback",
-  "/privacy",
-  "/terms",
-  "/legal",
-  "/contact-us",
-]);
+  svg {
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: none;
+  }
+}
 
 /*
- * Keeps the active theme synchronized everywhere in the app.
+ * Apple recommends a minimum touch target of 44 × 44 points.
  *
- * Previously, ThemeSection was the only component applying the saved
- * preference. That meant the saved theme did not return until the user
- * visited the Settings page and mounted ThemeSection.
+ * This increases the tappable area of every back button that uses
+ * Lucide's ArrowLeft icon without increasing the visible icon size.
  */
-function ThemeSync() {
-  const { preferences } = useAuth();
-
-  useEffect(() => {
-    applyTheme(
-      preferences?.theme || "default",
-    );
-  }, [preferences?.theme]);
-
-  return null;
+button:has(> .lucide-arrow-left),
+a:has(> .lucide-arrow-left) {
+  min-width: 44px;
+  min-height: 44px;
 }
 
-function AuthenticatedApp() {
-  const {
-    isLoadingPublicSettings,
-    authError,
-  } = useAuth();
-
-  const location =
-    useLocation();
-
-  const isPublicPath =
-    PUBLIC_PATHS.has(
-      location.pathname,
-    );
-
-  if (
-    isLoadingPublicSettings &&
-    !isPublicPath
-  ) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        Loading...
-      </div>
-    );
-  }
-
-  if (
-    authError?.type ===
-      "user_not_registered" &&
-    !isPublicPath
-  ) {
-    return (
-      <UserNotRegisteredError />
-    );
-  }
-
-  return (
-    <Routes location={location}>
-      <Route
-        path="/login"
-        element={<Login />}
-      />
-
-      <Route
-        path="/register"
-        element={<Register />}
-      />
-
-      <Route
-        path="/forgot-password"
-        element={
-          <ForgotPassword />
-        }
-      />
-
-      <Route
-        path="/reset-password"
-        element={
-          <ResetPassword />
-        }
-      />
-
-      <Route
-        path="/auth/callback"
-        element={
-          <AuthCallback />
-        }
-      />
-
-      <Route
-        path="/privacy"
-        element={
-          <Legal page="privacy" />
-        }
-      />
-
-      <Route
-        path="/terms"
-        element={
-          <Legal page="terms" />
-        }
-      />
-
-      <Route
-        path="/legal"
-        element={<Legal />}
-      />
-
-      <Route
-        path="/contact-us"
-        element={
-          <ContactUs />
-        }
-      />
-
-      <Route
-        element={
-          <ProtectedRoute
-            unauthenticatedElement={
-              <Navigate
-                to="/login"
-                replace
-              />
-            }
-          />
-        }
-      >
-        <Route
-          element={
-            <NavigationLayout />
-          }
-        >
-          <Route
-            path="/"
-            element={
-              <Navigate
-                to="/watchlist"
-                replace
-              />
-            }
-          />
-
-          <Route
-            path="/home"
-            element={<Home />}
-          />
-
-          <Route
-            path="/watchlist"
-            element={<Watchlist />}
-          />
-
-          <Route
-            path="/onboarding"
-            element={<Onboarding />}
-          />
-
-          <Route
-            path="/stock/:ticker"
-            element={<StockDetail />}
-          />
-
-          <Route
-            path="/analysis"
-            element={<Analysis />}
-          />
-
-          <Route
-            path="/analysis/:ticker"
-            element={<Analysis />}
-          />
-
-          <Route
-            path="/screener"
-            element={<Screener />}
-          />
-
-          <Route
-            path="/screener/results"
-            element={
-              <ScreenerResults />
-            }
-          />
-
-          <Route
-            path="/settings"
-            element={<Settings />}
-          />
-
-          <Route
-            path="/settings/theme"
-            element={
-              <ThemeSettings />
-            }
-          />
-
-          <Route
-            path="/settings/currency"
-            element={
-              <CurrencySettings />
-            }
-          />
-
-          <Route
-            path="/price-alerts"
-            element={
-              <PriceAlerts />
-            }
-          />
-
-          <Route
-            path="/monthly-report"
-            element={
-              <MonthlyReport />
-            }
-          />
-
-          <Route
-            path="/referrals"
-            element={
-              <ReferralPage />
-            }
-          />
-        </Route>
-      </Route>
-
-      <Route
-        path="*"
-        element={<PageNotFound />}
-      />
-    </Routes>
-  );
+/* Hide scrollbars on horizontal scroll areas */
+.overflow-x-auto::-webkit-scrollbar,
+[class*="overflow-x"]::-webkit-scrollbar {
+  display: none;
 }
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <ThemeSync />
+.overflow-x-auto,
+[class*="overflow-x"] {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
-      <QueryClientProvider
-        client={
-          queryClientInstance
-        }
-      >
-        <Router>
-          <MarketDataProvider>
-            <ScrollToTop />
+/*
+ * Several migrated screens still use Tailwind's neutral colour utilities.
+ * Map those shared surfaces to the active StockPulse theme so one selection
+ * consistently colours every authenticated tab while feature-specific accent
+ * colours (gain/loss, bullish/bearish, alerts) remain meaningful.
+ */
+:root[data-stockpulse-theme] .bg-white {
+  background-color: hsl(var(--card));
+}
 
-            <AuthenticatedApp />
-          </MarketDataProvider>
-        </Router>
+:root[data-stockpulse-theme] .bg-gray-50,
+:root[data-stockpulse-theme] [class~="bg-gray-50/50"],
+:root[data-stockpulse-theme] [class~="bg-gray-50/95"] {
+  background-color: hsl(var(--background));
+}
 
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
-  );
+:root[data-stockpulse-theme] [class~="bg-white/70"],
+:root[data-stockpulse-theme] [class~="bg-white/80"] {
+  background-color: hsl(var(--card) / 0.8);
+}
+
+:root[data-stockpulse-theme] .bg-gray-100 {
+  background-color: hsl(var(--muted));
+}
+
+:root[data-stockpulse-theme] .bg-gray-900 {
+  background-color: hsl(var(--primary));
+}
+
+:root[data-stockpulse-theme] .text-gray-900,
+:root[data-stockpulse-theme] .text-gray-800 {
+  color: hsl(var(--foreground));
+}
+
+:root[data-stockpulse-theme] .text-gray-700,
+:root[data-stockpulse-theme] .text-gray-600,
+:root[data-stockpulse-theme] .text-gray-500,
+:root[data-stockpulse-theme] .text-gray-400 {
+  color: hsl(var(--muted-foreground));
+}
+
+:root[data-stockpulse-theme] .border-gray-50,
+:root[data-stockpulse-theme] .border-gray-100,
+:root[data-stockpulse-theme] .border-gray-200,
+:root[data-stockpulse-theme] .border-gray-300 {
+  border-color: hsl(var(--border));
+}
+
+:root[data-stockpulse-theme]
+  .divide-gray-50
+  > :not([hidden])
+  ~ :not([hidden]),
+:root[data-stockpulse-theme]
+  .divide-gray-100
+  > :not([hidden])
+  ~ :not([hidden]) {
+  border-color: hsl(var(--border));
+}
+
+:root[data-stockpulse-theme] [class~="hover:bg-gray-50"]:hover {
+  background-color: hsl(var(--muted));
+}
+
+/*
+ * Stock detail header placeholder for extended-hours data.
+ *
+ * The normal daily-return badge remains unchanged and has no label.
+ * Replace N/A when paid Finnhub extended-hours data is connected.
+ */
+main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5 {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-rows: auto auto auto;
+  column-gap: 0.75rem;
+  row-gap: 0.125rem;
+  align-items: end;
+}
+
+main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5 > p {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  margin-bottom: 0.25rem;
+}
+
+main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5 > div {
+  grid-column: 1;
+  grid-row: 2 / 4;
+  align-self: end;
+}
+
+main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5::before {
+  content: "After-hours:";
+  grid-column: 2;
+  grid-row: 2;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5::after {
+  content: "N/A";
+  grid-column: 2;
+  grid-row: 3;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
 }
