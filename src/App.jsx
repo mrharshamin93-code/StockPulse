@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -14,6 +15,8 @@ import {
   useAuth,
 } from "@/lib/AuthContext";
 import { MarketDataProvider } from "@/lib/MarketDataContext";
+
+import { applyTheme } from "@/components/settings/ThemeSection.jsx";
 
 import PageNotFound from "./lib/PageNotFound";
 import ScrollToTop from "./components/ScrollToTop";
@@ -55,6 +58,25 @@ const PUBLIC_PATHS = new Set([
   "/legal",
   "/contact-us",
 ]);
+
+/*
+ * Keeps the active theme synchronized everywhere in the app.
+ *
+ * Previously, ThemeSection was the only component applying the saved
+ * preference. That meant the saved theme did not return until the user
+ * visited the Settings page and mounted ThemeSection.
+ */
+function ThemeSync() {
+  const { preferences } = useAuth();
+
+  useEffect(() => {
+    applyTheme(
+      preferences?.theme || "default",
+    );
+  }, [preferences?.theme]);
+
+  return null;
+}
 
 function AuthenticatedApp() {
   const {
@@ -272,6 +294,8 @@ function AuthenticatedApp() {
 export default function App() {
   return (
     <AuthProvider>
+      <ThemeSync />
+
       <QueryClientProvider
         client={
           queryClientInstance
