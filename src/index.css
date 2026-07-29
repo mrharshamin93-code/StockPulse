@@ -220,16 +220,6 @@ main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5 > div {
   align-self: end;
 }
 
-main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5::before {
-  content: "After-hours:";
-  grid-column: 2;
-  grid-row: 2;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.68rem;
-  font-weight: 500;
-  line-height: 1;
-}
-
 main > section:first-child > .mt-4.flex.flex-col.items-start.gap-1\.5::after {
   content: "N/A";
   grid-column: 2;
