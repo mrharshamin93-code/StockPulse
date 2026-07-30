@@ -758,7 +758,7 @@ async function fetchQuote(
   try {
     const url =
       new URL(
-        "https://finnhub.io/api/v1/quote",
+        "https://api.financialdatasets.ai/quotes/",
       );
 
     url.searchParams.set(
@@ -771,7 +771,7 @@ async function fetchQuote(
         url,
         {
           headers: {
-            "X-Finnhub-Token":
+            "X-API-KEY":
               apiKey,
           },
           signal:
@@ -786,7 +786,7 @@ async function fetchQuote(
 
     if (!response.ok) {
       throw new Error(
-        `Finnhub quote request failed with status ${response.status}.`,
+        `Financial Datasets quote request failed with status ${response.status}.`,
       );
     }
 
@@ -796,7 +796,7 @@ async function fetchQuote(
         "object"
     ) {
       throw new Error(
-        "Finnhub returned an invalid quote payload.",
+        "Financial Datasets returned an invalid quote payload.",
       );
     }
 
@@ -821,7 +821,7 @@ async function fetchQuote(
         previousClose <= 0)
     ) {
       throw new Error(
-        "Finnhub returned no usable quote.",
+        "Financial Datasets returned no usable quote.",
       );
     }
 
@@ -1574,9 +1574,9 @@ Deno.serve(
           []
         ) as unknown as ScreenerRow[];
 
-      const finnhubApiKey =
+      const financialDatasetsApiKey =
         Deno.env.get(
-          "FINNHUB_API_KEY",
+          "FINANCIAL_DATASETS_API_KEY",
         );
 
       const staleBeforeMs =
@@ -1586,7 +1586,7 @@ Deno.serve(
           1000;
 
       const staleRows =
-        finnhubApiKey
+        financialDatasetsApiKey
           ? rows.filter(
               (row) =>
                 isQuoteStale(
@@ -1600,7 +1600,7 @@ Deno.serve(
         QuoteUpdate[] = [];
 
       if (
-        finnhubApiKey &&
+        financialDatasetsApiKey &&
         staleRows.length >
           0
       ) {
@@ -1615,7 +1615,7 @@ Deno.serve(
                 const values =
                   await fetchQuote(
                     row.symbol,
-                    finnhubApiKey,
+                    financialDatasetsApiKey,
                   );
 
                 const {
