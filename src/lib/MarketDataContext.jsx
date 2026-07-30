@@ -10,7 +10,7 @@ import React, {
 import { useAuth } from "@/lib/AuthContext";
 import {
   getQuotes,
-} from "@/lib/finnhub";
+} from "@/lib/financialDatasets";
 
 const QUOTE_TTL_MS =
   15000;
