@@ -12,7 +12,7 @@ import {
 
 import { useAuth } from "@/lib/AuthContext";
 
-const LAST_UPDATED = "July 24, 2026";
+const LAST_UPDATED = "July 30, 2026";
 
 const PRIVACY_POLICY = `
 StockPulse ("StockPulse," "we," "our," or "us") provides stock-price information, portfolio tracking, watchlists, alerts, stock-screening tools, reports, and informational AI-generated stock analysis.
@@ -102,7 +102,7 @@ We use collected information to:
 StockPulse relies on third-party service providers to operate the service. These may include:
 
 - Supabase, for authentication, databases, server functions, and file storage.
-- Finnhub, for stock prices, historical market data, company information, financial metrics, news, and symbol information.
+- Financial Datasets, for stock prices, historical market data, company information, financial metrics, news, and symbol information.
 - xAI, for informational AI-generated stock analysis.
 - Vercel, for website hosting, delivery, and operational services.
 - Apple and Google, when you choose their authentication services.
@@ -231,7 +231,7 @@ You are responsible for your own investment decisions and should independently v
 
 ## 6. Market Data
 
-Market prices, charts, company information, metrics, and news may be supplied by third-party providers such as Finnhub. Market information may be delayed, incomplete, incorrect, unavailable, adjusted, revised, or different from information displayed by a broker or exchange.
+Market prices, charts, company information, metrics, and news may be supplied by third-party providers such as Financial Datasets. Market information may be delayed, incomplete, incorrect, unavailable, adjusted, revised, or different from information displayed by a broker or exchange.
 
 StockPulse does not guarantee the accuracy, completeness, availability, or timeliness of market information. You must not rely on StockPulse as your only source for an investment decision.
 
