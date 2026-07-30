@@ -20,8 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import {
-  finnhubRequest,
-} from "@/lib/finnhub";
+  financialDatasetsRequest,
+} from "@/lib/financialDatasets";
 import { POPULAR_TICKERS } from "@/lib/tickers";
 import bullImage from "@/assets/StockPulse.png";
 
@@ -34,11 +34,11 @@ const POPULAR_SEARCHES = [
   "TSLA",
 ];
 
-async function fetchFinnhub(
+async function fetchMarketData(
   action,
   ticker,
 ) {
-  return finnhubRequest({
+  return financialDatasetsRequest({
     action,
     ticker,
   });
@@ -393,13 +393,13 @@ export default function Analysis() {
             );
 
         const quoteCall =
-          fetchFinnhub(
+          fetchMarketData(
             "quote",
             normalizedTicker,
           );
 
         const newsCall =
-          fetchFinnhub(
+          fetchMarketData(
             "news",
             normalizedTicker,
           );
