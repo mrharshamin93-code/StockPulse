@@ -28,8 +28,8 @@ import {
   X,
 } from "lucide-react";
 import {
-  finnhubRequest,
-} from "@/lib/finnhub";
+  financialDatasetsRequest,
+} from "@/lib/financialDatasets";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -181,7 +181,7 @@ function normalizePrefetchedQuote(value) {
     : null;
 }
 
-async function finnhubProxy(
+async function marketDataProxy(
   body,
   signal,
 ) {
@@ -193,7 +193,7 @@ async function finnhubProxy(
   }
 
   const payload =
-    await finnhubRequest(
+    await financialDatasetsRequest(
       body,
     );
 
@@ -352,7 +352,7 @@ async function fetchChartData(
   } = getPeriodBounds(period);
 
   const result =
-    await finnhubProxy(
+    await marketDataProxy(
       {
         action:
           "candles_range",
@@ -2017,7 +2017,7 @@ export default function StockDetail() {
           ] =
             await Promise.all(
               [
-                finnhubProxy(
+                marketDataProxy(
                   {
                     action:
                       "quote",
@@ -2029,7 +2029,7 @@ export default function StockDetail() {
                     .signal,
                 ),
 
-                finnhubProxy(
+                marketDataProxy(
                   {
                     action:
                       "profile",
@@ -2355,7 +2355,7 @@ export default function StockDetail() {
 
       try {
         const result =
-          await finnhubProxy(
+          await marketDataProxy(
             {
               action:
                 "news",
@@ -2420,7 +2420,7 @@ export default function StockDetail() {
 
     try {
       const result =
-        await finnhubProxy({
+        await marketDataProxy({
           action:
             "news",
 
@@ -2490,7 +2490,7 @@ export default function StockDetail() {
 
     try {
       const quote =
-        await finnhubProxy({
+        await marketDataProxy({
           action:
             "quote",
 
