@@ -60,7 +60,7 @@ type TransactionRow = {
 type QuoteResult = {
   ticker: string;
   currentPrice: number | null;
-  source: "finnhub" | "stored" | "unavailable";
+  source: "financial_datasets" | "stored" | "unavailable";
 };
 
 type HoldingSummary = {
@@ -119,8 +119,8 @@ const SUPABASE_ANON_KEY =
   Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const FINNHUB_API_KEY =
-  Deno.env.get("FINNHUB_API_KEY") || "";
+const FINANCIAL_DATASETS_API_KEY =
+  Deno.env.get("FINANCIAL_DATASETS_API_KEY") || "";
 const MONTHLY_REPORT_CRON_SECRET =
   Deno.env.get("MONTHLY_REPORT_CRON_SECRET") || "";
 
@@ -397,11 +397,11 @@ async function fetchAllTransactions(
   return rows;
 }
 
-async function fetchFinnhubQuote(
+async function fetchFinancialDatasetsQuote(
   ticker: string,
   storedPrice: number | null,
 ): Promise<QuoteResult> {
-  if (!FINNHUB_API_KEY) {
+  if (!FINANCIAL_DATASETS_API_KEY) {
     return {
       ticker,
       currentPrice: storedPrice,
@@ -410,30 +410,59 @@ async function fetchFinnhubQuote(
   }
 
   try {
-    const url = new URL("https://finnhub.io/api/v1/quote");
-    url.searchParams.set("symbol", ticker);
-    url.searchParams.set("token", FINNHUB_API_KEY);
+    const url = new URL(
+      "https://api.financialdatasets.ai/prices/snapshot",
+    );
+    url.searchParams.set("ticker", ticker);
 
     const response = await fetch(url, {
       headers: {
         Accept: "application/json",
+        "X-API-KEY": FINANCIAL_DATASETS_API_KEY,
       },
     });
 
+    const payload = await response
+      .json()
+      .catch(() => null);
+
     if (!response.ok) {
-      throw new Error(`Finnhub returned ${response.status}`);
+      const apiMessage =
+        payload &&
+        typeof payload === "object" &&
+        typeof payload.error === "string"
+          ? payload.error
+          : null;
+
+      throw new Error(
+        apiMessage ||
+          `Financial Datasets returned ${response.status}`,
+      );
     }
 
-    const payload = await response.json();
-    const currentPrice = positiveNumberOrNull(payload?.c);
+    const snapshot =
+      payload &&
+      typeof payload === "object" &&
+      payload.snapshot &&
+      typeof payload.snapshot === "object"
+        ? payload.snapshot
+        : null;
+
+    const currentPrice = positiveNumberOrNull(
+      snapshot?.price ?? snapshot?.close,
+    );
 
     if (currentPrice !== null) {
       return {
         ticker,
         currentPrice,
-        source: "finnhub",
+        source: "financial_datasets",
       };
     }
+
+    throw new Error(
+      "Financial Datasets returned no valid current price.",
+    );
   } catch (error) {
     console.warn(`Quote fetch failed for ${ticker}:`, error);
   }
@@ -458,7 +487,7 @@ async function fetchQuotesInBatches(
       batch.map((stock) => {
         const ticker = normalizeTicker(stock.ticker);
         const storedPrice = positiveNumberOrNull(stock.current_price);
-        return fetchFinnhubQuote(ticker, storedPrice);
+        return fetchFinancialDatasetsQuote(ticker, storedPrice);
       }),
     );
 
@@ -1756,8 +1785,9 @@ async function processDelivery(
           currency: data.summary.currency,
           pdf_bytes: pdfBytes.length,
           price_sources: {
-            finnhub: data.holdings.filter(
-              (holding) => holding.priceSource === "finnhub",
+            financial_datasets: data.holdings.filter(
+              (holding) =>
+                holding.priceSource === "financial_datasets",
             ).length,
             stored: data.holdings.filter(
               (holding) => holding.priceSource === "stored",
