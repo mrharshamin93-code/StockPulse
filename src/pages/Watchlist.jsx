@@ -25,7 +25,9 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
-import { finnhubRequest } from "@/lib/finnhub";
+import {
+  financialDatasetsRequest,
+} from "@/lib/financialDatasets";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,7 +145,10 @@ function getCompanyName(ticker, stock, item) {
   );
 }
 
-async function finnhub(body, signal) {
+async function marketDataRequest(
+  body,
+  signal,
+) {
   if (signal?.aborted) {
     throw new DOMException(
       "The operation was aborted.",
@@ -152,7 +157,9 @@ async function finnhub(body, signal) {
   }
 
   const payload =
-    await finnhubRequest(body);
+    await financialDatasetsRequest(
+      body,
+    );
 
   if (signal?.aborted) {
     throw new DOMException(
@@ -288,7 +295,7 @@ function AddToPortfolioDialog({
       let currentPrice = cost;
 
       try {
-        const quote = await finnhub({
+        const quote = await marketDataRequest({
           action: "quote",
           ticker,
         });
@@ -613,7 +620,7 @@ async function fetchSparkline(
 
   const from = to - 30 * 86400;
 
-  const payload = await finnhub(
+  const payload = await marketDataRequest(
     {
       action: "candles_range",
       ticker,
@@ -1657,7 +1664,7 @@ export default function Watchlist() {
         setSearching(true);
 
         try {
-          const payload = await finnhub(
+          const payload = await marketDataRequest(
             {
               action: "search",
               query,
@@ -2110,7 +2117,7 @@ export default function Watchlist() {
       let resolvedExchange = exchange;
 
       try {
-        const profile = await finnhub({
+        const profile = await marketDataRequest({
           action: "profile",
           ticker: normalized,
         });
