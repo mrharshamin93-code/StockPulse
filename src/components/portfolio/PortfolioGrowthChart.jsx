@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import {
   getCandlesRange,
-} from "@/lib/finnhub";
+} from "@/lib/financialDatasets";
 
 const PERIODS = [
   "1D",
