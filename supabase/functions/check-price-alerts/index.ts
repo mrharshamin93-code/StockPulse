@@ -186,14 +186,14 @@ function notificationCopy(
   };
 }
 
-async function fetchFinnhubQuote(
+async function fetchFinancialDatasetsQuote(
   ticker: string,
   apiKey: string,
 ): Promise<QuoteResult> {
   try {
     const url =
       new URL(
-        "https://finnhub.io/api/v1/quote",
+        "https://api.financialdatasets.ai/quotes/",
       );
 
     url.searchParams.set(
@@ -201,10 +201,7 @@ async function fetchFinnhubQuote(
       ticker,
     );
 
-    url.searchParams.set(
-      "token",
-      apiKey,
-    );
+    
 
     const response =
       await fetch(url);
@@ -220,7 +217,7 @@ async function fetchFinnhubQuote(
         price: null,
         error:
           payload?.error ||
-          `Finnhub returned ${response.status}`,
+          `Financial Datasets returned ${response.status}`,
       };
     }
 
@@ -235,7 +232,7 @@ async function fetchFinnhubQuote(
         ticker,
         price: null,
         error:
-          "Finnhub returned no valid current price.",
+          "Financial Datasets returned no valid current price.",
       };
     }
 
@@ -316,9 +313,9 @@ Deno.serve(
           "SUPABASE_SERVICE_ROLE_KEY",
         );
 
-      const finnhubApiKey =
+      const financialDatasetsApiKey =
         getRequiredEnvironmentVariable(
-          "FINNHUB_API_KEY",
+          "FINANCIAL_DATASETS_API_KEY",
         );
 
       const admin =
@@ -396,9 +393,9 @@ Deno.serve(
         of uniqueTickers
       ) {
         const quote =
-          await fetchFinnhubQuote(
+          await fetchFinancialDatasetsQuote(
             ticker,
-            finnhubApiKey,
+            financialDatasetsApiKey,
           );
 
         quotes.set(
@@ -406,7 +403,7 @@ Deno.serve(
           quote,
         );
 
-        // Keeps a free Finnhub key comfortably below
+        // Keeps a free Financial Datasets key comfortably below
         // burst limits while still finishing quickly.
         await new Promise(
           (resolve) =>
