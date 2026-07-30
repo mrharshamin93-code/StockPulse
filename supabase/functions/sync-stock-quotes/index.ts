@@ -129,7 +129,7 @@ async function delay(
   );
 }
 
-async function fetchFinnhubQuote(
+async function fetchFinancialDatasetsQuote(
   symbol: string,
   apiKey: string,
 ): Promise<QuoteValues> {
@@ -154,7 +154,7 @@ async function fetchFinnhubQuote(
     try {
       const url =
         new URL(
-          "https://finnhub.io/api/v1/quote",
+          "https://api.financialdatasets.ai/quotes/",
         );
 
       url.searchParams.set(
@@ -167,7 +167,7 @@ async function fetchFinnhubQuote(
           url,
           {
             headers: {
-              "X-Finnhub-Token":
+              "X-API-KEY":
                 apiKey,
             },
             signal:
@@ -194,7 +194,7 @@ async function fetchFinnhubQuote(
 
       if (!response.ok) {
         throw new Error(
-          `Finnhub quote request failed with status ${response.status}.`,
+          `Financial Datasets quote request failed with status ${response.status}.`,
         );
       }
 
@@ -204,7 +204,7 @@ async function fetchFinnhubQuote(
           "object"
       ) {
         throw new Error(
-          "Finnhub returned an invalid quote payload.",
+          "Financial Datasets returned an invalid quote payload.",
         );
       }
 
@@ -232,7 +232,7 @@ async function fetchFinnhubQuote(
         )
       ) {
         throw new Error(
-          "Finnhub returned no usable quote.",
+          "Financial Datasets returned no usable quote.",
         );
       }
 
@@ -338,7 +338,7 @@ async function fetchFinnhubQuote(
         error instanceof Error
           ? error
           : new Error(
-              "Unknown Finnhub quote error.",
+              "Unknown Financial Datasets quote error.",
             );
 
       if (
@@ -359,7 +359,7 @@ async function fetchFinnhubQuote(
   throw (
     lastError ??
     new Error(
-      "Finnhub quote request failed.",
+      "Financial Datasets quote request failed.",
     )
   );
 }
@@ -452,9 +452,9 @@ Deno.serve(
       );
     }
 
-    const finnhubApiKey =
+    const financialDatasetsApiKey =
       Deno.env.get(
-        "FINNHUB_API_KEY",
+        "FINANCIAL_DATASETS_API_KEY",
       );
 
     const supabaseUrl =
@@ -467,12 +467,12 @@ Deno.serve(
         "SUPABASE_SERVICE_ROLE_KEY",
       );
 
-    if (!finnhubApiKey) {
+    if (!financialDatasetsApiKey) {
       return jsonResponse(
         {
           ok: false,
           error:
-            "FINNHUB_API_KEY is not configured.",
+            "FINANCIAL_DATASETS_API_KEY is not configured.",
         },
         503,
       );
@@ -732,9 +732,9 @@ Deno.serve(
 
             try {
               const values =
-                await fetchFinnhubQuote(
+                await fetchFinancialDatasetsQuote(
                   symbol,
-                  finnhubApiKey,
+                  financialDatasetsApiKey,
                 );
 
               const {
