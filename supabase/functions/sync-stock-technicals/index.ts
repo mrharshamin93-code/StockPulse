@@ -353,7 +353,7 @@ function buildTechnicalUpdate(
     64
   ) {
     throw new Error(
-      "Finnhub returned fewer than 64 usable daily candles.",
+      "Financial Datasets returned fewer than 64 usable daily candles.",
     );
   }
 
@@ -578,7 +578,7 @@ async function delay(
   );
 }
 
-async function fetchFinnhubCandles(
+async function fetchFinancialDatasetsCandles(
   symbol: string,
   apiKey: string,
 ) {
@@ -616,7 +616,7 @@ async function fetchFinnhubCandles(
 
       const url =
         new URL(
-          "https://finnhub.io/api/v1/stock/candle",
+          "https://api.financialdatasets.ai/prices",
         );
 
       url.searchParams.set(
@@ -648,7 +648,7 @@ async function fetchFinnhubCandles(
           url,
           {
             headers: {
-              "X-Finnhub-Token":
+              "X-API-KEY":
                 apiKey,
             },
             signal:
@@ -676,7 +676,7 @@ async function fetchFinnhubCandles(
 
       if (!response.ok) {
         throw new Error(
-          `Finnhub candle request failed with status ${response.status}.`,
+          `Financial Datasets candle request failed with status ${response.status}.`,
         );
       }
 
@@ -686,7 +686,7 @@ async function fetchFinnhubCandles(
           "object"
       ) {
         throw new Error(
-          "Finnhub returned an invalid candle payload.",
+          "Financial Datasets returned an invalid candle payload.",
         );
       }
 
@@ -699,7 +699,7 @@ async function fetchFinnhubCandles(
         candles.length === 0
       ) {
         throw new Error(
-          "Finnhub returned no usable daily candles.",
+          "Financial Datasets returned no usable daily candles.",
         );
       }
 
@@ -709,7 +709,7 @@ async function fetchFinnhubCandles(
         error instanceof Error
           ? error
           : new Error(
-              "Unknown Finnhub candle error.",
+              "Unknown Financial Datasets candle error.",
             );
 
       if (
@@ -730,7 +730,7 @@ async function fetchFinnhubCandles(
   throw (
     lastError ??
     new Error(
-      "Finnhub candle request failed.",
+      "Financial Datasets candle request failed.",
     )
   );
 }
@@ -823,9 +823,9 @@ Deno.serve(
       );
     }
 
-    const finnhubApiKey =
+    const financialDatasetsApiKey =
       Deno.env.get(
-        "FINNHUB_API_KEY",
+        "FINANCIAL_DATASETS_API_KEY",
       );
 
     const supabaseUrl =
@@ -838,12 +838,12 @@ Deno.serve(
         "SUPABASE_SERVICE_ROLE_KEY",
       );
 
-    if (!finnhubApiKey) {
+    if (!financialDatasetsApiKey) {
       return jsonResponse(
         {
           ok: false,
           error:
-            "FINNHUB_API_KEY is not configured.",
+            "FINANCIAL_DATASETS_API_KEY is not configured.",
         },
         503,
       );
@@ -1108,9 +1108,9 @@ Deno.serve(
 
             try {
               const candles =
-                await fetchFinnhubCandles(
+                await fetchFinancialDatasetsCandles(
                   symbol,
-                  finnhubApiKey,
+                  financialDatasetsApiKey,
                 );
 
               const update =
