@@ -29,7 +29,7 @@ import { useAuth } from "@/lib/AuthContext";
 import {
   getProfile,
   getQuote,
-} from "@/lib/finnhub";
+} from "@/lib/financialDatasets";
 
 export default function AddStockDialog({
   onStockAdded,
