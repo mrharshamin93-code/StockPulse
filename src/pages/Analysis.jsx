@@ -130,7 +130,7 @@ function EmptyStateHero({
       </h1>
 
       <p className="mt-4 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
-        Bullish and bearish AI insights backed by verified financial metrics.
+        A detailed AI assessment of the stock with key financial metrics.
       </p>
 
       <form
@@ -719,7 +719,7 @@ export default function Analysis() {
             </p>
 
             <p className="text-sm text-gray-500">
-              Generating bullish and bearish insights…
+              Generating AI assessment…
             </p>
           </div>
         )}
