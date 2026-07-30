@@ -18,3 +18,6 @@ verify_jwt = false
 
 [functions.contact-support]
 verify_jwt = false
+
+[functions.financial-datasets]
+verify_jwt = true
