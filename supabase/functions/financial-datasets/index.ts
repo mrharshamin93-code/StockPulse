@@ -975,22 +975,26 @@ async function getCandles(
     );
 
   const startDate =
-    isoDateFromUnix(
-      body.from,
-    ) ??
-    normalizeText(
-      body.start_date ??
-        body.startDate,
+    (
+      isoDateFromUnix(
+        body.from,
+      ) ??
+      normalizeText(
+        body.start_date ??
+          body.startDate,
+      )
     ) ||
     fallback.startDate;
 
   const endDate =
-    isoDateFromUnix(
-      body.to,
-    ) ??
-    normalizeText(
-      body.end_date ??
-        body.endDate,
+    (
+      isoDateFromUnix(
+        body.to,
+      ) ??
+      normalizeText(
+        body.end_date ??
+          body.endDate,
+      )
     ) ||
     fallback.endDate;
 
