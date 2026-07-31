@@ -1,7 +1,10 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  fetchFinancialDatasetsPrices,
-} from "../_shared/financial-datasets.ts";
+  createClient,
+  type SupabaseClient,
+} from "npm:@supabase/supabase-js@2";
+import {
+  getCachedFinancialDatasetsPrices,
+} from "../_shared/market-data-cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -466,6 +469,7 @@ function buildTechnicalUpdate(
 }
 
 async function fetchFinancialDatasetsCandles(
+  client: SupabaseClient,
   symbol: string,
   apiKey: string,
 ): Promise<Candle[]> {
@@ -484,8 +488,9 @@ async function fetchFinancialDatasetsCandles(
     start.toISOString()
       .slice(0, 10);
 
-  const prices =
-    await fetchFinancialDatasetsPrices(
+  const cached =
+    await getCachedFinancialDatasetsPrices(
+      client,
       symbol,
       apiKey,
       {
@@ -494,6 +499,9 @@ async function fetchFinancialDatasetsCandles(
         endDate,
       },
     );
+
+  const prices =
+    cached.data;
 
   if (!prices.length) {
     throw new Error(
@@ -658,23 +666,23 @@ Deno.serve(
         .json()
         .catch(() => ({}));
 
-    const requestedSymbols =
+    const rawSymbols: unknown[] =
       Array.isArray(
         body?.symbols,
       )
-        ? [
-            ...new Set(
-              body.symbols
-                .map(
-                  normalizeSymbol,
-                )
-                .filter(Boolean),
-            ),
-          ].slice(
-            0,
-            MAX_BATCH_SIZE,
-          )
+        ? body.symbols
         : [];
+
+    const requestedSymbols = [
+      ...new Set(
+        rawSymbols
+          .map(normalizeSymbol)
+          .filter(Boolean),
+      ),
+    ].slice(
+      0,
+      MAX_BATCH_SIZE,
+    );
 
     const requestedBatchSize =
       Math.trunc(
@@ -792,7 +800,7 @@ Deno.serve(
         }
 
         stocks =
-          data ?? [];
+          (data ?? []) as StockQueueRow[];
       }
 
       if (
@@ -885,6 +893,7 @@ Deno.serve(
             try {
               const candles =
                 await fetchFinancialDatasetsCandles(
+                  supabase,
                   symbol,
                   financialDatasetsApiKey,
                 );

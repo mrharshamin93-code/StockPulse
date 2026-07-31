@@ -1,7 +1,10 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
 import {
-  fetchFinancialDatasetsQuote as fetchProviderQuote,
-} from "../_shared/financial-datasets.ts";
+  createClient,
+  type SupabaseClient,
+} from "npm:@supabase/supabase-js@2.110.7";
+import {
+  getCachedFinancialDatasetsQuote,
+} from "../_shared/market-data-cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,7 +91,7 @@ function getErrorMessage(error: unknown): string {
       );
 
     if (parts.length) {
-      return [...new Set(parts)].join(" — ");
+      return [...new Set(parts)].join(" ??? ");
     }
   }
 
@@ -190,15 +193,21 @@ function notificationCopy(
 }
 
 async function fetchFinancialDatasetsQuote(
+  client: SupabaseClient,
   ticker: string,
   apiKey: string,
 ): Promise<QuoteResult> {
   try {
-    const quote =
-      await fetchProviderQuote(
+    const cached =
+      await getCachedFinancialDatasetsQuote(
+        client,
         ticker,
         apiKey,
+        { priority: true },
       );
+
+    const quote =
+      cached.data;
 
     const price = quote.price;
 
@@ -372,6 +381,7 @@ Deno.serve(
       ) {
         const quote =
           await fetchFinancialDatasetsQuote(
+            admin,
             ticker,
             financialDatasetsApiKey,
           );
@@ -381,8 +391,8 @@ Deno.serve(
           quote,
         );
 
-        // Keeps a free Financial Datasets key comfortably below
-        // burst limits while still finishing quickly.
+        // Avoids sudden bursts when several uncached alert tickers
+        // need their shared five-minute quote refreshed together.
         await new Promise(
           (resolve) =>
             setTimeout(

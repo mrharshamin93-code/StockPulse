@@ -1,6 +1,11 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  fetchFinancialDatasetsQuote as fetchProviderQuote,
+  createClient,
+  type SupabaseClient,
+} from "npm:@supabase/supabase-js@2";
+import {
+  getCachedFinancialDatasetsQuote,
+} from "../_shared/market-data-cache.ts";
+import {
   timestampToIso,
 } from "../_shared/financial-datasets.ts";
 
@@ -74,23 +79,32 @@ function normalizeSymbol(
 }
 
 async function fetchFinancialDatasetsQuote(
+  client: SupabaseClient,
   symbol: string,
   apiKey: string,
 ): Promise<QuoteValues> {
-  const quote =
-    await fetchProviderQuote(
+  const cached =
+    await getCachedFinancialDatasetsQuote(
+      client,
       symbol,
       apiKey,
     );
 
+  const quote =
+    cached.data;
+
   const checkedAt =
     new Date().toISOString();
+
+  const quoteUpdatedAt =
+    cached.cache.fetchedAt ||
+    checkedAt;
 
   const values: QuoteValues = {
     quote_checked_at:
       checkedAt,
     quote_updated_at:
-      checkedAt,
+      quoteUpdatedAt,
     quote_error: null,
   };
 
@@ -285,23 +299,23 @@ Deno.serve(
         .json()
         .catch(() => ({}));
 
-    const requestedSymbols =
+    const rawSymbols: unknown[] =
       Array.isArray(
         body?.symbols,
       )
-        ? [
-            ...new Set(
-              body.symbols
-                .map(
-                  normalizeSymbol,
-                )
-                .filter(Boolean),
-            ),
-          ].slice(
-            0,
-            MAX_BATCH_SIZE,
-          )
+        ? body.symbols
         : [];
+
+    const requestedSymbols = [
+      ...new Set(
+        rawSymbols
+          .map(normalizeSymbol)
+          .filter(Boolean),
+      ),
+    ].slice(
+      0,
+      MAX_BATCH_SIZE,
+    );
 
     const requestedBatchSize =
       Math.trunc(
@@ -418,7 +432,7 @@ Deno.serve(
         }
 
         stocks =
-          data ?? [];
+          (data ?? []) as StockQueueRow[];
       }
 
       if (
@@ -507,6 +521,7 @@ Deno.serve(
             try {
               const values =
                 await fetchFinancialDatasetsQuote(
+                  supabase,
                   symbol,
                   financialDatasetsApiKey,
                 );

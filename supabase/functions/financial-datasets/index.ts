@@ -1,5 +1,20 @@
+import {
+  createClient,
+  type SupabaseClient,
+} from "npm:@supabase/supabase-js@2";
+import {
+  getCachedFinancialDatasetsPrices,
+  getCachedFinancialDatasetsQuote,
+  getCachedMarketData,
+} from "../_shared/market-data-cache.ts";
+
 const FINANCIAL_DATASETS_API_KEY =
   Deno.env.get("FINANCIAL_DATASETS_API_KEY") || "";
+
+const SUPABASE_URL =
+  Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_SERVICE_ROLE_KEY =
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const API_BASE_URL =
   "https://api.financialdatasets.ai";
@@ -11,15 +26,39 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const QUOTE_TTL_MS = 15_000;
-const PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
-const NEWS_TTL_MS = 10 * 60 * 1000;
-const CANDLES_TTL_MS = 5 * 60 * 1000;
-const METRICS_TTL_MS = 60 * 60 * 1000;
-const TICKER_DIRECTORY_TTL_MS = 24 * 60 * 60 * 1000;
+const PROFILE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const NEWS_TTL_MS = 30 * 60 * 1000;
+const METRICS_TTL_MS = 24 * 60 * 60 * 1000;
+const TICKER_DIRECTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const QUOTE_REQUEST_CONCURRENCY = 5;
 
 const cache = new Map();
+let cacheClient: SupabaseClient | null = null;
+
+function getCacheClient(): SupabaseClient {
+  if (
+    !SUPABASE_URL ||
+    !SUPABASE_SERVICE_ROLE_KEY
+  ) {
+    throw new Error(
+      "Supabase service credentials are required for the shared market-data cache.",
+    );
+  }
+
+  cacheClient ??=
+    createClient(
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      },
+    );
+
+  return cacheClient;
+}
 
 class ProviderError extends Error {
   status: number;
@@ -318,13 +357,63 @@ async function withCache<T>(
     return existing.value as T;
   }
 
+  const [dataType, tickerValue] =
+    key.split(":");
+
+  const result =
+    await getCachedMarketData({
+      client: getCacheClient(),
+      key,
+      dataType:
+        dataType || "market-data",
+      ticker:
+        tickerValue || null,
+      parameters: { key },
+      freshMs: ttlMs,
+      staleMs: Math.max(
+        ttlMs,
+        dataType === "news"
+          ? 24 * 60 * 60 * 1000
+          : 30 * 24 * 60 * 60 * 1000,
+      ),
+      endpoint:
+        dataType === "profile"
+          ? "/company/facts"
+          : dataType === "news"
+            ? "/news"
+            : dataType === "candles"
+              ? "/prices"
+              : dataType === "metrics"
+                ? "/financial-metrics/snapshot"
+                : "/company/facts/tickers/",
+      fetcher,
+    });
+
   const value =
-    await fetcher();
+    result.data;
+
+  const persistentExpiration =
+    Date.parse(
+      result.cache.expiresAt ||
+      "",
+    );
+
+  const memoryExpiration =
+    Number.isFinite(
+      persistentExpiration,
+    ) &&
+    persistentExpiration >
+      Date.now()
+      ? Math.min(
+          persistentExpiration,
+          Date.now() + ttlMs,
+        )
+      : Date.now() + 15_000;
 
   cache.set(key, {
     value,
     expiresAt:
-      Date.now() + ttlMs,
+      memoryExpiration,
   });
 
   return value;
@@ -392,7 +481,9 @@ async function providerGet(
     string,
     unknown
   > = {},
-  retries = 2,
+  // Every attempt consumes a provider request. Cache backoff replaces
+  // immediate provider retries so quota accounting stays exact.
+  retries = 0,
 ): Promise<unknown> {
   if (
     !FINANCIAL_DATASETS_API_KEY
@@ -504,133 +595,31 @@ function emptyQuote(
   };
 }
 
-function normalizeQuote(
-  ticker: string,
-  payload: unknown,
-) {
-  const root =
-    payload &&
-    typeof payload === "object"
-      ? payload as Record<
-          string,
-          unknown
-        >
-      : {};
-
-  const snapshot =
-    root.snapshot &&
-    typeof root.snapshot ===
-      "object"
-      ? root.snapshot as Record<
-          string,
-          unknown
-        >
-      : root;
-
-  const current =
-    finiteNumber(
-      snapshot.price ??
-        snapshot.close ??
-        snapshot.current_price,
-    );
-
-  const change =
-    finiteNumber(
-      snapshot.day_change ??
-        snapshot.change ??
-        snapshot.change_amount,
-    );
-
-  const previousCloseDirect =
-    finiteNumber(
-      snapshot.previous_close ??
-        snapshot.previousClose,
-    );
-
-  const previousClose =
-    previousCloseDirect ??
-    (
-      current !== null &&
-      change !== null
-        ? current - change
-        : null
-    );
-
-  let changePercent =
-    finiteNumber(
-      snapshot.day_change_percent ??
-        snapshot.change_percent ??
-        snapshot.changePercent,
-    );
-
-  if (
-    changePercent === null &&
-    change !== null &&
-    previousClose !== null &&
-    previousClose !== 0
-  ) {
-    changePercent =
-      change /
-      previousClose *
-      100;
-  }
-
-  return {
-    ticker:
-      normalizeTicker(
-        snapshot.ticker,
-      ) || ticker,
-
-    c: current,
-    d: change,
-    dp: changePercent,
-
-    h: finiteNumber(
-      snapshot.high ??
-        snapshot.day_high,
-    ),
-
-    l: finiteNumber(
-      snapshot.low ??
-        snapshot.day_low,
-    ),
-
-    o: finiteNumber(
-      snapshot.open ??
-        snapshot.open_price,
-    ),
-
-    pc: previousClose,
-
-    t:
-      timestampSeconds(
-        snapshot.time_milliseconds,
-      ) ??
-      timestampSeconds(
-        snapshot.time,
-      ),
-  };
-}
-
 async function getQuote(
   ticker: string,
 ) {
-  return withCache(
-    `quote:${ticker}`,
-    QUOTE_TTL_MS,
-    async () => {
-      const payload =
-        await providerGet(
-          "/prices/snapshot",
-          { ticker },
-        );
+  const result =
+    await getCachedFinancialDatasetsQuote(
+      getCacheClient(),
+      ticker,
+      FINANCIAL_DATASETS_API_KEY,
+    );
 
-      return normalizeQuote(
-        ticker,
-        payload,
-      );
-    },
-  );
+  const quote = result.data;
+
+  return {
+    ticker: quote.ticker,
+    c: quote.price,
+    d: quote.changeAmount,
+    dp: quote.changePercent,
+    h: quote.high,
+    l: quote.low,
+    o: quote.open,
+    pc: quote.previousClose,
+    t: quote.timestamp,
+    cacheStatus: result.cache.status,
+    cacheExpiresAt: result.cache.expiresAt,
+  };
 }
 
 async function mapWithConcurrency<T, R>(
@@ -951,47 +940,6 @@ async function getNews(
   );
 }
 
-function normalizeCandle(
-  item: unknown,
-) {
-  const record =
-    item &&
-    typeof item === "object"
-      ? item as Record<
-          string,
-          unknown
-        >
-      : {};
-
-  return {
-    t: timestampSeconds(
-      record.time ??
-        record.date,
-    ),
-
-    o: finiteNumber(
-      record.open,
-    ),
-
-    h: finiteNumber(
-      record.high,
-    ),
-
-    l: finiteNumber(
-      record.low,
-    ),
-
-    c: finiteNumber(
-      record.close ??
-        record.price,
-    ),
-
-    v: finiteNumber(
-      record.volume,
-    ),
-  };
-}
-
 async function getCandles(
   body: Record<
     string,
@@ -1038,89 +986,49 @@ async function getCandles(
     ) ||
     fallback.endDate;
 
-  return withCache(
-    `candles:${ticker}:${interval}:${startDate}:${endDate}`,
-    CANDLES_TTL_MS,
-    async () => {
-      const payload =
-        await providerGet(
-          "/prices",
-          {
-            ticker,
-            interval,
-            start_date:
-              startDate,
-            end_date:
-              endDate,
-          },
-        );
-
-      const root =
-        payload &&
-        typeof payload === "object"
-          ? payload as Record<
-              string,
-              unknown
-            >
-          : {};
-
-      const raw =
-        Array.isArray(root.prices)
-          ? root.prices
-          : [];
-
-      const candles =
-        raw
-          .map(normalizeCandle)
-          .filter(
-            (item) =>
-              item.t !== null &&
-              item.c !== null,
-          )
-          .sort(
-            (left, right) =>
-              Number(left.t) -
-              Number(right.t),
-          );
-
-      return {
-        ticker,
+  const cached =
+    await getCachedFinancialDatasetsPrices(
+      getCacheClient(),
+      ticker,
+      FINANCIAL_DATASETS_API_KEY,
+      {
         interval,
+        startDate,
+        endDate,
+      },
+    );
 
-        s:
-          candles.length
-            ? "ok"
-            : "no_data",
+  const candles =
+    cached.data
+      .map((price) => ({
+        t: price.timestamp,
+        o: price.open,
+        h: price.high,
+        l: price.low,
+        c: price.close,
+        v: price.volume,
+      }))
+      .sort(
+        (left, right) =>
+          Number(left.t) -
+          Number(right.t),
+      );
 
-        candles,
-        prices: candles,
-
-        t: candles.map(
-          (item) => item.t,
-        ),
-
-        o: candles.map(
-          (item) => item.o,
-        ),
-
-        h: candles.map(
-          (item) => item.h,
-        ),
-
-        l: candles.map(
-          (item) => item.l,
-        ),
-
-        c: candles.map(
-          (item) => item.c,
-        ),
-
-        v: candles.map(
-          (item) => item.v,
-        ),
-      };
-    },
-  );
+  return {
+    ticker,
+    interval,
+    s: candles.length ? "ok" : "no_data",
+    candles,
+    prices: candles,
+    t: candles.map((item) => item.t),
+    o: candles.map((item) => item.o),
+    h: candles.map((item) => item.h),
+    l: candles.map((item) => item.l),
+    c: candles.map((item) => item.c),
+    v: candles.map((item) => item.v),
+    cacheStatus: cached.cache.status,
+    cacheExpiresAt: cached.cache.expiresAt,
+  };
 }
 
 async function getMetrics(

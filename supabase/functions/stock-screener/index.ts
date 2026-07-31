@@ -1,6 +1,11 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  fetchFinancialDatasetsQuote,
+  createClient,
+  type SupabaseClient,
+} from "npm:@supabase/supabase-js@2";
+import {
+  getCachedFinancialDatasetsQuote,
+} from "../_shared/market-data-cache.ts";
+import {
   timestampToIso,
 } from "../_shared/financial-datasets.ts";
 
@@ -722,18 +727,24 @@ function isQuoteStale(
 }
 
 async function fetchQuote(
+  client: SupabaseClient,
   symbol: string,
   apiKey: string,
 ) {
-  const quote =
-    await fetchFinancialDatasetsQuote(
+  const cached =
+    await getCachedFinancialDatasetsQuote(
+      client,
       symbol,
       apiKey,
     );
 
+  const quote =
+    cached.data;
+
   const values:
     Partial<ScreenerRow> = {
       quote_updated_at:
+        cached.cache.fetchedAt ||
         new Date().toISOString(),
     };
 
@@ -1471,6 +1482,7 @@ Deno.serve(
               try {
                 const values =
                   await fetchQuote(
+                    admin,
                     row.symbol,
                     financialDatasetsApiKey,
                   );

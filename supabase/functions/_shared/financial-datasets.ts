@@ -2,10 +2,28 @@ const API_BASE_URL =
   "https://api.financialdatasets.ai";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_MAX_RETRIES = 2;
+// Every attempt consumes a provider request. The shared cache handles
+// fallback and retry backoff without spending hidden extra units.
+const DEFAULT_MAX_RETRIES = 0;
 
 type UnknownRecord =
   Record<string, unknown>;
+
+class FinancialDatasetsProviderError extends Error {
+  status: number;
+  payload: unknown;
+
+  constructor(
+    message: string,
+    status: number,
+    payload: unknown,
+  ) {
+    super(message);
+    this.name = "FinancialDatasetsProviderError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
 
 export type FinancialDatasetsQuote = {
   ticker: string;
@@ -250,11 +268,13 @@ async function providerGet(
         return payload;
       }
 
-      const error = new Error(
+      const error = new FinancialDatasetsProviderError(
         providerMessage(
           response.status,
           payload,
         ),
+        response.status,
+        payload,
       );
 
       if (

@@ -9,6 +9,9 @@ import {
   type PDFFont,
   type PDFPage,
 } from "pdf-lib";
+import {
+  getCachedFinancialDatasetsQuote,
+} from "../_shared/market-data-cache.ts";
 
 type DeliveryKind = "scheduled" | "manual";
 type DeliveryStatus =
@@ -210,7 +213,7 @@ function getErrorMessage(
       );
 
     if (parts.length) {
-      return [...new Set(parts)].join(" — ");
+      return [...new Set(parts)].join(" ??? ");
     }
 
     try {
@@ -283,7 +286,7 @@ function formatNumber(value: number, maxFractionDigits = 4): string {
 
 function formatPercent(value: number | null): string {
   if (!Number.isFinite(value)) {
-    return "—";
+    return "???";
   }
 
   const numeric = Number(value);
@@ -398,6 +401,7 @@ async function fetchAllTransactions(
 }
 
 async function fetchFinancialDatasetsQuote(
+  service: SupabaseClient,
   ticker: string,
   storedPrice: number | null,
 ): Promise<QuoteResult> {
@@ -410,47 +414,17 @@ async function fetchFinancialDatasetsQuote(
   }
 
   try {
-    const url = new URL(
-      "https://api.financialdatasets.ai/prices/snapshot",
-    );
-    url.searchParams.set("ticker", ticker);
-
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        "X-API-KEY": FINANCIAL_DATASETS_API_KEY,
-      },
-    });
-
-    const payload = await response
-      .json()
-      .catch(() => null);
-
-    if (!response.ok) {
-      const apiMessage =
-        payload &&
-        typeof payload === "object" &&
-        typeof payload.error === "string"
-          ? payload.error
-          : null;
-
-      throw new Error(
-        apiMessage ||
-          `Financial Datasets returned ${response.status}`,
+    const cached =
+      await getCachedFinancialDatasetsQuote(
+        service,
+        ticker,
+        FINANCIAL_DATASETS_API_KEY,
       );
-    }
 
-    const snapshot =
-      payload &&
-      typeof payload === "object" &&
-      payload.snapshot &&
-      typeof payload.snapshot === "object"
-        ? payload.snapshot
-        : null;
-
-    const currentPrice = positiveNumberOrNull(
-      snapshot?.price ?? snapshot?.close,
-    );
+    const currentPrice =
+      positiveNumberOrNull(
+        cached.data.price,
+      );
 
     if (currentPrice !== null) {
       return {
@@ -475,6 +449,7 @@ async function fetchFinancialDatasetsQuote(
 }
 
 async function fetchQuotesInBatches(
+  service: SupabaseClient,
   stocks: StockRow[],
 ): Promise<Map<string, QuoteResult>> {
   const result = new Map<string, QuoteResult>();
@@ -487,7 +462,11 @@ async function fetchQuotesInBatches(
       batch.map((stock) => {
         const ticker = normalizeTicker(stock.ticker);
         const storedPrice = positiveNumberOrNull(stock.current_price);
-        return fetchFinancialDatasetsQuote(ticker, storedPrice);
+        return fetchFinancialDatasetsQuote(
+          service,
+          ticker,
+          storedPrice,
+        );
       }),
     );
 
@@ -777,7 +756,7 @@ async function loadReportData(
       ),
   };
   const stocks = (stocksResult.data || []) as StockRow[];
-  const quotes = await fetchQuotesInBatches(stocks);
+  const quotes = await fetchQuotesInBatches(service, stocks);
   const holdings = buildHoldingSummaries(stocks, quotes);
   const transactionSummaries = buildTransactionSummaries(transactions);
   const currency = normalizeCurrency(delivery.report_currency);
@@ -1294,7 +1273,7 @@ function drawHoldingsPages(
       color: COLORS.ink,
     });
     page.drawText(
-      `${data.summary.reportLabel} report · ${data.holdings.length} holding${
+      `${data.summary.reportLabel} report ?? ${data.holdings.length} holding${
         data.holdings.length === 1 ? "" : "s"
       }`,
       {
@@ -1358,7 +1337,7 @@ function drawHoldingsPages(
 
     const company =
       holding.companyName.length > 20
-        ? `${holding.companyName.slice(0, 19)}…`
+        ? `${holding.companyName.slice(0, 19)}???`
         : holding.companyName;
 
     const values = [
@@ -1367,13 +1346,13 @@ function drawHoldingsPages(
       formatNumber(holding.quantity),
       formatMoney(holding.averageCost, data.summary.currency),
       holding.currentPrice === null
-        ? "—"
+        ? "???"
         : formatMoney(holding.currentPrice, data.summary.currency),
       holding.marketValue === null
-        ? "—"
+        ? "???"
         : formatMoney(holding.marketValue, data.summary.currency),
       holding.gainLoss === null
-        ? "—"
+        ? "???"
         : `${holding.gainLoss >= 0 ? "+" : ""}${formatMoney(
             holding.gainLoss,
             data.summary.currency,
@@ -1451,7 +1430,7 @@ function drawTransactionPages(
       color: COLORS.ink,
     });
     page.drawText(
-      `${data.summary.reportLabel} · ${data.transactions.length} transaction${
+      `${data.summary.reportLabel} ?? ${data.transactions.length} transaction${
         data.transactions.length === 1 ? "" : "s"
       }`,
       {
@@ -1594,7 +1573,7 @@ async function generatePdf(data: ReportData): Promise<Uint8Array> {
       color: COLORS.line,
     });
     page.drawText(
-      "StockPulse · Market prices may be delayed · Not financial advice",
+      "StockPulse ?? Market prices may be delayed ?? Not financial advice",
       {
         x: 30,
         y: 14,

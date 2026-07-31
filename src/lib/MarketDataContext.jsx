@@ -13,7 +13,7 @@ import {
 } from "@/lib/financialDatasets";
 
 const QUOTE_TTL_MS =
-  15000;
+  5 * 60 * 1000;
 
 const DEFAULT_BATCH_SIZE =
   25;
