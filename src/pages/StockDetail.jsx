@@ -106,6 +106,160 @@ const PERIOD_CONFIG = {
 };
 
 const TOOLTIP_HIDE_DELAY = 2500;
+const UNAVAILABLE_VALUE = "\u2014";
+
+const FUNDAMENTAL_METRICS = [
+  {
+    label: "Market Cap",
+    keys: ["market_cap", "marketCap"],
+    format: "marketCap",
+  },
+  {
+    label: "P/E",
+    keys: [
+      "price_to_earnings_ratio",
+      "pe_ratio",
+      "price_to_earnings",
+      "pe",
+    ],
+    format: "number",
+  },
+  {
+    label: "Forward P/E",
+    keys: [
+      "forward_price_to_earnings_ratio",
+      "forward_pe_ratio",
+      "forward_pe",
+      "forwardPE",
+    ],
+    format: "number",
+  },
+  {
+    label: "Price/Sales",
+    keys: [
+      "price_to_sales_ratio",
+      "price_sales_ratio",
+      "price_to_sales",
+    ],
+    format: "number",
+  },
+  {
+    label: "PEG",
+    keys: ["peg_ratio", "peg"],
+    format: "number",
+  },
+  {
+    label: "EPS",
+    keys: [
+      "earnings_per_share",
+      "eps",
+      "eps_ttm",
+    ],
+    format: "currency",
+  },
+  {
+    label: "Revenue Growth",
+    keys: [
+      "revenue_growth",
+      "revenue_growth_yoy",
+    ],
+    format: "percent",
+  },
+  {
+    label: "Net Margin",
+    keys: ["net_margin"],
+    format: "percent",
+  },
+  {
+    label: "ROE",
+    keys: [
+      "return_on_equity",
+      "roe",
+    ],
+    format: "percent",
+  },
+  {
+    label: "Debt/Equity",
+    keys: ["debt_to_equity"],
+    format: "number",
+  },
+  {
+    label: "Dividend Yield",
+    keys: [
+      "dividend_yield",
+      "dividend_yield_percentage",
+    ],
+    format: "percent",
+  },
+];
+
+function metricValue(
+  metrics,
+  keys,
+) {
+  for (const key of keys) {
+    const value = Number(
+      metrics?.[key],
+    );
+
+    if (
+      metrics?.[key] !== null &&
+      metrics?.[key] !== undefined &&
+      metrics?.[key] !== "" &&
+      Number.isFinite(value)
+    ) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function formatFundamentalMetric(
+  value,
+  format,
+) {
+  if (!Number.isFinite(value)) {
+    return UNAVAILABLE_VALUE;
+  }
+
+  if (format === "marketCap") {
+    return new Intl.NumberFormat(
+      "en-US",
+      {
+        style: "currency",
+        currency: "USD",
+        notation: "compact",
+        maximumFractionDigits: 2,
+      },
+    ).format(value);
+  }
+
+  if (format === "currency") {
+    return new Intl.NumberFormat(
+      "en-US",
+      {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      },
+    ).format(value);
+  }
+
+  if (format === "percent") {
+    return `${(
+      value * 100
+    ).toFixed(2)}%`;
+  }
+
+  return value.toLocaleString(
+    "en-US",
+    {
+      maximumFractionDigits: 2,
+    },
+  );
+}
 
 function roundPrice(value) {
   const number = Number(value);
@@ -383,7 +537,7 @@ async function fetchChartData(
         Number(candle?.t),
 
       value:
-        Number(candle?.v),
+        Number(candle?.c),
     }))
     .filter(
       (point) =>
@@ -1802,6 +1956,21 @@ export default function StockDetail() {
   ] = useState("");
 
   const [
+    fundamentals,
+    setFundamentals,
+  ] = useState(null);
+
+  const [
+    fundamentalsLoading,
+    setFundamentalsLoading,
+  ] = useState(false);
+
+  const [
+    fundamentalsError,
+    setFundamentalsError,
+  ] = useState("");
+
+  const [
     news,
     setNews,
   ] = useState([]);
@@ -2337,6 +2506,79 @@ export default function StockDetail() {
     routeStateQuote,
     routeStateTicker,
   ]);
+
+  useEffect(() => {
+    if (!stock?.ticker) {
+      setFundamentals(null);
+      setFundamentalsError("");
+      setFundamentalsLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+
+    async function loadFundamentals() {
+      setFundamentalsLoading(true);
+      setFundamentalsError("");
+
+      try {
+        const result =
+          await financialDatasetsRequest({
+            action: "metrics",
+            ticker: stock.ticker,
+          });
+
+        if (!active) {
+          return;
+        }
+
+        const metrics =
+          result?.snapshot ??
+          result?.metrics;
+
+        if (
+          !metrics ||
+          typeof metrics !==
+            "object"
+        ) {
+          throw new Error(
+            "Fundamentals are unavailable for this stock.",
+          );
+        }
+
+        setFundamentals(
+          metrics,
+        );
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        console.warn(
+          "Fundamentals fetch failed:",
+          error,
+        );
+
+        setFundamentals(null);
+        setFundamentalsError(
+          error?.message ||
+            "Unable to load fundamentals.",
+        );
+      } finally {
+        if (active) {
+          setFundamentalsLoading(
+            false,
+          );
+        }
+      }
+    }
+
+    loadFundamentals();
+
+    return () => {
+      active = false;
+    };
+  }, [stock?.ticker]);
 
   useEffect(() => {
     if (
@@ -3106,6 +3348,62 @@ export default function StockDetail() {
             dailyReturn
           }
         />
+
+        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-gray-900">
+              Fundamentals
+            </h2>
+
+            {fundamentalsLoading && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading metrics…
+              </span>
+            )}
+          </div>
+
+          {fundamentalsError && (
+            <p
+              role="status"
+              className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600"
+            >
+              {fundamentalsError}
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+            {FUNDAMENTAL_METRICS.map(
+              (metric) => {
+                const value =
+                  metricValue(
+                    fundamentals,
+                    metric.keys,
+                  );
+
+                return (
+                  <div
+                    key={
+                      metric.label
+                    }
+                    className="min-w-0"
+                  >
+                    <p className="text-xs font-medium text-gray-400">
+                      {metric.label}
+                    </p>
+
+                    <p className="mt-1 truncate text-sm font-semibold text-gray-900 sm:text-base">
+                      {formatFundamentalMetric(
+                        value,
+                        metric.format,
+                      )}
+                    </p>
+                  </div>
+                );
+              },
+            )}
+          </div>
+        </section>
 
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-4 flex items-center justify-between">
