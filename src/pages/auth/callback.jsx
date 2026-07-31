@@ -5,7 +5,6 @@ import React, {
 } from "react";
 import {
   AlertCircle,
-  CheckCircle2,
   Loader2,
 } from "lucide-react";
 
@@ -267,11 +266,6 @@ export default function AuthCallback() {
           return;
         }
 
-        setStatus("success");
-        setMessage(
-          "Opening your watchlist…"
-        );
-
         window.location.replace(
           nextPath
         );
@@ -337,16 +331,10 @@ export default function AuthCallback() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
-        {status === "success" ? (
-          <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500" />
-        ) : (
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-900" />
-        )}
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-gray-900" />
 
         <h1 className="mt-4 text-lg font-semibold text-gray-900">
-          {status === "success"
-            ? "Signed in"
-            : "Signing you in"}
+          Signing you in
         </h1>
 
         <p className="mt-2 text-sm text-gray-500">
