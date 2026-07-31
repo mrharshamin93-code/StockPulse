@@ -213,7 +213,7 @@ function getErrorMessage(
       );
 
     if (parts.length) {
-      return [...new Set(parts)].join(" ??? ");
+      return [...new Set(parts)].join(" — ");
     }
 
     try {
@@ -286,7 +286,7 @@ function formatNumber(value: number, maxFractionDigits = 4): string {
 
 function formatPercent(value: number | null): string {
   if (!Number.isFinite(value)) {
-    return "???";
+    return "—";
   }
 
   const numeric = Number(value);
@@ -1273,7 +1273,7 @@ function drawHoldingsPages(
       color: COLORS.ink,
     });
     page.drawText(
-      `${data.summary.reportLabel} report ?? ${data.holdings.length} holding${
+      `${data.summary.reportLabel} report · ${data.holdings.length} holding${
         data.holdings.length === 1 ? "" : "s"
       }`,
       {
@@ -1337,7 +1337,7 @@ function drawHoldingsPages(
 
     const company =
       holding.companyName.length > 20
-        ? `${holding.companyName.slice(0, 19)}???`
+        ? `${holding.companyName.slice(0, 19)}…`
         : holding.companyName;
 
     const values = [
@@ -1346,13 +1346,13 @@ function drawHoldingsPages(
       formatNumber(holding.quantity),
       formatMoney(holding.averageCost, data.summary.currency),
       holding.currentPrice === null
-        ? "???"
+        ? "—"
         : formatMoney(holding.currentPrice, data.summary.currency),
       holding.marketValue === null
-        ? "???"
+        ? "—"
         : formatMoney(holding.marketValue, data.summary.currency),
       holding.gainLoss === null
-        ? "???"
+        ? "—"
         : `${holding.gainLoss >= 0 ? "+" : ""}${formatMoney(
             holding.gainLoss,
             data.summary.currency,
@@ -1430,7 +1430,7 @@ function drawTransactionPages(
       color: COLORS.ink,
     });
     page.drawText(
-      `${data.summary.reportLabel} ?? ${data.transactions.length} transaction${
+      `${data.summary.reportLabel} · ${data.transactions.length} transaction${
         data.transactions.length === 1 ? "" : "s"
       }`,
       {
@@ -1573,7 +1573,7 @@ async function generatePdf(data: ReportData): Promise<Uint8Array> {
       color: COLORS.line,
     });
     page.drawText(
-      "StockPulse ?? Market prices may be delayed ?? Not financial advice",
+      "StockPulse · Market prices may be delayed · Not financial advice",
       {
         x: 30,
         y: 14,

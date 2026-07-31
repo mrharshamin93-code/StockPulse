@@ -91,7 +91,7 @@ function getErrorMessage(error: unknown): string {
       );
 
     if (parts.length) {
-      return [...new Set(parts)].join(" ??? ");
+      return [...new Set(parts)].join(" — ");
     }
   }
 

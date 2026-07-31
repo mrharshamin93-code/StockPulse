@@ -519,7 +519,7 @@ function AddTickerDialog({
             ) : searching ? (
               <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Searching???
+                Searching…
               </div>
             ) : suggestions.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-gray-500">
@@ -694,7 +694,7 @@ function MiniSparkline({
         className="flex h-[34px] w-[44px] items-center justify-center text-xs text-gray-300"
         aria-label="Chart unavailable"
       >
-        ???
+        —
       </div>
     );
   }
@@ -768,7 +768,7 @@ function AnimatedPrice({ value }) {
   useEffect(() => {
     if (
       previous.current !== value &&
-      value !== "???"
+      value !== "—"
     ) {
       const oldValue = Number(
         previous.current,
@@ -815,8 +815,8 @@ function AnimatedPrice({ value }) {
               : undefined,
       }}
     >
-      {value === "???"
-        ? "???"
+      {value === "—"
+        ? "—"
         : `$${value}`}
     </span>
   );
@@ -943,7 +943,7 @@ function WatchlistCard({
       ? livePrice.toFixed(2)
       : storedPrice !== null
         ? storedPrice.toFixed(2)
-        : "???";
+        : "—";
 
   const dailyGain =
     typeof quote?.dp === "number"
@@ -1062,9 +1062,9 @@ function WatchlistCard({
 
     const text =
       `${companyName} (${item.ticker})` +
-      (displayPrice === "???"
+      (displayPrice === "—"
         ? ""
-        : ` ??? $${displayPrice}`);
+        : ` — $${displayPrice}`);
 
     try {
       if (navigator.share) {
@@ -1334,7 +1334,7 @@ function WatchlistCard({
                 </div>
               ) : (
                 <p className="mt-0 text-xs text-gray-400">
-                  ???
+                  —
                 </p>
               )}
             </div>
