@@ -17,6 +17,7 @@ const NEWS_TTL_MS = 10 * 60 * 1000;
 const CANDLES_TTL_MS = 5 * 60 * 1000;
 const METRICS_TTL_MS = 60 * 60 * 1000;
 const TICKER_DIRECTORY_TTL_MS = 24 * 60 * 60 * 1000;
+const QUOTE_REQUEST_CONCURRENCY = 5;
 
 const cache = new Map();
 
@@ -296,8 +297,8 @@ function intervalFromResolution(
   }
 
   // Financial Datasets historical prices are EOD.
-  // Finnhub-style numeric intraday resolutions therefore
-  // intentionally fall back to daily candles.
+  // Unsupported intraday resolutions intentionally fall back
+  // to daily candles.
   return "day";
 }
 
@@ -632,27 +633,72 @@ async function getQuote(
   );
 }
 
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  worker: (
+    value: T,
+  ) => Promise<R>,
+): Promise<R[]> {
+  const results =
+    new Array<R>(
+      values.length,
+    );
+
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      if (index >= values.length) {
+        return;
+      }
+
+      results[index] =
+        await worker(
+          values[index],
+        );
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      {
+        length: Math.min(
+          concurrency,
+          values.length,
+        ),
+      },
+      () => runWorker(),
+    ),
+  );
+
+  return results;
+}
+
 async function getQuotes(
   tickers: string[],
 ) {
   const quotes =
-    await Promise.all(
-      tickers.map(
-        async (ticker) => {
-          try {
-            return await getQuote(
-              ticker,
-            );
-          } catch (error) {
-            return emptyQuote(
-              ticker,
-              error instanceof Error
-                ? error.message
-                : "Quote request failed.",
-            );
-          }
-        },
-      ),
+    await mapWithConcurrency(
+      tickers,
+      QUOTE_REQUEST_CONCURRENCY,
+      async (ticker) => {
+        try {
+          return await getQuote(
+            ticker,
+          );
+        } catch (error) {
+          return emptyQuote(
+            ticker,
+            error instanceof Error
+              ? error.message
+              : "Quote request failed.",
+          );
+        }
+      },
     );
 
   return { quotes };
@@ -709,12 +755,6 @@ async function getProfile(
         exchange:
           normalizeText(
             facts.exchange,
-          ) || null,
-
-        finnhubIndustry:
-          normalizeText(
-            facts.industry ??
-              facts.sic_industry,
           ) || null,
 
         industry:

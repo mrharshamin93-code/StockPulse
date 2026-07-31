@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  fetchFinancialDatasetsPrices,
+} from "../_shared/financial-datasets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,8 +15,6 @@ const MAX_BATCH_SIZE = 100;
 const DEFAULT_STALE_HOURS = 20;
 const MAX_STALE_HOURS = 168;
 const REQUEST_CONCURRENCY = 5;
-const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_RETRIES = 2;
 const CANDLE_LOOKBACK_DAYS = 220;
 
 const SMA_FAST_PERIOD = 20;
@@ -69,25 +70,6 @@ function normalizeSymbol(
 ) {
   return normalizeText(value)
     .toUpperCase();
-}
-
-function finiteNumber(
-  value: unknown,
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
-  const parsed =
-    Number(value);
-
-  return Number.isFinite(parsed)
-    ? parsed
-    : null;
 }
 
 function roundNumber(
@@ -259,89 +241,6 @@ function calculateRsi(
     100 /
       (1 +
         relativeStrength);
-}
-
-function parseCandles(
-  payload: UnknownRecord,
-): Candle[] {
-  if (
-    normalizeText(
-      payload.s,
-    ).toLowerCase() !==
-    "ok"
-  ) {
-    return [];
-  }
-
-  const timestamps =
-    Array.isArray(payload.t)
-      ? payload.t
-      : [];
-
-  const closes =
-    Array.isArray(payload.c)
-      ? payload.c
-      : [];
-
-  const volumes =
-    Array.isArray(payload.v)
-      ? payload.v
-      : [];
-
-  const length =
-    Math.min(
-      timestamps.length,
-      closes.length,
-    );
-
-  const candles:
-    Candle[] = [];
-
-  for (
-    let index = 0;
-    index < length;
-    index += 1
-  ) {
-    const timestamp =
-      finiteNumber(
-        timestamps[index],
-      );
-
-    const close =
-      finiteNumber(
-        closes[index],
-      );
-
-    const volume =
-      finiteNumber(
-        volumes[index],
-      );
-
-    if (
-      timestamp === null ||
-      timestamp <= 0 ||
-      close === null ||
-      close <= 0
-    ) {
-      continue;
-    }
-
-    candles.push({
-      timestamp,
-      close,
-      volume:
-        volume !== null &&
-        volume >= 0
-          ? volume
-          : null,
-    });
-  }
-
-  return candles.sort(
-    (left, right) =>
-      left.timestamp -
-      right.timestamp,
-  );
 }
 
 function buildTechnicalUpdate(
@@ -566,172 +465,49 @@ function buildTechnicalUpdate(
   return update;
 }
 
-async function delay(
-  milliseconds: number,
-) {
-  await new Promise(
-    (resolve) =>
-      setTimeout(
-        resolve,
-        milliseconds,
-      ),
-  );
-}
-
 async function fetchFinancialDatasetsCandles(
   symbol: string,
   apiKey: string,
-) {
-  let lastError:
-    Error | null = null;
+): Promise<Candle[]> {
+  const endDate =
+    new Date()
+      .toISOString()
+      .slice(0, 10);
 
-  for (
-    let attempt = 0;
-    attempt <= MAX_RETRIES;
-    attempt += 1
-  ) {
-    const controller =
-      new AbortController();
+  const start = new Date();
+  start.setUTCDate(
+    start.getUTCDate() -
+      CANDLE_LOOKBACK_DAYS,
+  );
 
-    const timeout =
-      setTimeout(
-        () =>
-          controller.abort(),
-        REQUEST_TIMEOUT_MS,
-      );
+  const startDate =
+    start.toISOString()
+      .slice(0, 10);
 
-    try {
-      const nowSeconds =
-        Math.floor(
-          Date.now() /
-            1000,
-        );
+  const prices =
+    await fetchFinancialDatasetsPrices(
+      symbol,
+      apiKey,
+      {
+        interval: "day",
+        startDate,
+        endDate,
+      },
+    );
 
-      const fromSeconds =
-        nowSeconds -
-        CANDLE_LOOKBACK_DAYS *
-          24 *
-          60 *
-          60;
-
-      const url =
-        new URL(
-          "https://api.financialdatasets.ai/prices",
-        );
-
-      url.searchParams.set(
-        "symbol",
-        symbol,
-      );
-
-      url.searchParams.set(
-        "resolution",
-        "D",
-      );
-
-      url.searchParams.set(
-        "from",
-        String(
-          fromSeconds,
-        ),
-      );
-
-      url.searchParams.set(
-        "to",
-        String(
-          nowSeconds,
-        ),
-      );
-
-      const response =
-        await fetch(
-          url,
-          {
-            headers: {
-              "X-API-KEY":
-                apiKey,
-            },
-            signal:
-              controller.signal,
-          },
-        );
-
-      const payload =
-        await response
-          .json()
-          .catch(() => null);
-
-      if (
-        response.status ===
-          429 &&
-        attempt < MAX_RETRIES
-      ) {
-        await delay(
-          1_500 *
-            (attempt + 1),
-        );
-
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          `Financial Datasets candle request failed with status ${response.status}.`,
-        );
-      }
-
-      if (
-        !payload ||
-        typeof payload !==
-          "object"
-      ) {
-        throw new Error(
-          "Financial Datasets returned an invalid candle payload.",
-        );
-      }
-
-      const candles =
-        parseCandles(
-          payload as UnknownRecord,
-        );
-
-      if (
-        candles.length === 0
-      ) {
-        throw new Error(
-          "Financial Datasets returned no usable daily candles.",
-        );
-      }
-
-      return candles;
-    } catch (error) {
-      lastError =
-        error instanceof Error
-          ? error
-          : new Error(
-              "Unknown Financial Datasets candle error.",
-            );
-
-      if (
-        attempt < MAX_RETRIES
-      ) {
-        await delay(
-          900 *
-            (attempt + 1),
-        );
-      }
-    } finally {
-      clearTimeout(
-        timeout,
-      );
-    }
+  if (!prices.length) {
+    throw new Error(
+      "Financial Datasets returned no usable daily prices.",
+    );
   }
 
-  throw (
-    lastError ??
-    new Error(
-      "Financial Datasets candle request failed.",
-    )
+  return prices.map(
+    (price) => ({
+      timestamp:
+        price.timestamp,
+      close: price.close,
+      volume: price.volume,
+    }),
   );
 }
 

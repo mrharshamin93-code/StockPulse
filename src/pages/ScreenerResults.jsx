@@ -1346,7 +1346,7 @@ export default function ScreenerResults() {
    * make one fast database request for exact count, sorting,
    * and server-pagination metadata. The quotes from the first
    * request are already fresh, so this second request normally
-   * makes zero Finnhub quote calls.
+   * makes zero additional provider quote calls.
    */
   useEffect(() => {
     if (routeLoading) {

@@ -1,4 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.7";
+import {
+  fetchFinancialDatasetsQuote as fetchProviderQuote,
+} from "../_shared/financial-datasets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -191,38 +194,13 @@ async function fetchFinancialDatasetsQuote(
   apiKey: string,
 ): Promise<QuoteResult> {
   try {
-    const url =
-      new URL(
-        "https://api.financialdatasets.ai/quotes/",
+    const quote =
+      await fetchProviderQuote(
+        ticker,
+        apiKey,
       );
 
-    url.searchParams.set(
-      "symbol",
-      ticker,
-    );
-
-    
-
-    const response =
-      await fetch(url);
-
-    const payload =
-      await response
-        .json()
-        .catch(() => null);
-
-    if (!response.ok) {
-      return {
-        ticker,
-        price: null,
-        error:
-          payload?.error ||
-          `Financial Datasets returned ${response.status}`,
-      };
-    }
-
-    const price =
-      numberOrNull(payload?.c);
+    const price = quote.price;
 
     if (
       price === null ||

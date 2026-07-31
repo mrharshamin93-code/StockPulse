@@ -1,4 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  fetchFinancialDatasetsQuote,
+  timestampToIso,
+} from "../_shared/financial-datasets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +16,6 @@ const MAX_PAGE_SIZE = 50;
 const DEFAULT_QUOTE_STALE_MINUTES = 5;
 const MAX_QUOTE_STALE_MINUTES = 60;
 const QUOTE_CONCURRENCY = 4;
-const QUOTE_TIMEOUT_MS = 10_000;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -718,210 +721,64 @@ function isQuoteStale(
   );
 }
 
-function unixTimestampToIso(
-  value: unknown,
-): string | null {
-  const timestamp =
-    finiteNumber(value);
-
-  if (
-    timestamp === null ||
-    timestamp <= 0
-  ) {
-    return null;
-  }
-
-  const date =
-    new Date(timestamp * 1000);
-
-  return Number.isNaN(
-    date.getTime(),
-  )
-    ? null
-    : date.toISOString();
-}
-
 async function fetchQuote(
   symbol: string,
   apiKey: string,
 ) {
-  const controller =
-    new AbortController();
-
-  const timeout =
-    setTimeout(
-      () =>
-        controller.abort(),
-      QUOTE_TIMEOUT_MS,
-    );
-
-  try {
-    const url =
-      new URL(
-        "https://api.financialdatasets.ai/quotes/",
-      );
-
-    url.searchParams.set(
-      "symbol",
+  const quote =
+    await fetchFinancialDatasetsQuote(
       symbol,
+      apiKey,
     );
 
-    const response =
-      await fetch(
-        url,
-        {
-          headers: {
-            "X-API-KEY":
-              apiKey,
-          },
-          signal:
-            controller.signal,
-        },
-      );
+  const values:
+    Partial<ScreenerRow> = {
+      quote_updated_at:
+        new Date().toISOString(),
+    };
 
-    const payload =
-      await response
-        .json()
-        .catch(() => null);
-
-    if (!response.ok) {
-      throw new Error(
-        `Financial Datasets quote request failed with status ${response.status}.`,
-      );
-    }
-
-    if (
-      !payload ||
-      typeof payload !==
-        "object"
-    ) {
-      throw new Error(
-        "Financial Datasets returned an invalid quote payload.",
-      );
-    }
-
-    const quote =
-      payload as UnknownRecord;
-
-    const price =
-      finiteNumber(
-        quote.c,
-      );
-
-    const previousClose =
-      finiteNumber(
-        quote.pc,
-      );
-
-    if (
-      (price === null ||
-        price <= 0) &&
-      (previousClose ===
-        null ||
-        previousClose <= 0)
-    ) {
-      throw new Error(
-        "Financial Datasets returned no usable quote.",
-      );
-    }
-
-    const now =
-      new Date().toISOString();
-
-    const values:
-      Partial<ScreenerRow> = {
-        quote_updated_at:
-          now,
-      };
-
-    const changeAmount =
-      finiteNumber(
-        quote.d,
-      );
-
-    const changePercent =
-      finiteNumber(
-        quote.dp,
-      );
-
-    const openPrice =
-      finiteNumber(
-        quote.o,
-      );
-
-    const dayHigh =
-      finiteNumber(
-        quote.h,
-      );
-
-    const dayLow =
-      finiteNumber(
-        quote.l,
-      );
-
-    const marketTimestamp =
-      unixTimestampToIso(
-        quote.t,
-      );
-
-    if (price !== null) {
-      values.price =
-        price;
-    }
-
-    if (
-      changeAmount !== null
-    ) {
-      values.change_amount =
-        changeAmount;
-    }
-
-    if (
-      changePercent !== null
-    ) {
-      values.change_percent =
-        changePercent;
-    }
-
-    if (
-      openPrice !== null
-    ) {
-      values.open_price =
-        openPrice;
-    }
-
-    if (
-      dayHigh !== null
-    ) {
-      values.day_high =
-        dayHigh;
-    }
-
-    if (
-      dayLow !== null
-    ) {
-      values.day_low =
-        dayLow;
-    }
-
-    if (
-      previousClose !== null
-    ) {
-      values.previous_close =
-        previousClose;
-    }
-
-    if (marketTimestamp) {
-      values.market_timestamp =
-        marketTimestamp;
-    }
-
-    return values;
-  } finally {
-    clearTimeout(
-      timeout,
-    );
+  if (quote.price !== null) {
+    values.price = quote.price;
   }
+
+  if (quote.changeAmount !== null) {
+    values.change_amount =
+      quote.changeAmount;
+  }
+
+  if (quote.changePercent !== null) {
+    values.change_percent =
+      quote.changePercent;
+  }
+
+  if (quote.open !== null) {
+    values.open_price = quote.open;
+  }
+
+  if (quote.high !== null) {
+    values.day_high = quote.high;
+  }
+
+  if (quote.low !== null) {
+    values.day_low = quote.low;
+  }
+
+  if (quote.previousClose !== null) {
+    values.previous_close =
+      quote.previousClose;
+  }
+
+  const marketTimestamp =
+    timestampToIso(
+      quote.timestamp,
+    );
+
+  if (marketTimestamp) {
+    values.market_timestamp =
+      marketTimestamp;
+  }
+
+  return values;
 }
 
 async function processInBatches<T, R>(

@@ -435,7 +435,7 @@ function calculatePeriodReturn(
   officialDailyReturn,
 ) {
   /*
-   * The Watchlist uses Finnhub quote.dp.
+   * The Watchlist uses the provider-normalized daily return.
    * Keep that exact value for 1D.
    */
   if (
@@ -897,7 +897,7 @@ function StockChart({
 
         /*
          * Only calculate a 1D fallback from candles when
-         * Finnhub quote.dp is unavailable.
+         * The provider-normalized daily return is unavailable.
          */
         if (
           activePeriod ===
@@ -2069,8 +2069,8 @@ export default function StockDetail() {
               tickerFromRoute,
 
             sector:
-              profile
-                ?.finnhubIndustry ||
+              profile?.industry ||
+              profile?.sector ||
               "",
 
             logo_url:

@@ -21,3 +21,9 @@ verify_jwt = false
 
 [functions.financial-datasets]
 verify_jwt = true
+
+[functions.check-price-alerts]
+verify_jwt = false
+
+[functions.monthly-report]
+verify_jwt = false

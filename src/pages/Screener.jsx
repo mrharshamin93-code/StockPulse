@@ -11,7 +11,6 @@ import {
   Activity,
   ArrowLeft,
   BadgeDollarSign,
-  Banknote,
   BarChart3,
   Building2,
   Check,
