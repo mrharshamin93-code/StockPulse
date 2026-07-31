@@ -2138,13 +2138,15 @@ export default function StockDetail() {
         );
       }
 
-      if (
-        isTickerRoute &&
-        Number.isFinite(
-          cachedQuote?.c,
-        ) &&
-        cachedQuote.c > 0
-      ) {
+      if (isTickerRoute) {
+        const cachedPrice =
+          Number.isFinite(
+            cachedQuote?.c,
+          ) &&
+          cachedQuote.c > 0
+            ? cachedQuote.c
+            : 0;
+
         setStock({
           ticker:
             tickerFromRoute,
@@ -2158,14 +2160,14 @@ export default function StockDetail() {
           logo_url: "",
 
           current_price:
-            cachedQuote.c,
+            cachedPrice,
 
           purchase_price:
             Number.isFinite(
-              cachedQuote.pc,
+              cachedQuote?.pc,
             )
               ? cachedQuote.pc
-              : cachedQuote.c,
+              : cachedPrice,
 
           quantity: 0,
 
@@ -2181,10 +2183,10 @@ export default function StockDetail() {
       try {
         if (isTickerRoute) {
           const [
-            quote,
-            profile,
+            quoteResult,
+            profileResult,
           ] =
-            await Promise.all(
+            await Promise.allSettled(
               [
                 marketDataProxy(
                   {
@@ -2211,6 +2213,44 @@ export default function StockDetail() {
                 ),
               ],
             );
+
+          if (
+            controller.signal
+              .aborted
+          ) {
+            return;
+          }
+
+          const quote =
+            quoteResult.status ===
+              "fulfilled"
+              ? quoteResult.value
+              : null;
+
+          const profile =
+            profileResult.status ===
+              "fulfilled"
+              ? profileResult.value
+              : null;
+
+          if (
+            quoteResult.status ===
+              "rejected" ||
+            profileResult.status ===
+              "rejected"
+          ) {
+            console.warn(
+              "Stock detail market data is partially unavailable:",
+              quoteResult.status ===
+                "rejected"
+                ? quoteResult.reason
+                : profileResult.reason,
+            );
+
+            setPageError(
+              "Market data is temporarily unavailable. Showing available stock details.",
+            );
+          }
 
           const resolvedQuote =
             normalizePrefetchedQuote(
@@ -2343,6 +2383,13 @@ export default function StockDetail() {
           "Stock detail load failed:",
           error,
         );
+
+        if (isTickerRoute) {
+          setPageError(
+            "Market data is temporarily unavailable. Showing available stock details.",
+          );
+          return;
+        }
 
         setStock(null);
 
@@ -3129,6 +3176,16 @@ export default function StockDetail() {
       </button>
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 pb-10 sm:px-6">
+        {pageError &&
+          isTickerRoute && (
+            <div
+              role="status"
+              className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+              {pageError}
+            </div>
+          )}
+
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
