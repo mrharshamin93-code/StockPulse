@@ -28,8 +28,8 @@ import {
   X,
 } from "lucide-react";
 import {
-  financialDatasetsRequest,
-} from "@/lib/financialDatasets";
+  finnhubRequest,
+} from "@/lib/finnhub";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -106,160 +106,6 @@ const PERIOD_CONFIG = {
 };
 
 const TOOLTIP_HIDE_DELAY = 2500;
-const UNAVAILABLE_VALUE = "\u2014";
-
-const FUNDAMENTAL_METRICS = [
-  {
-    label: "Market Cap",
-    keys: ["market_cap", "marketCap"],
-    format: "marketCap",
-  },
-  {
-    label: "P/E",
-    keys: [
-      "price_to_earnings_ratio",
-      "pe_ratio",
-      "price_to_earnings",
-      "pe",
-    ],
-    format: "number",
-  },
-  {
-    label: "Forward P/E",
-    keys: [
-      "forward_price_to_earnings_ratio",
-      "forward_pe_ratio",
-      "forward_pe",
-      "forwardPE",
-    ],
-    format: "number",
-  },
-  {
-    label: "Price/Sales",
-    keys: [
-      "price_to_sales_ratio",
-      "price_sales_ratio",
-      "price_to_sales",
-    ],
-    format: "number",
-  },
-  {
-    label: "PEG",
-    keys: ["peg_ratio", "peg"],
-    format: "number",
-  },
-  {
-    label: "EPS",
-    keys: [
-      "earnings_per_share",
-      "eps",
-      "eps_ttm",
-    ],
-    format: "currency",
-  },
-  {
-    label: "Revenue Growth",
-    keys: [
-      "revenue_growth",
-      "revenue_growth_yoy",
-    ],
-    format: "percent",
-  },
-  {
-    label: "Net Margin",
-    keys: ["net_margin"],
-    format: "percent",
-  },
-  {
-    label: "ROE",
-    keys: [
-      "return_on_equity",
-      "roe",
-    ],
-    format: "percent",
-  },
-  {
-    label: "Debt/Equity",
-    keys: ["debt_to_equity"],
-    format: "number",
-  },
-  {
-    label: "Dividend Yield",
-    keys: [
-      "dividend_yield",
-      "dividend_yield_percentage",
-    ],
-    format: "percent",
-  },
-];
-
-function metricValue(
-  metrics,
-  keys,
-) {
-  for (const key of keys) {
-    const value = Number(
-      metrics?.[key],
-    );
-
-    if (
-      metrics?.[key] !== null &&
-      metrics?.[key] !== undefined &&
-      metrics?.[key] !== "" &&
-      Number.isFinite(value)
-    ) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function formatFundamentalMetric(
-  value,
-  format,
-) {
-  if (!Number.isFinite(value)) {
-    return UNAVAILABLE_VALUE;
-  }
-
-  if (format === "marketCap") {
-    return new Intl.NumberFormat(
-      "en-US",
-      {
-        style: "currency",
-        currency: "USD",
-        notation: "compact",
-        maximumFractionDigits: 2,
-      },
-    ).format(value);
-  }
-
-  if (format === "currency") {
-    return new Intl.NumberFormat(
-      "en-US",
-      {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      },
-    ).format(value);
-  }
-
-  if (format === "percent") {
-    return `${(
-      value * 100
-    ).toFixed(2)}%`;
-  }
-
-  return value.toLocaleString(
-    "en-US",
-    {
-      maximumFractionDigits: 2,
-    },
-  );
-}
 
 function roundPrice(value) {
   const number = Number(value);
@@ -335,7 +181,7 @@ function normalizePrefetchedQuote(value) {
     : null;
 }
 
-async function marketDataProxy(
+async function finnhubProxy(
   body,
   signal,
 ) {
@@ -347,7 +193,7 @@ async function marketDataProxy(
   }
 
   const payload =
-    await financialDatasetsRequest(
+    await finnhubRequest(
       body,
     );
 
@@ -506,7 +352,7 @@ async function fetchChartData(
   } = getPeriodBounds(period);
 
   const result =
-    await marketDataProxy(
+    await finnhubProxy(
       {
         action:
           "candles_range",
@@ -589,7 +435,7 @@ function calculatePeriodReturn(
   officialDailyReturn,
 ) {
   /*
-   * The Watchlist uses the provider-normalized daily return.
+   * The Watchlist uses Finnhub quote.dp.
    * Keep that exact value for 1D.
    */
   if (
@@ -1047,13 +893,6 @@ function StockChart({
     compareTickers.length >
     0;
 
-  useEffect(() => {
-    setCompareTickers([]);
-    setCompareInput("");
-    setCompareError("");
-    setShowInput(false);
-  }, [primaryTicker]);
-
   function clearTooltipTimer() {
     if (
       tooltipTimerRef.current
@@ -1327,42 +1166,56 @@ function StockChart({
       ? "#10b981"
       : "#ef4444";
 
-  const comparisonLegendItems = [
-    {
-      ticker:
-        primaryTicker,
-      color:
-        primaryColor,
-      removable:
-        false,
-      value:
-        getSeriesReturn(
-          chartData,
-          primaryTicker,
-        ),
-    },
+  const legendItems =
+    comparisonsActive
+      ? [
+          {
+            ticker:
+              primaryTicker,
+            color:
+              primaryColor,
+            removable:
+              false,
+            value:
+              getSeriesReturn(
+                chartData,
+                primaryTicker,
+              ),
+          },
 
-    ...compareTickers.map(
-      (
-        comparisonTicker,
-        index,
-      ) => ({
-        ticker:
-          comparisonTicker,
-        color:
-          COMPARISON_COLORS[
-            index
-          ],
-        removable:
-          true,
-        value:
-          getSeriesReturn(
-            chartData,
-            comparisonTicker,
+          ...compareTickers.map(
+            (
+              comparisonTicker,
+              index,
+            ) => ({
+              ticker:
+                comparisonTicker,
+              color:
+                COMPARISON_COLORS[
+                  index
+                ],
+              removable:
+                true,
+              value:
+                getSeriesReturn(
+                  chartData,
+                  comparisonTicker,
+                ),
+            }),
           ),
-      }),
-    ),
-  ];
+        ]
+      : [
+          {
+            ticker:
+              primaryTicker,
+            color:
+              primaryColor,
+            removable:
+              false,
+            value:
+              primaryReturn,
+          },
+        ];
 
   function handleAddCompare(
     event,
@@ -1617,85 +1470,83 @@ function StockChart({
         </p>
       )}
 
-      {compareTickers.length > 0 && (
-        <>
-          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            {comparisonLegendItems.map(
-              (item) => {
-                const positive =
-                  Number.isFinite(
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        {legendItems.map(
+          (item) => {
+            const positive =
+              Number.isFinite(
+                item.value,
+              )
+                ? item.value >=
+                  0
+                : null;
+
+            return (
+              <div
+                key={
+                  item.ticker
+                }
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1.5"
+              >
+                <span
+                  className="h-0.5 w-5 rounded-full"
+                  style={{
+                    backgroundColor:
+                      item.color,
+                  }}
+                />
+
+                <span className="text-xs font-semibold text-gray-700">
+                  {item.ticker}
+                </span>
+
+                <span
+                  className={`text-[11px] font-semibold ${
+                    positive ===
+                    null
+                      ? "text-gray-400"
+                      : positive
+                        ? "text-emerald-600"
+                        : "text-red-600"
+                  }`}
+                >
+                  {Number.isFinite(
                     item.value,
                   )
-                    ? item.value >=
-                      0
-                    : null;
+                    ? `${
+                        positive
+                          ? "+"
+                          : ""
+                      }${item.value.toFixed(
+                        2,
+                      )}%`
+                    : "—"}
+                </span>
 
-                return (
-                  <div
-                    key={
-                      item.ticker
-                    }
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1.5"
-                  >
-                    <span
-                      className="h-0.5 w-5 rounded-full"
-                      style={{
-                        backgroundColor:
-                          item.color,
-                      }}
-                    />
-
-                    <span className="text-xs font-semibold text-gray-700">
-                      {item.ticker}
-                    </span>
-
-                    <span
-                      className={`text-[11px] font-semibold ${
-                        positive ===
-                        null
-                          ? "text-gray-400"
-                          : positive
-                            ? "text-emerald-600"
-                            : "text-red-600"
-                      }`}
-                    >
-                      {Number.isFinite(
-                        item.value,
+                {item.removable && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      removeCompare(
+                        item.ticker,
                       )
-                        ? `${
-                            positive
-                              ? "+"
-                              : ""
-                          }${item.value.toFixed(
-                            2,
-                          )}%`
-                        : "—"}
-                    </span>
+                    }
+                    className="-mr-1 text-gray-400 transition-colors hover:text-gray-900"
+                    aria-label={`Remove ${item.ticker} comparison`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          },
+        )}
+      </div>
 
-                    {item.removable && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeCompare(
-                            item.ticker,
-                          )
-                        }
-                        className="-mr-1 text-gray-400 transition-colors hover:text-gray-900"
-                        aria-label={`Remove ${item.ticker} comparison`}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                );
-              },
-            )}
-          </div>
-
-          <p className="mb-2 text-xs text-gray-400">
-            Showing percentage return from the first shared trading date.
-          </p>
-        </>
+      {comparisonsActive && (
+        <p className="mb-2 text-xs text-gray-400">
+          Showing percentage return from the first shared trading date.
+        </p>
       )}
 
       <div className="relative h-[300px] w-full">
@@ -2242,21 +2093,6 @@ export default function StockDetail() {
   ] = useState("");
 
   const [
-    fundamentals,
-    setFundamentals,
-  ] = useState(null);
-
-  const [
-    fundamentalsLoading,
-    setFundamentalsLoading,
-  ] = useState(false);
-
-  const [
-    fundamentalsError,
-    setFundamentalsError,
-  ] = useState("");
-
-  const [
     news,
     setNews,
   ] = useState([]);
@@ -2424,15 +2260,13 @@ export default function StockDetail() {
         );
       }
 
-      if (isTickerRoute) {
-        const cachedPrice =
-          Number.isFinite(
-            cachedQuote?.c,
-          ) &&
-          cachedQuote.c > 0
-            ? cachedQuote.c
-            : 0;
-
+      if (
+        isTickerRoute &&
+        Number.isFinite(
+          cachedQuote?.c,
+        ) &&
+        cachedQuote.c > 0
+      ) {
         setStock({
           ticker:
             tickerFromRoute,
@@ -2446,14 +2280,14 @@ export default function StockDetail() {
           logo_url: "",
 
           current_price:
-            cachedPrice,
+            cachedQuote.c,
 
           purchase_price:
             Number.isFinite(
-              cachedQuote?.pc,
+              cachedQuote.pc,
             )
               ? cachedQuote.pc
-              : cachedPrice,
+              : cachedQuote.c,
 
           quantity: 0,
 
@@ -2469,12 +2303,12 @@ export default function StockDetail() {
       try {
         if (isTickerRoute) {
           const [
-            quoteResult,
-            profileResult,
+            quote,
+            profile,
           ] =
-            await Promise.allSettled(
+            await Promise.all(
               [
-                marketDataProxy(
+                finnhubProxy(
                   {
                     action:
                       "quote",
@@ -2486,7 +2320,7 @@ export default function StockDetail() {
                     .signal,
                 ),
 
-                marketDataProxy(
+                finnhubProxy(
                   {
                     action:
                       "profile",
@@ -2499,44 +2333,6 @@ export default function StockDetail() {
                 ),
               ],
             );
-
-          if (
-            controller.signal
-              .aborted
-          ) {
-            return;
-          }
-
-          const quote =
-            quoteResult.status ===
-              "fulfilled"
-              ? quoteResult.value
-              : null;
-
-          const profile =
-            profileResult.status ===
-              "fulfilled"
-              ? profileResult.value
-              : null;
-
-          if (
-            quoteResult.status ===
-              "rejected" ||
-            profileResult.status ===
-              "rejected"
-          ) {
-            console.warn(
-              "Stock detail market data is partially unavailable:",
-              quoteResult.status ===
-                "rejected"
-                ? quoteResult.reason
-                : profileResult.reason,
-            );
-
-            setPageError(
-              "Market data is temporarily unavailable. Showing available stock details.",
-            );
-          }
 
           const resolvedQuote =
             normalizePrefetchedQuote(
@@ -2564,8 +2360,8 @@ export default function StockDetail() {
               tickerFromRoute,
 
             sector:
-              profile?.industry ||
-              profile?.sector ||
+              profile
+                ?.finnhubIndustry ||
               "",
 
             logo_url:
@@ -2669,13 +2465,6 @@ export default function StockDetail() {
           "Stock detail load failed:",
           error,
         );
-
-        if (isTickerRoute) {
-          setPageError(
-            "Market data is temporarily unavailable. Showing available stock details.",
-          );
-          return;
-        }
 
         setStock(null);
 
@@ -2841,79 +2630,6 @@ export default function StockDetail() {
   ]);
 
   useEffect(() => {
-    if (!stock?.ticker) {
-      setFundamentals(null);
-      setFundamentalsError("");
-      setFundamentalsLoading(false);
-      return undefined;
-    }
-
-    let active = true;
-
-    async function loadFundamentals() {
-      setFundamentalsLoading(true);
-      setFundamentalsError("");
-
-      try {
-        const result =
-          await financialDatasetsRequest({
-            action: "metrics",
-            ticker: stock.ticker,
-          });
-
-        if (!active) {
-          return;
-        }
-
-        const metrics =
-          result?.snapshot ??
-          result?.metrics;
-
-        if (
-          !metrics ||
-          typeof metrics !==
-            "object"
-        ) {
-          throw new Error(
-            "Fundamentals are unavailable for this stock.",
-          );
-        }
-
-        setFundamentals(
-          metrics,
-        );
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-
-        console.warn(
-          "Fundamentals fetch failed:",
-          error,
-        );
-
-        setFundamentals(null);
-        setFundamentalsError(
-          error?.message ||
-            "Unable to load fundamentals.",
-        );
-      } finally {
-        if (active) {
-          setFundamentalsLoading(
-            false,
-          );
-        }
-      }
-    }
-
-    loadFundamentals();
-
-    return () => {
-      active = false;
-    };
-  }, [stock?.ticker]);
-
-  useEffect(() => {
     if (
       !stock?.ticker
     ) {
@@ -2930,7 +2646,7 @@ export default function StockDetail() {
 
       try {
         const result =
-          await marketDataProxy(
+          await finnhubProxy(
             {
               action:
                 "news",
@@ -2995,7 +2711,7 @@ export default function StockDetail() {
 
     try {
       const result =
-        await marketDataProxy({
+        await finnhubProxy({
           action:
             "news",
 
@@ -3065,7 +2781,7 @@ export default function StockDetail() {
 
     try {
       const quote =
-        await marketDataProxy({
+        await finnhubProxy({
           action:
             "quote",
 
@@ -3462,16 +3178,6 @@ export default function StockDetail() {
       </button>
 
       <main className="mx-auto max-w-6xl space-y-5 px-4 pb-10 sm:px-6">
-        {pageError &&
-          isTickerRoute && (
-            <div
-              role="status"
-              className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-            >
-              {pageError}
-            </div>
-          )}
-
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -3691,62 +3397,6 @@ export default function StockDetail() {
             dailyReturn
           }
         />
-
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-gray-900">
-              Fundamentals
-            </h2>
-
-            {fundamentalsLoading && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Loading metrics…
-              </span>
-            )}
-          </div>
-
-          {fundamentalsError && (
-            <p
-              role="status"
-              className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600"
-            >
-              {fundamentalsError}
-            </p>
-          )}
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
-            {FUNDAMENTAL_METRICS.map(
-              (metric) => {
-                const value =
-                  metricValue(
-                    fundamentals,
-                    metric.keys,
-                  );
-
-                return (
-                  <div
-                    key={
-                      metric.label
-                    }
-                    className="min-w-0"
-                  >
-                    <p className="text-xs font-medium text-gray-400">
-                      {metric.label}
-                    </p>
-
-                    <p className="mt-1 truncate text-sm font-semibold text-gray-900 sm:text-base">
-                      {formatFundamentalMetric(
-                        value,
-                        metric.format,
-                      )}
-                    </p>
-                  </div>
-                );
-              },
-            )}
-          </div>
-        </section>
 
         <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
           <div className="mb-4 flex items-center justify-between">
