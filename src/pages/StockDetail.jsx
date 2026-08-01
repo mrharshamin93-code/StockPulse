@@ -659,122 +659,201 @@ function calculatePeriodReturn(
   ) * 100;
 }
 
-function mergeComparisonData(
-  primary,
-  comparison,
+const MAX_COMPARISON_TICKERS = 4;
+
+const COMPARISON_COLORS = [
+  "#6366f1",
+  "#f59e0b",
+  "#8b5cf6",
+  "#06b6d4",
+];
+
+function normalizeTickerInput(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
+}
+
+function seriesDataKey(ticker) {
+  return `return_${String(ticker)
+    .replace(/[^A-Z0-9]/gi, "_")
+    .toUpperCase()}`;
+}
+
+function alignComparisonSeries(
+  tickerSeries,
+  primaryTicker,
 ) {
-  const comparisonMap =
-    new Map(
-      comparison.map(
-        (point) => [
+  const entries =
+    Object.entries(tickerSeries);
+
+  if (entries.length < 2) {
+    return [];
+  }
+
+  const keySets =
+    entries.map(
+      ([, points]) =>
+        new Set(
+          points.map(
+            (point) =>
+              point.key,
+          ),
+        ),
+    );
+
+  const primaryPoints =
+    tickerSeries[
+      primaryTicker
+    ] || [];
+
+  const sharedKeys =
+    primaryPoints
+      .map(
+        (point) =>
           point.key,
-          point.value,
+      )
+      .filter(
+        (key) =>
+          keySets.every(
+            (set) =>
+              set.has(key),
+          ),
+      );
+
+  if (sharedKeys.length < 2) {
+    return [];
+  }
+
+  const pointMaps =
+    Object.fromEntries(
+      entries.map(
+        ([ticker, points]) => [
+          ticker,
+          new Map(
+            points.map(
+              (point) => [
+                point.key,
+                point,
+              ],
+            ),
+          ),
         ],
       ),
     );
 
-  const merged =
-    primary
-      .map((point) => ({
-        ...point,
+  const basePrices = {};
 
-        comparisonValue:
-          comparisonMap.get(
-            point.key,
-          ) ?? null,
-      }))
-      .filter(
-        (point) =>
-          Number.isFinite(
-            point.value,
-          ) &&
-          Number.isFinite(
-            point.comparisonValue,
-          ),
+  for (
+    const [ticker] of
+      entries
+  ) {
+    const firstPoint =
+      pointMaps[ticker].get(
+        sharedKeys[0],
       );
 
-  if (merged.length < 2) {
-    return [];
+    const basePrice =
+      roundPrice(
+        firstPoint?.value,
+      );
+
+    if (
+      !Number.isFinite(
+        basePrice,
+      ) ||
+      basePrice <= 0
+    ) {
+      return [];
+    }
+
+    basePrices[ticker] =
+      basePrice;
   }
 
-  const primaryBase =
-    roundPrice(
-      merged[0].value,
-    );
+  return sharedKeys.map(
+    (key) => {
+      const primaryPoint =
+        pointMaps[
+          primaryTicker
+        ].get(key);
 
-  const comparisonBase =
-    roundPrice(
-      merged[0]
-        .comparisonValue,
-    );
-
-  if (
-    !Number.isFinite(
-      primaryBase,
-    ) ||
-    primaryBase <= 0 ||
-    !Number.isFinite(
-      comparisonBase,
-    ) ||
-    comparisonBase <= 0
-  ) {
-    return [];
-  }
-
-  return merged.map(
-    (point) => {
-      const primaryValue =
-        roundPrice(
-          point.value,
-        );
-
-      const comparisonValue =
-        roundPrice(
-          point.comparisonValue,
-        );
-
-      return {
+      const row = {
         timestamp:
-          point.timestamp,
+          primaryPoint.timestamp,
 
         label:
-          point.label,
-
-        primaryReturn:
-          Number.isFinite(
-            primaryValue,
-          )
-            ? (
-                (
-                  primaryValue -
-                  primaryBase
-                ) /
-                primaryBase
-              ) * 100
-            : null,
-
-        comparisonReturn:
-          Number.isFinite(
-            comparisonValue,
-          )
-            ? (
-                (
-                  comparisonValue -
-                  comparisonBase
-                ) /
-                comparisonBase
-              ) * 100
-            : null,
+          primaryPoint.label,
       };
+
+      for (
+        const [ticker] of
+          entries
+      ) {
+        const point =
+          pointMaps[ticker].get(
+            key,
+          );
+
+        const displayedPrice =
+          roundPrice(
+            point?.value,
+          );
+
+        row[
+          seriesDataKey(
+            ticker,
+          )
+        ] =
+          Number.isFinite(
+            displayedPrice,
+          )
+            ? (
+                (
+                  displayedPrice -
+                  basePrices[ticker]
+                ) /
+                basePrices[ticker]
+              ) * 100
+            : null;
+      }
+
+      return row;
     },
   );
+}
+
+function getSeriesReturn(
+  chartData,
+  ticker,
+) {
+  const key =
+    seriesDataKey(
+      ticker,
+    );
+
+  const lastValue =
+    [...chartData]
+      .reverse()
+      .find(
+        (point) =>
+          Number.isFinite(
+            point?.[key],
+          ),
+      )?.[key];
+
+  return Number.isFinite(
+    lastValue,
+  )
+    ? lastValue
+    : null;
 }
 
 function ChartTooltip({
   active,
   payload,
   label,
-  compareTicker,
+  comparisonsActive,
   ticker,
   periodStartPrice,
 }) {
@@ -811,13 +890,8 @@ function ChartTooltip({
             return null;
           }
 
-          const isComparison =
-            Boolean(
-              compareTicker,
-            );
-
           const growthPct =
-            isComparison
+            comparisonsActive
               ? displayedValue
               : Number.isFinite(
                     displayedStartPrice,
@@ -841,15 +915,29 @@ function ChartTooltip({
               key={
                 entry.dataKey
               }
-              className="flex min-w-[150px] items-center justify-between gap-4 text-xs"
+              className="flex min-w-[170px] items-center justify-between gap-4 py-0.5 text-xs"
             >
-              <span className="font-medium text-gray-600">
+              <span className="flex items-center gap-2 font-medium text-gray-600">
+                <span
+                  className="h-0.5 w-4 rounded-full"
+                  style={{
+                    backgroundColor:
+                      entry.color,
+                  }}
+                />
+
                 {entry.name ||
                   ticker}
               </span>
 
-              <span className="font-semibold text-gray-900">
-                {isComparison
+              <span
+                className={`font-semibold ${
+                  positive
+                    ? "text-emerald-600"
+                    : "text-red-600"
+                }`}
+              >
+                {comparisonsActive
                   ? `${
                       positive
                         ? "+"
@@ -861,14 +949,8 @@ function ChartTooltip({
                       2,
                     )}`}
 
-                {!isComparison && (
-                  <span
-                    className={`ml-2 ${
-                      positive
-                        ? "text-emerald-600"
-                        : "text-red-600"
-                    }`}
-                  >
+                {!comparisonsActive && (
+                  <span className="ml-2">
                     {positive
                       ? "▲"
                       : "▼"}{" "}
@@ -901,13 +983,18 @@ function StockChart({
   initialDailyReturn,
 }) {
   const [
-    compareTicker,
-    setCompareTicker,
-  ] = useState("");
+    compareTickers,
+    setCompareTickers,
+  ] = useState([]);
 
   const [
     compareInput,
     setCompareInput,
+  ] = useState("");
+
+  const [
+    compareError,
+    setCompareError,
   ] = useState("");
 
   const [
@@ -950,6 +1037,15 @@ function StockChart({
 
   const tooltipTimerRef =
     useRef(null);
+
+  const primaryTicker =
+    normalizeTickerInput(
+      ticker,
+    );
+
+  const comparisonsActive =
+    compareTickers.length >
+    0;
 
   function clearTooltipTimer() {
     if (
@@ -1027,12 +1123,36 @@ function StockChart({
       setChartError("");
 
       try {
-        const primary =
-          await fetchChartData(
-            ticker,
-            activePeriod,
-            controller.signal,
+        const requestedTickers = [
+          primaryTicker,
+          ...compareTickers,
+        ];
+
+        const seriesResults =
+          await Promise.all(
+            requestedTickers.map(
+              async (
+                requestedTicker,
+              ) => [
+                requestedTicker,
+                await fetchChartData(
+                  requestedTicker,
+                  activePeriod,
+                  controller.signal,
+                ),
+              ],
+            ),
           );
+
+        const tickerSeries =
+          Object.fromEntries(
+            seriesResults,
+          );
+
+        const primary =
+          tickerSeries[
+            primaryTicker
+          ];
 
         const nextReturn =
           calculatePeriodReturn(
@@ -1049,10 +1169,6 @@ function StockChart({
           nextReturn,
         );
 
-        /*
-         * Only calculate a 1D fallback from candles when
-         * The provider-normalized daily return is unavailable.
-         */
         if (
           activePeriod ===
             "1D" &&
@@ -1068,30 +1184,25 @@ function StockChart({
           );
         }
 
-        if (compareTicker) {
-          const comparison =
-            await fetchChartData(
-              compareTicker,
-              activePeriod,
-              controller.signal,
-            );
-
-          const merged =
-            mergeComparisonData(
-              primary,
-              comparison,
+        if (
+          comparisonsActive
+        ) {
+          const aligned =
+            alignComparisonSeries(
+              tickerSeries,
+              primaryTicker,
             );
 
           if (
-            merged.length < 2
+            aligned.length < 2
           ) {
             throw new Error(
-              `Could not align ${ticker} and ${compareTicker} chart dates`,
+              "Could not align the selected tickers on shared trading dates.",
             );
           }
 
           setChartData(
-            merged,
+            aligned,
           );
         } else {
           setChartData(
@@ -1166,9 +1277,10 @@ function StockChart({
     return () =>
       controller.abort();
   }, [
-    ticker,
+    primaryTicker,
     activePeriod,
-    compareTicker,
+    compareTickers,
+    comparisonsActive,
     onPeriodReturnChange,
     onDailyReturnChange,
     initialDailyReturn,
@@ -1176,7 +1288,7 @@ function StockChart({
 
   const periodStartPrice =
     useMemo(() => {
-      if (compareTicker) {
+      if (comparisonsActive) {
         return 0;
       }
 
@@ -1192,7 +1304,7 @@ function StockChart({
       );
     }, [
       chartData,
-      compareTicker,
+      comparisonsActive,
       currentPrice,
     ]);
 
@@ -1208,8 +1320,42 @@ function StockChart({
       ? "#10b981"
       : "#ef4444";
 
-  const compareColor =
-    "#6366f1";
+  const comparisonLegendItems = [
+    {
+      ticker:
+        primaryTicker,
+      color:
+        primaryColor,
+      removable:
+        false,
+      value:
+        getSeriesReturn(
+          chartData,
+          primaryTicker,
+        ),
+    },
+
+    ...compareTickers.map(
+      (
+        comparisonTicker,
+        index,
+      ) => ({
+        ticker:
+          comparisonTicker,
+        color:
+          COMPARISON_COLORS[
+            index
+          ],
+        removable:
+          true,
+        value:
+          getSeriesReturn(
+            chartData,
+            comparisonTicker,
+          ),
+      }),
+    ),
+  ];
 
   function handleAddCompare(
     event,
@@ -1217,22 +1363,72 @@ function StockChart({
     event.preventDefault();
 
     const normalized =
-      compareInput
-        .trim()
-        .toUpperCase();
-
-    if (
-      normalized &&
-      normalized !==
-        ticker.toUpperCase()
-    ) {
-      setCompareTicker(
-        normalized,
+      normalizeTickerInput(
+        compareInput,
       );
+
+    if (!normalized) {
+      return;
     }
 
+    if (
+      normalized ===
+        primaryTicker
+    ) {
+      setCompareError(
+        `${primaryTicker} is already the primary ticker.`,
+      );
+      return;
+    }
+
+    if (
+      compareTickers.includes(
+        normalized,
+      )
+    ) {
+      setCompareError(
+        `${normalized} is already being compared.`,
+      );
+      return;
+    }
+
+    if (
+      compareTickers.length >=
+      MAX_COMPARISON_TICKERS
+    ) {
+      setCompareError(
+        `Maximum ${MAX_COMPARISON_TICKERS} comparison tickers.`,
+      );
+      return;
+    }
+
+    setCompareTickers(
+      (previous) => [
+        ...previous,
+        normalized,
+      ],
+    );
+
     setCompareInput("");
+    setCompareError("");
     setShowInput(false);
+  }
+
+  function removeCompare(
+    comparisonTicker,
+  ) {
+    hideTooltip();
+
+    setCompareTickers(
+      (previous) =>
+        previous.filter(
+          (item) =>
+            item !==
+            comparisonTicker,
+        ),
+    );
+
+    setCompareError("");
   }
 
   function selectPeriod(
@@ -1268,36 +1464,31 @@ function StockChart({
           Price Chart
         </h2>
 
-        <span
-          className={`text-sm font-semibold ${
-            Number.isFinite(
+        {!comparisonsActive && (
+          <span
+            className={`text-sm font-semibold ${
+              Number.isFinite(
+                primaryReturn,
+              )
+                ? primaryReturn >=
+                  0
+                  ? "text-emerald-600"
+                  : "text-red-600"
+                : "text-gray-400"
+            }`}
+          >
+            {Number.isFinite(
               primaryReturn,
             )
-              ? primaryReturn >=
-                0
-                ? "text-emerald-600"
-                : "text-red-600"
-              : "text-gray-400"
-          }`}
-        >
-          {Number.isFinite(
-            primaryReturn,
-          )
-            ? `${
-                primaryReturn >=
-                0
-                  ? "+"
-                  : ""
-              }${primaryReturn.toFixed(
-                2,
-              )}%`
-            : "—"}
-        </span>
-
-        {compareTicker && (
-          <span className="rounded-full bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-600">
-            {ticker} vs{" "}
-            {compareTicker}
+              ? `${
+                  primaryReturn >=
+                  0
+                    ? "+"
+                    : ""
+                }${primaryReturn.toFixed(
+                  2,
+                )}%`
+              : "—"}
           </span>
         )}
       </div>
@@ -1325,15 +1516,20 @@ function StockChart({
           ),
         )}
 
-        {!compareTicker &&
+        {compareTickers.length <
+          MAX_COMPARISON_TICKERS &&
           !showInput && (
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                setCompareError(
+                  "",
+                );
+
                 setShowInput(
                   true,
-                )
-              }
+                );
+              }}
               className="ml-auto inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
             >
               <Plus className="h-3 w-3" />
@@ -1354,11 +1550,15 @@ function StockChart({
               }
               onChange={(
                 event,
-              ) =>
+              ) => {
                 setCompareInput(
                   event.target.value.toUpperCase(),
-                )
-              }
+                );
+
+                setCompareError(
+                  "",
+                );
+              }}
               placeholder="TICKER"
               className="h-7 w-24 px-2 text-xs uppercase"
               maxLength={8}
@@ -1383,6 +1583,10 @@ function StockChart({
                 setCompareInput(
                   "",
                 );
+
+                setCompareError(
+                  "",
+                );
               }}
               className="text-gray-400 hover:text-gray-900"
               aria-label="Cancel comparison"
@@ -1392,30 +1596,99 @@ function StockChart({
           </form>
         )}
 
-        {compareTicker && (
-          <button
-            type="button"
-            onClick={() => {
-              hideTooltip();
-
-              setCompareTicker(
-                "",
-              );
-            }}
-            className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-          >
-            <X className="h-3.5 w-3.5" />
-            Remove comparison
-          </button>
+        {compareTickers.length >=
+          MAX_COMPARISON_TICKERS && (
+          <span className="ml-auto text-[11px] font-medium text-gray-400">
+            Maximum 4 comparisons
+          </span>
         )}
       </div>
 
-      {compareTicker && (
-        <p className="mb-2 text-xs text-gray-400">
-          Showing percentage
-          return from the first
-          shared trading date.
+      {compareError && (
+        <p className="mb-3 text-xs font-medium text-red-600">
+          {compareError}
         </p>
+      )}
+
+      {comparisonsActive && (
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            {comparisonLegendItems.map(
+              (item) => {
+                const positive =
+                  Number.isFinite(
+                    item.value,
+                  )
+                    ? item.value >=
+                      0
+                    : null;
+
+                return (
+                  <div
+                    key={
+                      item.ticker
+                    }
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1.5"
+                  >
+                    <span
+                      className="h-0.5 w-5 rounded-full"
+                      style={{
+                        backgroundColor:
+                          item.color,
+                      }}
+                    />
+
+                    <span className="text-xs font-semibold text-gray-700">
+                      {item.ticker}
+                    </span>
+
+                    <span
+                      className={`text-[11px] font-semibold ${
+                        positive ===
+                        null
+                          ? "text-gray-400"
+                          : positive
+                            ? "text-emerald-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {Number.isFinite(
+                        item.value,
+                      )
+                        ? `${
+                            positive
+                              ? "+"
+                              : ""
+                          }${item.value.toFixed(
+                            2,
+                          )}%`
+                        : "—"}
+                    </span>
+
+                    {item.removable && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          removeCompare(
+                            item.ticker,
+                          )
+                        }
+                        className="-mr-1 text-gray-400 transition-colors hover:text-gray-900"
+                        aria-label={`Remove ${item.ticker} comparison`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              },
+            )}
+          </div>
+
+          <p className="mb-2 text-xs text-gray-400">
+            Showing percentage return from the first shared trading date.
+          </p>
+        </>
       )}
 
       <div className="relative h-[300px] w-full">
@@ -1448,9 +1721,9 @@ function StockChart({
               }
               margin={{
                 top: 10,
-                right: 8,
+                right: 0,
                 bottom: 0,
-                left: 0,
+                left: 8,
               }}
               onMouseMove={
                 showTooltipTemporarily
@@ -1500,6 +1773,7 @@ function StockChart({
               />
 
               <YAxis
+                orientation="right"
                 domain={[
                   "auto",
                   "auto",
@@ -1507,7 +1781,7 @@ function StockChart({
                 tickFormatter={(
                   value,
                 ) =>
-                  compareTicker
+                  comparisonsActive
                     ? `${value.toFixed(
                         0,
                       )}%`
@@ -1538,11 +1812,11 @@ function StockChart({
                 }
                 content={
                   <ChartTooltip
-                    compareTicker={
-                      compareTicker
+                    comparisonsActive={
+                      comparisonsActive
                     }
                     ticker={
-                      ticker
+                      primaryTicker
                     }
                     periodStartPrice={
                       periodStartPrice
@@ -1554,11 +1828,15 @@ function StockChart({
               <Line
                 type="monotone"
                 dataKey={
-                  compareTicker
-                    ? "primaryReturn"
+                  comparisonsActive
+                    ? seriesDataKey(
+                        primaryTicker,
+                      )
                     : "primaryValue"
                 }
-                name={ticker}
+                name={
+                  primaryTicker
+                }
                 stroke={
                   primaryColor
                 }
@@ -1577,48 +1855,49 @@ function StockChart({
                 }
               />
 
-              {compareTicker && (
-                <Line
-                  type="monotone"
-                  dataKey="comparisonReturn"
-                  name={
-                    compareTicker
-                  }
-                  stroke={
-                    compareColor
-                  }
-                  strokeWidth={
-                    2
-                  }
-                  dot={false}
-                  activeDot={{
-                    r: 4,
-                  }}
-                  isAnimationActive={
-                    false
-                  }
-                  connectNulls={
-                    false
-                  }
-                />
+              {compareTickers.map(
+                (
+                  comparisonTicker,
+                  index,
+                ) => (
+                  <Line
+                    key={
+                      comparisonTicker
+                    }
+                    type="monotone"
+                    dataKey={
+                      seriesDataKey(
+                        comparisonTicker,
+                      )
+                    }
+                    name={
+                      comparisonTicker
+                    }
+                    stroke={
+                      COMPARISON_COLORS[
+                        index
+                      ]
+                    }
+                    strokeWidth={
+                      2
+                    }
+                    dot={false}
+                    activeDot={{
+                      r: 4,
+                    }}
+                    isAnimationActive={
+                      false
+                    }
+                    connectNulls={
+                      false
+                    }
+                  />
+                ),
               )}
             </LineChart>
           </ResponsiveContainer>
         )}
       </div>
-
-      {compareTicker &&
-        !chartError && (
-          <div className="mt-3 flex items-center gap-5 text-xs text-gray-500">
-            <span className="font-medium">
-              {ticker}
-            </span>
-
-            <span className="font-medium">
-              {compareTicker}
-            </span>
-          </div>
-        )}
     </section>
   );
 }
