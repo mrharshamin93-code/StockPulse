@@ -1047,6 +1047,13 @@ function StockChart({
     compareTickers.length >
     0;
 
+  useEffect(() => {
+    setCompareTickers([]);
+    setCompareInput("");
+    setCompareError("");
+    setShowInput(false);
+  }, [primaryTicker]);
+
   function clearTooltipTimer() {
     if (
       tooltipTimerRef.current
@@ -1610,7 +1617,7 @@ function StockChart({
         </p>
       )}
 
-      {comparisonsActive && (
+      {compareTickers.length > 0 && (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             {comparisonLegendItems.map(
