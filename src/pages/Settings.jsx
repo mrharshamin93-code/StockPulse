@@ -54,14 +54,6 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = () => {
-    /*
-      Connect this to your secure server-side
-      account-deletion endpoint.
-
-      Never expose the Supabase service-role key
-      in frontend code.
-    */
-
     window.alert(
       "Account deletion still needs to be connected to the secure server endpoint."
     );
@@ -71,7 +63,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-full bg-background text-foreground">
-      <main className="mx-auto w-full max-w-lg px-4 pb-7">
+      <main className="mx-auto w-full max-w-[390px] px-6 pb-7">
         <header className="flex h-[72px] items-end justify-center pb-3">
           <h1 className="text-[24px] font-bold tracking-[-0.5px] text-foreground">
             Settings
@@ -171,8 +163,7 @@ export default function Settings() {
               </div>
 
               <div className="mt-0.5 text-[12px] leading-[1.35] text-muted-foreground">
-                Permanently remove your account and all
-                data
+                Permanently remove your account and all data
               </div>
             </div>
 
@@ -302,7 +293,7 @@ function DeleteAccountModal({
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-md rounded-[22px] border border-border bg-card p-5 text-foreground shadow-2xl"
+        className="w-full max-w-sm rounded-[22px] border border-border bg-card p-5 text-foreground shadow-2xl"
         onClick={(event) =>
           event.stopPropagation()
         }
