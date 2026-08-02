@@ -1,20 +1,15 @@
 // src/pages/Settings.jsx
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bell,
-  BriefcaseBusiness,
   ChevronRight,
   FileText,
   Headphones,
-  LineChart,
   LogOut,
   Palette,
-  Settings as SettingsIcon,
   ShieldCheck,
-  SlidersHorizontal,
-  Star,
   Trash2,
   TrendingUp,
   WalletCards,
@@ -22,25 +17,14 @@ import {
 
 import { supabase } from "@/lib/supabase";
 
-const APP_ACCENT = "#c73659";
-
 export default function Settings() {
   const navigate = useNavigate();
 
-  const [currency, setCurrency] = useState("USD");
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const currencyOptions = useMemo(
-    () => [
-      { code: "USD", label: "US Dollar" },
-      { code: "CAD", label: "Canadian Dollar" },
-      { code: "EUR", label: "Euro" },
-      { code: "GBP", label: "British Pound" },
-    ],
-    []
-  );
+  const savedCurrency =
+    localStorage.getItem("stockpulse_currency") || "USD";
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -54,156 +38,158 @@ export default function Settings() {
         throw error;
       }
 
-      navigate("/login", { replace: true });
+      navigate("/login", {
+        replace: true,
+      });
     } catch (error) {
       console.error("Unable to sign out:", error);
+
       window.alert(
-        error?.message || "Unable to sign out. Please try again."
+        error?.message ||
+          "Unable to sign out. Please try again."
       );
     } finally {
       setIsSigningOut(false);
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = () => {
     /*
-      Connect this to your secure server-side account-deletion endpoint.
+      Connect this to your secure server-side
+      account-deletion endpoint.
 
-      Do not delete the Supabase Auth user directly from the browser.
-      The service-role key must never be exposed in frontend code.
-
-      Example:
-
-      const { data: sessionData } = await supabase.auth.getSession();
-
-      const response = await fetch("/api/delete-account", {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${sessionData.session?.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Unable to delete account");
-      }
+      Never expose the Supabase service-role key
+      in frontend code.
     */
 
     window.alert(
-      "Connect this button to your secure account-deletion API endpoint."
+      "Account deletion still needs to be connected to the secure server endpoint."
     );
 
     setShowDeleteModal(false);
   };
 
   return (
-    <div className="min-h-dvh bg-[#f7f7f7] text-[#111111]">
-      <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col">
-        <main className="flex-1 px-4 pb-32">
-          <header className="flex h-[116px] items-end justify-center pb-6">
-            <h1 className="text-[30px] font-bold tracking-[-0.9px]">
-              Settings
-            </h1>
-          </header>
+    <div className="min-h-full bg-[#f7f7f7] text-[#151515]">
+      <main className="mx-auto w-full max-w-lg px-4 pb-8">
+        <header className="flex h-[82px] items-center justify-center">
+          <h1 className="text-[25px] font-bold tracking-[-0.6px]">
+            Settings
+          </h1>
+        </header>
 
-          <SettingsSection title="GENERAL">
-            <SettingsRow
-              icon={Bell}
-              label="Price Alerts"
-              onClick={() => navigate("/settings/price-alerts")}
+        <SettingsSection title="GENERAL">
+          <SettingsRow
+            icon={Bell}
+            label="Price Alerts"
+            onClick={() => navigate("/price-alerts")}
+          />
+
+          <SettingsRow
+            icon={TrendingUp}
+            label="Performance Report"
+            onClick={() => navigate("/monthly-report")}
+          />
+
+          <SettingsRow
+            icon={WalletCards}
+            label="Currency"
+            rightText={savedCurrency}
+            onClick={() =>
+              navigate("/settings/currency")
+            }
+            isLast
+          />
+        </SettingsSection>
+
+        <SettingsSection title="APPEARANCE">
+          <SettingsRow
+            icon={Palette}
+            label="Colour Theme"
+            onClick={() => navigate("/settings/theme")}
+            isLast
+          />
+        </SettingsSection>
+
+        <SettingsSection title="SUPPORT">
+          <SettingsRow
+            icon={Headphones}
+            label="Contact Us"
+            onClick={() => navigate("/contact-us")}
+            isLast
+          />
+        </SettingsSection>
+
+        <SettingsSection title="LEGAL">
+          <SettingsRow
+            icon={ShieldCheck}
+            label="Privacy Policy"
+            onClick={() => navigate("/privacy")}
+          />
+
+          <SettingsRow
+            icon={FileText}
+            label="Terms of Service"
+            onClick={() => navigate("/terms")}
+            isLast
+          />
+        </SettingsSection>
+
+        <SettingsSection title="ACCOUNT">
+          <SettingsRow
+            icon={LogOut}
+            label={
+              isSigningOut
+                ? "Signing Out..."
+                : "Sign Out"
+            }
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            isLast
+          />
+        </SettingsSection>
+
+        <section className="mb-6">
+          <h2 className="mb-2.5 px-2 text-[12px] font-semibold tracking-[1px] text-[#6d6d6d]">
+            DANGER ZONE
+          </h2>
+
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="flex min-h-[86px] w-full items-center rounded-[20px] border border-red-300 bg-white px-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:bg-red-50"
+          >
+            <div className="flex w-[48px] shrink-0 items-center">
+              <Trash2
+                size={26}
+                strokeWidth={2.2}
+                className="text-red-600"
+              />
+            </div>
+
+            <div className="min-w-0 flex-1 pr-2">
+              <div className="text-[17px] font-semibold text-red-600">
+                Delete Account
+              </div>
+
+              <div className="mt-0.5 text-[13px] leading-[1.35] text-[#777777]">
+                Permanently remove your account and
+                all data
+              </div>
+            </div>
+
+            <ChevronRight
+              size={22}
+              strokeWidth={2.2}
+              className="shrink-0 text-red-500"
             />
+          </button>
+        </section>
 
-            <SettingsRow
-              icon={TrendingUp}
-              label="Performance Report"
-              onClick={() => navigate("/settings/performance-report")}
-            />
-
-            <SettingsRow
-              icon={WalletCards}
-              label="Currency"
-              rightText={currency}
-              onClick={() => setShowCurrencyModal(true)}
-              isLast
-            />
-          </SettingsSection>
-
-          <SettingsSection title="APPEARANCE">
-            <SettingsRow
-              icon={Palette}
-              label="Colour Theme"
-              onClick={() => navigate("/settings/colour-theme")}
-              isLast
-            />
-          </SettingsSection>
-
-          <SettingsSection title="SUPPORT">
-            <SettingsRow
-              icon={Headphones}
-              label="Contact Us"
-              onClick={() => navigate("/contact")}
-              isLast
-            />
-          </SettingsSection>
-
-          <SettingsSection title="LEGAL">
-            <SettingsRow
-              icon={ShieldCheck}
-              label="Privacy Policy"
-              onClick={() => navigate("/privacy-policy")}
-            />
-
-            <SettingsRow
-              icon={FileText}
-              label="Terms of Service"
-              onClick={() => navigate("/terms-of-service")}
-              isLast
-            />
-          </SettingsSection>
-
-          <SettingsSection title="ACCOUNT">
-            <SettingsRow
-              icon={LogOut}
-              label={isSigningOut ? "Signing Out..." : "Sign Out"}
-              disabled={isSigningOut}
-              onClick={handleSignOut}
-              isLast
-            />
-          </SettingsSection>
-
-          <SettingsSection title="DANGER ZONE">
-            <DangerRow
-              icon={Trash2}
-              label="Delete Account"
-              description="Permanently remove your account and all data"
-              onClick={() => setShowDeleteModal(true)}
-            />
-          </SettingsSection>
-
-          <p className="pb-4 pt-2 text-center text-[16px] font-medium text-[#858585]">
-            StockPulse · Stock Portfolio
-          </p>
-        </main>
-
-        <BottomNavigation
-          activeItem="settings"
-          onNavigate={(path) => navigate(path)}
-        />
-      </div>
-
-      <CurrencyModal
-        open={showCurrencyModal}
-        currentCurrency={currency}
-        currencies={currencyOptions}
-        onClose={() => setShowCurrencyModal(false)}
-        onSelect={(selectedCurrency) => {
-          setCurrency(selectedCurrency);
-          localStorage.setItem(
-            "stockpulse_currency",
-            selectedCurrency
-          );
-          setShowCurrencyModal(false);
-        }}
-      />
+        <p className="pb-2 text-center text-[13px] font-medium text-[#8a8a8a]">
+          StockPulse · Stock Portfolio
+        </p>
+      </main>
 
       <DeleteAccountModal
         open={showDeleteModal}
@@ -216,12 +202,12 @@ export default function Settings() {
 
 function SettingsSection({ title, children }) {
   return (
-    <section className="mb-8">
-      <h2 className="mb-3 px-2 text-[14px] font-semibold tracking-[1.1px] text-[#656565]">
+    <section className="mb-6">
+      <h2 className="mb-2.5 px-2 text-[12px] font-semibold tracking-[1px] text-[#6d6d6d]">
         {title}
       </h2>
 
-      <div className="overflow-hidden rounded-[22px] border border-[#e3e3e3] bg-white shadow-[0_3px_10px_rgba(0,0,0,0.055)]">
+      <div className="overflow-hidden rounded-[20px] border border-[#e3e3e3] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.045)]">
         {children}
       </div>
     </section>
@@ -242,42 +228,43 @@ function SettingsRow({
       onClick={onClick}
       disabled={disabled}
       className={[
-        "group relative flex min-h-[86px] w-full items-center px-5 text-left",
-        "transition-colors duration-150",
+        "flex min-h-[68px] w-full items-center px-4 text-left",
         disabled
           ? "cursor-not-allowed opacity-60"
-          : "active:bg-[#f2f2f2]",
+          : "active:bg-[#f3f3f3]",
       ].join(" ")}
     >
-      <div className="flex w-[58px] shrink-0 items-center justify-start">
+      <div className="flex w-[48px] shrink-0 items-center">
         <Icon
-          size={31}
+          size={25}
           strokeWidth={2.15}
-          className="text-black"
+          className="text-[#111111]"
           aria-hidden="true"
         />
       </div>
 
       <div
         className={[
-          "flex min-h-[86px] flex-1 items-center",
-          !isLast ? "border-b border-[#e2e2e2]" : "",
+          "flex min-h-[68px] min-w-0 flex-1 items-center",
+          !isLast
+            ? "border-b border-[#e5e5e5]"
+            : "",
         ].join(" ")}
       >
-        <span className="flex-1 pr-4 text-[20px] font-semibold tracking-[-0.35px] text-[#151515]">
+        <span className="min-w-0 flex-1 truncate pr-3 text-[17px] font-semibold tracking-[-0.2px]">
           {label}
         </span>
 
         {rightText ? (
-          <span className="mr-2 text-[18px] font-semibold text-[#777777]">
+          <span className="mr-1.5 text-[16px] font-medium text-[#777777]">
             {rightText}
           </span>
         ) : null}
 
         <ChevronRight
-          size={25}
-          strokeWidth={2.25}
-          className="shrink-0 text-[#666666]"
+          size={21}
+          strokeWidth={2.15}
+          className="shrink-0 text-[#777777]"
           aria-hidden="true"
         />
       </div>
@@ -285,266 +272,83 @@ function SettingsRow({
   );
 }
 
-function DangerRow({
-  icon: Icon,
-  label,
-  description,
-  onClick,
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-h-[112px] w-full items-center rounded-[22px] border border-[#ff8787] bg-white px-5 text-left shadow-[0_3px_10px_rgba(0,0,0,0.035)] active:bg-red-50"
-    >
-      <div className="flex w-[58px] shrink-0 items-center justify-start">
-        <Icon
-          size={32}
-          strokeWidth={2.2}
-          className="text-red-600"
-          aria-hidden="true"
-        />
-      </div>
-
-      <div className="min-w-0 flex-1 pr-3">
-        <div className="text-[20px] font-semibold tracking-[-0.3px] text-red-600">
-          {label}
-        </div>
-
-        <div className="mt-1 text-[15px] font-medium leading-[1.35] text-[#757575]">
-          {description}
-        </div>
-      </div>
-
-      <ChevronRight
-        size={26}
-        strokeWidth={2.3}
-        className="shrink-0 text-red-500"
-        aria-hidden="true"
-      />
-    </button>
-  );
-}
-
-function BottomNavigation({ activeItem, onNavigate }) {
-  const navItems = [
-    {
-      id: "watchlist",
-      label: "Watchlist",
-      icon: Star,
-      path: "/watchlist",
-    },
-    {
-      id: "portfolio",
-      label: "Portfolio",
-      icon: BriefcaseBusiness,
-      path: "/portfolio",
-    },
-    {
-      id: "analysis",
-      label: "Analysis",
-      icon: LineChart,
-      path: "/analysis",
-    },
-    {
-      id: "screener",
-      label: "Screener",
-      icon: SlidersHorizontal,
-      path: "/screener",
-    },
-    {
-      id: "settings",
-      label: "Settings",
-      icon: SettingsIcon,
-      path: "/settings",
-    },
-  ];
-
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[#dddddd] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
-      <div className="mx-auto grid h-[88px] w-full max-w-[430px] grid-cols-5">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = item.id === activeItem;
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.path)}
-              className="relative flex min-w-0 flex-col items-center justify-center gap-1 px-1"
-              aria-current={isActive ? "page" : undefined}
-            >
-              <Icon
-                size={28}
-                strokeWidth={isActive ? 2.3 : 2}
-                style={{
-                  color: isActive ? APP_ACCENT : "#666666",
-                }}
-                aria-hidden="true"
-              />
-
-              <span
-                className="max-w-full truncate text-[12px] font-semibold"
-                style={{
-                  color: isActive ? APP_ACCENT : "#666666",
-                }}
-              >
-                {item.label}
-              </span>
-
-              {isActive ? (
-                <span
-                  className="absolute bottom-[7px] h-[3px] w-8 rounded-full"
-                  style={{ backgroundColor: APP_ACCENT }}
-                />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
-
-function CurrencyModal({
+function DeleteAccountModal({
   open,
-  currentCurrency,
-  currencies,
   onClose,
-  onSelect,
+  onConfirm,
 }) {
-  if (!open) return null;
-
-  return (
-    <ModalOverlay onClose={onClose}>
-      <div
-        className="w-full rounded-[26px] bg-white p-5 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-4">
-          <h3 className="text-[23px] font-bold tracking-[-0.5px]">
-            Select Currency
-          </h3>
-
-          <p className="mt-1 text-[15px] text-[#777777]">
-            Choose how monetary values appear in StockPulse.
-          </p>
-        </div>
-
-        <div className="overflow-hidden rounded-[18px] border border-[#e5e5e5]">
-          {currencies.map((currencyOption, index) => {
-            const isSelected =
-              currentCurrency === currencyOption.code;
-
-            return (
-              <button
-                key={currencyOption.code}
-                type="button"
-                onClick={() => onSelect(currencyOption.code)}
-                className={[
-                  "flex min-h-[66px] w-full items-center px-4 text-left active:bg-[#f2f2f2]",
-                  index !== currencies.length - 1
-                    ? "border-b border-[#e5e5e5]"
-                    : "",
-                ].join(" ")}
-              >
-                <div className="flex-1">
-                  <div className="text-[17px] font-semibold">
-                    {currencyOption.code}
-                  </div>
-
-                  <div className="text-[14px] text-[#777777]">
-                    {currencyOption.label}
-                  </div>
-                </div>
-
-                <div
-                  className={[
-                    "flex h-6 w-6 items-center justify-center rounded-full border-2",
-                    isSelected
-                      ? "border-[#c73659]"
-                      : "border-[#bdbdbd]",
-                  ].join(" ")}
-                >
-                  {isSelected ? (
-                    <div className="h-3 w-3 rounded-full bg-[#c73659]" />
-                  ) : null}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-4 min-h-[52px] w-full rounded-[16px] bg-[#eeeeee] text-[17px] font-semibold active:bg-[#e2e2e2]"
-        >
-          Cancel
-        </button>
-      </div>
-    </ModalOverlay>
-  );
-}
-
-function DeleteAccountModal({ open, onClose, onConfirm }) {
-  const [confirmationText, setConfirmationText] = useState("");
+  const [confirmationText, setConfirmationText] =
+    useState("");
 
   if (!open) return null;
 
   const canDelete =
-    confirmationText.trim().toUpperCase() === "DELETE";
+    confirmationText.trim().toUpperCase() ===
+    "DELETE";
+
+  const handleClose = () => {
+    setConfirmationText("");
+    onClose();
+  };
+
+  const handleConfirm = () => {
+    if (!canDelete) return;
+
+    setConfirmationText("");
+    onConfirm();
+  };
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] backdrop-blur-[2px]"
+      onClick={handleClose}
+    >
       <div
-        className="w-full rounded-[26px] bg-white p-5 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-md rounded-[22px] bg-white p-5 shadow-2xl"
+        onClick={(event) =>
+          event.stopPropagation()
+        }
       >
-        <div className="mb-5">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-            <Trash2
-              size={25}
-              strokeWidth={2.2}
-              className="text-red-600"
-            />
-          </div>
-
-          <h3 className="text-[23px] font-bold tracking-[-0.5px] text-red-600">
-            Delete Account
-          </h3>
-
-          <p className="mt-2 text-[15px] leading-6 text-[#686868]">
-            This permanently removes your account and associated
-            StockPulse data. This action cannot be undone.
-          </p>
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100">
+          <Trash2
+            size={23}
+            className="text-red-600"
+          />
         </div>
+
+        <h3 className="text-[21px] font-bold text-red-600">
+          Delete Account
+        </h3>
+
+        <p className="mt-2 text-[14px] leading-5 text-[#666666]">
+          This permanently removes your account and
+          associated StockPulse data. This cannot be
+          undone.
+        </p>
 
         <label
           htmlFor="delete-confirmation"
-          className="mb-2 block text-[14px] font-semibold text-[#555555]"
+          className="mb-2 mt-4 block text-[13px] font-semibold text-[#555555]"
         >
           Type DELETE to confirm
         </label>
 
         <input
           id="delete-confirmation"
-          type="text"
           value={confirmationText}
           onChange={(event) =>
             setConfirmationText(event.target.value)
           }
           autoComplete="off"
-          className="h-[54px] w-full rounded-[15px] border border-[#d4d4d4] bg-white px-4 text-[17px] outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
           placeholder="DELETE"
+          className="h-[48px] w-full rounded-[14px] border border-[#d4d4d4] px-4 text-[16px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
         />
 
-        <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={onClose}
-            className="min-h-[52px] rounded-[16px] bg-[#eeeeee] text-[17px] font-semibold active:bg-[#e2e2e2]"
+            onClick={handleClose}
+            className="h-[48px] rounded-[14px] bg-[#eeeeee] text-[16px] font-semibold active:bg-[#e3e3e3]"
           >
             Cancel
           </button>
@@ -552,9 +356,9 @@ function DeleteAccountModal({ open, onClose, onConfirm }) {
           <button
             type="button"
             disabled={!canDelete}
-            onClick={onConfirm}
+            onClick={handleConfirm}
             className={[
-              "min-h-[52px] rounded-[16px] text-[17px] font-semibold text-white",
+              "h-[48px] rounded-[14px] text-[16px] font-semibold text-white",
               canDelete
                 ? "bg-red-600 active:bg-red-700"
                 : "cursor-not-allowed bg-red-300",
@@ -564,18 +368,6 @@ function DeleteAccountModal({ open, onClose, onConfirm }) {
           </button>
         </div>
       </div>
-    </ModalOverlay>
-  );
-}
-
-function ModalOverlay({ children, onClose }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-[calc(16px+env(safe-area-inset-bottom))] backdrop-blur-[2px] sm:items-center sm:pb-4"
-      onClick={onClose}
-      role="presentation"
-    >
-      <div className="w-full max-w-[400px]">{children}</div>
     </div>
   );
 }
