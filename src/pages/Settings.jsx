@@ -71,9 +71,9 @@ export default function Settings() {
 
   return (
     <div className="min-h-full bg-[#f7f7f7] text-[#151515]">
-      <main className="mx-auto w-full max-w-lg px-4 pb-8">
-        <header className="flex h-[82px] items-center justify-center">
-          <h1 className="text-[25px] font-bold tracking-[-0.6px]">
+      <main className="mx-auto w-full max-w-lg px-4 pb-7">
+        <header className="flex h-[72px] items-end justify-center pb-3">
+          <h1 className="text-[24px] font-bold tracking-[-0.5px]">
             Settings
           </h1>
         </header>
@@ -149,44 +149,44 @@ export default function Settings() {
           />
         </SettingsSection>
 
-        <section className="mb-6">
-          <h2 className="mb-2.5 px-2 text-[12px] font-semibold tracking-[1px] text-[#6d6d6d]">
+        <section className="mb-5">
+          <h2 className="mb-2 px-2 text-[11px] font-semibold tracking-[0.08em] text-[#8e8e93]">
             DANGER ZONE
           </h2>
 
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
-            className="flex min-h-[86px] w-full items-center rounded-[20px] border border-red-300 bg-white px-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.04)] active:bg-red-50"
+            className="flex min-h-[74px] w-full items-center rounded-[18px] border border-red-300 bg-white px-4 text-left shadow-[0_2px_7px_rgba(0,0,0,0.035)] active:bg-red-50"
           >
-            <div className="flex w-[48px] shrink-0 items-center">
+            <div className="flex w-[40px] shrink-0 items-center">
               <Trash2
-                size={26}
-                strokeWidth={2.2}
+                size={21}
+                strokeWidth={2.15}
                 className="text-red-600"
               />
             </div>
 
             <div className="min-w-0 flex-1 pr-2">
-              <div className="text-[17px] font-semibold text-red-600">
+              <div className="text-[16px] font-medium text-red-600">
                 Delete Account
               </div>
 
-              <div className="mt-0.5 text-[13px] leading-[1.35] text-[#777777]">
-                Permanently remove your account and
-                all data
+              <div className="mt-0.5 text-[12px] leading-[1.35] text-[#7a7a7a]">
+                Permanently remove your account and all
+                data
               </div>
             </div>
 
             <ChevronRight
-              size={22}
-              strokeWidth={2.2}
+              size={18}
+              strokeWidth={2.1}
               className="shrink-0 text-red-500"
             />
           </button>
         </section>
 
-        <p className="pb-2 text-center text-[13px] font-medium text-[#8a8a8a]">
+        <p className="pb-1 text-center text-[12px] font-medium text-[#8e8e93]">
           StockPulse · Stock Portfolio
         </p>
       </main>
@@ -202,12 +202,12 @@ export default function Settings() {
 
 function SettingsSection({ title, children }) {
   return (
-    <section className="mb-6">
-      <h2 className="mb-2.5 px-2 text-[12px] font-semibold tracking-[1px] text-[#6d6d6d]">
+    <section className="mb-5">
+      <h2 className="mb-2 px-2 text-[11px] font-semibold tracking-[0.08em] text-[#8e8e93]">
         {title}
       </h2>
 
-      <div className="overflow-hidden rounded-[20px] border border-[#e3e3e3] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.045)]">
+      <div className="overflow-hidden rounded-[18px] border border-[#e5e5ea] bg-white shadow-[0_2px_7px_rgba(0,0,0,0.035)]">
         {children}
       </div>
     </section>
@@ -228,43 +228,43 @@ function SettingsRow({
       onClick={onClick}
       disabled={disabled}
       className={[
-        "flex min-h-[68px] w-full items-center px-4 text-left",
+        "flex h-[58px] w-full items-center px-4 text-left",
         disabled
           ? "cursor-not-allowed opacity-60"
-          : "active:bg-[#f3f3f3]",
+          : "active:bg-[#f2f2f2]",
       ].join(" ")}
     >
-      <div className="flex w-[48px] shrink-0 items-center">
+      <div className="flex w-[40px] shrink-0 items-center">
         <Icon
-          size={25}
-          strokeWidth={2.15}
-          className="text-[#111111]"
+          size={20}
+          strokeWidth={2.1}
+          className="text-[#161616]"
           aria-hidden="true"
         />
       </div>
 
       <div
         className={[
-          "flex min-h-[68px] min-w-0 flex-1 items-center",
+          "flex h-[58px] min-w-0 flex-1 items-center",
           !isLast
-            ? "border-b border-[#e5e5e5]"
+            ? "border-b border-[#e5e5ea]"
             : "",
         ].join(" ")}
       >
-        <span className="min-w-0 flex-1 truncate pr-3 text-[17px] font-semibold tracking-[-0.2px]">
+        <span className="min-w-0 flex-1 truncate pr-3 text-[16px] font-medium tracking-[-0.15px]">
           {label}
         </span>
 
         {rightText ? (
-          <span className="mr-1.5 text-[16px] font-medium text-[#777777]">
+          <span className="mr-1.5 text-[15px] font-normal text-[#8e8e93]">
             {rightText}
           </span>
         ) : null}
 
         <ChevronRight
-          size={21}
-          strokeWidth={2.15}
-          className="shrink-0 text-[#777777]"
+          size={18}
+          strokeWidth={2}
+          className="shrink-0 text-[#8e8e93]"
           aria-hidden="true"
         />
       </div>
@@ -309,14 +309,15 @@ function DeleteAccountModal({
           event.stopPropagation()
         }
       >
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-red-100">
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
           <Trash2
-            size={23}
+            size={21}
+            strokeWidth={2.1}
             className="text-red-600"
           />
         </div>
 
-        <h3 className="text-[21px] font-bold text-red-600">
+        <h3 className="text-[20px] font-bold text-red-600">
           Delete Account
         </h3>
 
@@ -335,20 +336,21 @@ function DeleteAccountModal({
 
         <input
           id="delete-confirmation"
+          type="text"
           value={confirmationText}
           onChange={(event) =>
             setConfirmationText(event.target.value)
           }
           autoComplete="off"
           placeholder="DELETE"
-          className="h-[48px] w-full rounded-[14px] border border-[#d4d4d4] px-4 text-[16px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+          className="h-[46px] w-full rounded-[13px] border border-[#d4d4d4] px-4 text-[15px] outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
         />
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={handleClose}
-            className="h-[48px] rounded-[14px] bg-[#eeeeee] text-[16px] font-semibold active:bg-[#e3e3e3]"
+            className="h-[46px] rounded-[13px] bg-[#eeeeee] text-[15px] font-semibold active:bg-[#e3e3e3]"
           >
             Cancel
           </button>
@@ -358,7 +360,7 @@ function DeleteAccountModal({
             disabled={!canDelete}
             onClick={handleConfirm}
             className={[
-              "h-[48px] rounded-[14px] text-[16px] font-semibold text-white",
+              "h-[46px] rounded-[13px] text-[15px] font-semibold text-white",
               canDelete
                 ? "bg-red-600 active:bg-red-700"
                 : "cursor-not-allowed bg-red-300",
