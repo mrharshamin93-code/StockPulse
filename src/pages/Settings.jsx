@@ -54,6 +54,14 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = () => {
+    /*
+      Connect this to your secure server-side
+      account-deletion endpoint.
+
+      Never expose the Supabase service-role key
+      in frontend code.
+    */
+
     window.alert(
       "Account deletion still needs to be connected to the secure server endpoint."
     );
@@ -64,12 +72,14 @@ export default function Settings() {
   return (
     <div className="min-h-full bg-background text-foreground">
       <main className="mx-auto w-full max-w-[390px] px-6 pb-7">
-        <header className="flex h-[72px] items-end justify-center pb-3">
+        {/* PAGE TITLE */}
+        <header className="flex h-[70px] items-end justify-center pb-3">
           <h1 className="text-[24px] font-bold tracking-[-0.5px] text-foreground">
             Settings
           </h1>
         </header>
 
+        {/* GENERAL */}
         <SettingsSection title="GENERAL">
           <SettingsRow
             icon={Bell}
@@ -92,6 +102,7 @@ export default function Settings() {
           />
         </SettingsSection>
 
+        {/* APPEARANCE */}
         <SettingsSection title="APPEARANCE">
           <SettingsRow
             icon={Palette}
@@ -101,6 +112,7 @@ export default function Settings() {
           />
         </SettingsSection>
 
+        {/* SUPPORT */}
         <SettingsSection title="SUPPORT">
           <SettingsRow
             icon={Headphones}
@@ -110,6 +122,7 @@ export default function Settings() {
           />
         </SettingsSection>
 
+        {/* LEGAL */}
         <SettingsSection title="LEGAL">
           <SettingsRow
             icon={ShieldCheck}
@@ -125,6 +138,7 @@ export default function Settings() {
           />
         </SettingsSection>
 
+        {/* ACCOUNT */}
         <SettingsSection title="ACCOUNT">
           <SettingsRow
             icon={LogOut}
@@ -139,26 +153,47 @@ export default function Settings() {
           />
         </SettingsSection>
 
-        <section className="mb-5">
-          <h2 className="mb-2 px-2 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+        {/* DANGER ZONE */}
+        <section className="mb-4">
+          <SectionHeading>
             DANGER ZONE
-          </h2>
+          </SectionHeading>
 
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
-            className="flex min-h-[74px] w-full items-center rounded-[18px] border border-red-300 bg-card px-4 text-left shadow-[0_2px_7px_rgba(0,0,0,0.035)] transition-colors active:bg-red-50 dark:border-red-900/70 dark:active:bg-red-950/30"
+            className="
+              flex
+              min-h-[72px]
+              w-full
+              items-center
+              rounded-[20px]
+              border
+              border-red-300
+              bg-card
+              px-4
+              text-left
+              shadow-[0_4px_10px_rgba(0,0,0,0.04)]
+              transition-[transform,background-color,border-color]
+              duration-150
+              ease-out
+              active:scale-[0.995]
+              active:bg-red-50
+              dark:border-red-900/70
+              dark:active:bg-red-950/30
+            "
           >
             <div className="flex w-[40px] shrink-0 items-center">
               <Trash2
                 size={21}
                 strokeWidth={2.15}
                 className="text-red-600"
+                aria-hidden="true"
               />
             </div>
 
             <div className="min-w-0 flex-1 pr-2">
-              <div className="text-[16px] font-medium text-red-600">
+              <div className="text-[16px] font-medium tracking-[-0.1px] text-red-600">
                 Delete Account
               </div>
 
@@ -169,13 +204,15 @@ export default function Settings() {
 
             <ChevronRight
               size={18}
-              strokeWidth={2.1}
+              strokeWidth={2}
               className="shrink-0 text-red-500"
+              aria-hidden="true"
             />
           </button>
         </section>
 
-        <p className="pb-1 text-center text-[12px] font-medium text-muted-foreground">
+        {/* FOOTER */}
+        <p className="pb-1 pt-1 text-center text-[12px] font-medium text-muted-foreground">
           StockPulse · Stock Portfolio
         </p>
       </main>
@@ -189,19 +226,62 @@ export default function Settings() {
   );
 }
 
-function SettingsSection({ title, children }) {
-  return (
-    <section className="mb-5">
-      <h2 className="mb-2 px-2 text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
-        {title}
-      </h2>
+/* -------------------------------------------------------------------------- */
+/* SETTINGS SECTION                                                            */
+/* -------------------------------------------------------------------------- */
 
-      <div className="overflow-hidden rounded-[18px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.035)]">
+function SettingsSection({
+  title,
+  children,
+}) {
+  return (
+    <section className="mb-4">
+      <SectionHeading>
+        {title}
+      </SectionHeading>
+
+      <div
+        className="
+          overflow-hidden
+          rounded-[20px]
+          border
+          border-border
+          bg-card
+          shadow-[0_4px_10px_rgba(0,0,0,0.04)]
+        "
+      >
         {children}
       </div>
     </section>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* SECTION HEADING                                                             */
+/* -------------------------------------------------------------------------- */
+
+function SectionHeading({
+  children,
+}) {
+  return (
+    <h2
+      className="
+        mb-2
+        px-2
+        text-[11px]
+        font-medium
+        tracking-[0.08em]
+        text-muted-foreground
+      "
+    >
+      {children}
+    </h2>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* SETTINGS ROW                                                                */
+/* -------------------------------------------------------------------------- */
 
 function SettingsRow({
   icon: Icon,
@@ -217,12 +297,24 @@ function SettingsRow({
       onClick={onClick}
       disabled={disabled}
       className={[
-        "flex h-[58px] w-full items-center px-4 text-left text-foreground transition-colors",
+        `
+          flex
+          h-[58px]
+          w-full
+          items-center
+          px-4
+          text-left
+          text-foreground
+          transition-[transform,background-color,opacity]
+          duration-150
+          ease-out
+        `,
         disabled
           ? "cursor-not-allowed opacity-60"
-          : "active:bg-muted/70",
+          : "active:scale-[0.995] active:bg-muted/70",
       ].join(" ")}
     >
+      {/* ICON */}
       <div className="flex w-[40px] shrink-0 items-center">
         <Icon
           size={20}
@@ -232,20 +324,49 @@ function SettingsRow({
         />
       </div>
 
+      {/* CONTENT
+          Divider begins after the icon instead of
+          running edge-to-edge, matching native iOS lists.
+      */}
       <div
         className={[
-          "flex h-[58px] min-w-0 flex-1 items-center",
+          `
+            flex
+            h-[58px]
+            min-w-0
+            flex-1
+            items-center
+          `,
           !isLast
             ? "border-b border-border"
             : "",
         ].join(" ")}
       >
-        <span className="min-w-0 flex-1 truncate pr-3 text-[16px] font-medium tracking-[-0.15px] text-foreground">
+        <span
+          className="
+            min-w-0
+            flex-1
+            truncate
+            pr-3
+            text-[16px]
+            font-medium
+            tracking-[-0.15px]
+            text-foreground
+          "
+        >
           {label}
         </span>
 
         {rightText ? (
-          <span className="mr-1.5 text-[15px] font-normal text-muted-foreground">
+          <span
+            className="
+              mr-1.5
+              shrink-0
+              text-[15px]
+              font-normal
+              text-muted-foreground
+            "
+          >
             {rightText}
           </span>
         ) : null}
@@ -253,13 +374,17 @@ function SettingsRow({
         <ChevronRight
           size={18}
           strokeWidth={2}
-          className="shrink-0 text-muted-foreground"
+          className="shrink-0 text-muted-foreground/80"
           aria-hidden="true"
         />
       </div>
     </button>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* DELETE ACCOUNT MODAL                                                        */
+/* -------------------------------------------------------------------------- */
 
 function DeleteAccountModal({
   open,
@@ -289,57 +414,137 @@ function DeleteAccountModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 px-3 pb-[calc(12px+env(safe-area-inset-bottom))] backdrop-blur-[2px]"
+      className="
+        fixed
+        inset-0
+        z-[100]
+        flex
+        items-end
+        justify-center
+        bg-black/40
+        px-3
+        pb-[calc(12px+env(safe-area-inset-bottom))]
+        backdrop-blur-[2px]
+      "
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-sm rounded-[22px] border border-border bg-card p-5 text-foreground shadow-2xl"
+        className="
+          w-full
+          max-w-sm
+          rounded-[22px]
+          border
+          border-border
+          bg-card
+          p-5
+          text-foreground
+          shadow-2xl
+        "
         onClick={(event) =>
           event.stopPropagation()
         }
       >
-        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40">
+        {/* ICON */}
+        <div
+          className="
+            mb-4
+            flex
+            h-10
+            w-10
+            items-center
+            justify-center
+            rounded-full
+            bg-red-100
+            dark:bg-red-950/40
+          "
+        >
           <Trash2
             size={21}
             strokeWidth={2.1}
             className="text-red-600"
+            aria-hidden="true"
           />
         </div>
 
-        <h3 className="text-[20px] font-bold text-red-600">
+        {/* TITLE */}
+        <h3 className="text-[20px] font-bold tracking-[-0.3px] text-red-600">
           Delete Account
         </h3>
 
+        {/* DESCRIPTION */}
         <p className="mt-2 text-[14px] leading-5 text-muted-foreground">
           This permanently removes your account and
           associated StockPulse data. This cannot be
           undone.
         </p>
 
+        {/* CONFIRMATION LABEL */}
         <label
           htmlFor="delete-confirmation"
-          className="mb-2 mt-4 block text-[13px] font-semibold text-foreground"
+          className="
+            mb-2
+            mt-4
+            block
+            text-[13px]
+            font-semibold
+            text-foreground
+          "
         >
           Type DELETE to confirm
         </label>
 
+        {/* CONFIRMATION INPUT */}
         <input
           id="delete-confirmation"
           type="text"
           value={confirmationText}
           onChange={(event) =>
-            setConfirmationText(event.target.value)
+            setConfirmationText(
+              event.target.value
+            )
           }
           autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck="false"
           placeholder="DELETE"
-          className="h-[46px] w-full rounded-[13px] border border-input bg-background px-4 text-[15px] text-foreground outline-none placeholder:text-muted-foreground focus:border-red-500 focus:ring-2 focus:ring-red-100 dark:focus:ring-red-950/40"
+          className="
+            h-[46px]
+            w-full
+            rounded-[13px]
+            border
+            border-input
+            bg-background
+            px-4
+            text-[15px]
+            text-foreground
+            outline-none
+            transition-[border-color,box-shadow]
+            duration-150
+            placeholder:text-muted-foreground
+            focus:border-red-500
+            focus:ring-2
+            focus:ring-red-100
+            dark:focus:ring-red-950/40
+          "
         />
 
+        {/* ACTIONS */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={handleClose}
-            className="h-[46px] rounded-[13px] bg-muted text-[15px] font-semibold text-foreground transition-colors active:bg-muted/70"
+            className="
+              h-[46px]
+              rounded-[13px]
+              bg-muted
+              text-[15px]
+              font-semibold
+              text-foreground
+              transition-[transform,background-color]
+              duration-150
+              active:scale-[0.98]
+              active:bg-muted/70
+            "
           >
             Cancel
           </button>
@@ -349,9 +554,17 @@ function DeleteAccountModal({
             disabled={!canDelete}
             onClick={handleConfirm}
             className={[
-              "h-[46px] rounded-[13px] text-[15px] font-semibold text-white transition-colors",
+              `
+                h-[46px]
+                rounded-[13px]
+                text-[15px]
+                font-semibold
+                text-white
+                transition-[transform,background-color,opacity]
+                duration-150
+              `,
               canDelete
-                ? "bg-red-600 active:bg-red-700"
+                ? "bg-red-600 active:scale-[0.98] active:bg-red-700"
                 : "cursor-not-allowed bg-red-300 dark:bg-red-900/50",
             ].join(" ")}
           >
