@@ -1,5 +1,3 @@
-// src/pages/Home.jsx
-
 import React, {
   useCallback,
   useEffect,
@@ -124,16 +122,20 @@ function EmptyPortfolio() {
 function PortfolioLoading() {
   return (
     <div className="space-y-4">
-      <div
-        className="
-          h-[154px]
-          animate-pulse
-          rounded-[22px]
-          border
-          border-border
-          bg-card
-        "
-      />
+      <div className="grid grid-cols-3 gap-2.5">
+        {[0, 1, 2].map((item) => (
+          <div
+            key={item}
+            className="
+              h-[82px]
+              animate-pulse
+              rounded-[18px]
+              bg-card
+              shadow-[0_4px_10px_rgba(0,0,0,0.04)]
+            "
+          />
+        ))}
+      </div>
 
       <div
         className="
@@ -227,17 +229,6 @@ export default function Home() {
   const onboardingMarked =
     useRef(false);
 
-  /*
-   * Portfolio source of truth:
-   *
-   * A stock must:
-   * 1. Exist in the stocks table (highlighted/starred)
-   * 2. Still exist in at least one Watchlist
-   *
-   * This prevents orphaned holdings from appearing
-   * in Portfolio when the ticker is no longer in
-   * any Watchlist.
-   */
   const loadStocks =
     useCallback(async () => {
       if (!user?.id) {
@@ -372,13 +363,6 @@ export default function Home() {
     setShowPortfolioOnboarding(false);
   }, [user?.id]);
 
-  /*
-   * Reload Portfolio whenever:
-   *
-   * - A stock is starred/unstarred
-   * - Shares are bought/sold
-   * - A Watchlist ticker is added/removed
-   */
   useEffect(() => {
     loadStocks();
 
@@ -480,7 +464,6 @@ export default function Home() {
 
   return (
     <div className="flex min-h-full flex-col bg-background text-foreground">
-      {/* HEADER */}
       <header
         className="
           sticky
@@ -504,7 +487,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* PULL TO REFRESH */}
       <AnimatePresence>
         {(pullDistance > 0 ||
           refreshing) && (
@@ -545,7 +527,6 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* CONTENT */}
       <main
         ref={scrollRef}
         className="
@@ -595,29 +576,18 @@ export default function Home() {
             }}
             className="space-y-5"
           >
-            {/* PORTFOLIO SUMMARY */}
+            {/* OVERVIEW */}
             <section>
               <SectionHeading>
                 Overview
               </SectionHeading>
 
-              <div
-                className="
-                  overflow-hidden
-                  rounded-[22px]
-                  border
-                  border-border
-                  bg-card
-                  shadow-[0_4px_12px_rgba(0,0,0,0.04)]
-                "
-              >
-                <PortfolioSummary
-                  stocks={stocks}
-                />
-              </div>
+              <PortfolioSummary
+                stocks={stocks}
+              />
             </section>
 
-            {/* PORTFOLIO CHART */}
+            {/* PERFORMANCE */}
             <section>
               <SectionHeading>
                 Performance
