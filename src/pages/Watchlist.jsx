@@ -10,7 +10,10 @@ import { useNavigate } from "react-router-dom";
 
 import {
   AnimatePresence,
+  animate,
   motion,
+  useMotionValue,
+  useTransform,
 } from "framer-motion";
 
 import {
@@ -98,18 +101,6 @@ function clamp(
   );
 }
 
-function smoothstep(value) {
-  const normalized =
-    clamp(value);
-
-  return (
-    normalized *
-    normalized *
-    (3 -
-      2 * normalized)
-  );
-}
-
 function abbreviateExchange(exchange) {
   if (!exchange) {
     return "";
@@ -122,6 +113,7 @@ function abbreviateExchange(exchange) {
 
   const rules = [
     [["NASDAQ"], "NASDAQ"],
+
     [
       [
         "NYSE AMERICAN",
@@ -129,6 +121,7 @@ function abbreviateExchange(exchange) {
       ],
       "AMEX",
     ],
+
     [
       [
         "NEW YORK STOCK EXCHANGE",
@@ -136,14 +129,23 @@ function abbreviateExchange(exchange) {
       ],
       "NYSE",
     ],
+
     [
-      ["OTC", "PINK"],
+      [
+        "OTC",
+        "PINK",
+      ],
       "OTC",
     ],
+
     [
-      ["CBOE", "BATS"],
+      [
+        "CBOE",
+        "BATS",
+      ],
       "CBOE",
     ],
+
     [
       [
         "TSX VENTURE",
@@ -151,10 +153,15 @@ function abbreviateExchange(exchange) {
       ],
       "TSXV",
     ],
+
     [
-      ["TSX", "TORONTO"],
+      [
+        "TSX",
+        "TORONTO",
+      ],
       "TSX",
     ],
+
     [
       [
         "CSE",
@@ -162,14 +169,20 @@ function abbreviateExchange(exchange) {
       ],
       "CSE",
     ],
+
     [
-      ["LONDON", "LSE"],
+      [
+        "LONDON",
+        "LSE",
+      ],
       "LSE",
     ],
+
     [
       ["EURONEXT"],
       "ENX",
     ],
+
     [
       [
         "XETRA",
@@ -177,6 +190,7 @@ function abbreviateExchange(exchange) {
       ],
       "FRA",
     ],
+
     [
       [
         "ASX",
@@ -184,10 +198,15 @@ function abbreviateExchange(exchange) {
       ],
       "ASX",
     ],
+
     [
-      ["TOKYO", "TSE"],
+      [
+        "TOKYO",
+        "TSE",
+      ],
       "TSE",
     ],
+
     [
       [
         "HONG KONG",
@@ -317,6 +336,10 @@ function normalizeSearchResults(
     );
 }
 
+/* -------------------------------------------------------------------------- */
+/* TOAST                                                                       */
+/* -------------------------------------------------------------------------- */
+
 function Toast({
   message,
   onDone,
@@ -372,6 +395,10 @@ function Toast({
     </motion.div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* ADD TO PORTFOLIO                                                            */
+/* -------------------------------------------------------------------------- */
 
 function AddToPortfolioDialog({
   open,
@@ -454,6 +481,7 @@ function AddToPortfolioDialog({
             {
               action:
                 "quote",
+
               ticker,
             }
           );
@@ -477,7 +505,9 @@ function AddToPortfolioDialog({
 
       const { error } =
         await supabase
-          .from("stocks")
+          .from(
+            "stocks"
+          )
           .insert({
             user_id:
               userId,
@@ -497,7 +527,8 @@ function AddToPortfolioDialog({
             current_price:
               currentPrice,
 
-            sector: "",
+            sector:
+              "",
           });
 
       if (error) {
@@ -632,6 +663,10 @@ function AddToPortfolioDialog({
     </Dialog>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* ADD TICKER                                                                  */
+/* -------------------------------------------------------------------------- */
 
 function AddTickerDialog({
   open,
@@ -895,6 +930,10 @@ function AddTickerDialog({
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* SPARKLINE                                                                   */
+/* -------------------------------------------------------------------------- */
+
 async function fetchSparkline(
   ticker,
   signal
@@ -972,6 +1011,7 @@ async function fetchSparkline(
     key,
     {
       data,
+
       timestamp:
         Date.now(),
     }
@@ -1057,8 +1097,12 @@ function MiniSparkline({
       aria-hidden="true"
     >
       <polyline
-        points={points}
-        stroke={color}
+        points={
+          points
+        }
+        stroke={
+          color
+        }
         strokeWidth="2"
         fill="none"
         strokeLinecap="round"
@@ -1085,7 +1129,9 @@ function Sparkline({
       ticker,
       controller.signal
     )
-      .then(setData)
+      .then(
+        setData
+      )
       .catch(
         (error) => {
           if (
@@ -1113,6 +1159,10 @@ function Sparkline({
     />
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* PRICE                                                                       */
+/* -------------------------------------------------------------------------- */
 
 function AnimatedPrice({
   value,
@@ -1207,31 +1257,80 @@ function AnimatedPrice({
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* SWIPE ACTION                                                                */
+/* -------------------------------------------------------------------------- */
+
 function SwipeAction({
   type,
   label,
   icon: Icon,
   progress,
+  start,
+  end,
   disabled,
   onClick,
 }) {
-  const deleteAction =
-    type === "delete";
-
-  const alertAction =
-    type === "alert";
-
-  const visible =
-    smoothstep(
-      progress
+  const opacity =
+    useTransform(
+      progress,
+      [
+        start,
+        end,
+      ],
+      [
+        0,
+        1,
+      ]
     );
 
+  const scale =
+    useTransform(
+      progress,
+      [
+        start,
+        end,
+      ],
+      [
+        0.76,
+        1,
+      ]
+    );
+
+  const translateX =
+    useTransform(
+      progress,
+      [
+        start,
+        end,
+      ],
+      [
+        16,
+        0,
+      ]
+    );
+
+  const backgroundClass =
+    type ===
+    "delete"
+      ? "bg-red-500"
+      : type ===
+          "alert"
+        ? "bg-amber-500"
+        : "bg-sky-500";
+
   return (
-    <button
+    <motion.button
       type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
+      aria-label={
+        label
+      }
+      disabled={
+        disabled
+      }
+      onClick={
+        onClick
+      }
       className={[
         `
           flex
@@ -1245,43 +1344,21 @@ function SwipeAction({
           rounded-full
           text-white
           outline-none
-          transition-[transform,opacity]
-          duration-150
+          will-change-transform
         `,
-        deleteAction
-          ? "bg-red-500"
-          : alertAction
-            ? "bg-amber-500"
-            : "bg-sky-500",
+        backgroundClass,
       ].join(" ")}
       style={{
-        opacity:
-          visible,
+        opacity,
 
-        transform:
-          `translateX(${
-            (1 -
-              visible) *
-            20
-          }px) scale(${
-            0.62 +
-            visible *
-              0.38
-          })`,
+        scale,
 
-        boxShadow:
-          deleteAction
-            ? "0 5px 15px rgba(239,68,68,.22)"
-            : alertAction
-              ? "0 5px 15px rgba(245,158,11,.22)"
-              : "0 5px 15px rgba(14,165,233,.22)",
-
-        pointerEvents:
-          disabled ||
-          visible <
-            0.76
-            ? "none"
-            : "auto",
+        x:
+          translateX,
+      }}
+      whileTap={{
+        scale:
+          0.9,
       }}
     >
       <Icon
@@ -1292,9 +1369,13 @@ function SwipeAction({
       <span className="text-[8px] font-bold leading-none">
         {label}
       </span>
-    </button>
+    </motion.button>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* WATCHLIST CARD                                                              */
+/* -------------------------------------------------------------------------- */
 
 function WatchlistCard({
   item,
@@ -1319,11 +1400,6 @@ function WatchlistCard({
     );
 
   const [
-    dragX,
-    setDragX,
-  ] = useState(0);
-
-  const [
     swiped,
     setSwiped,
   ] = useState(false);
@@ -1333,13 +1409,42 @@ function WatchlistCard({
     setDeleting,
   ] = useState(false);
 
+  const cardX =
+    useMotionValue(0);
+
+  const revealWidth =
+    172;
+
+  /*
+   * This is now a Framer Motion value rather than React state.
+   *
+   * Moving your finger updates the GPU transform directly.
+   * React does NOT rerender the entire stock card every few pixels.
+   */
+  const revealProgress =
+    useTransform(
+      cardX,
+      [
+        -revealWidth,
+        0,
+      ],
+      [
+        1,
+        0,
+      ],
+      {
+        clamp:
+          true,
+      }
+    );
+
   const touchX =
     useRef(null);
 
   const touchY =
     useRef(null);
 
-  const startDragX =
+  const startingX =
     useRef(0);
 
   const dragging =
@@ -1347,37 +1452,6 @@ function WatchlistCard({
 
   const suppressClick =
     useRef(false);
-
-  const revealWidth =
-    172;
-
-  const revealProgress =
-    clamp(
-      Math.abs(
-        dragX
-      ) /
-        revealWidth
-    );
-
-  const deleteProgress =
-    clamp(
-      revealProgress /
-        0.42
-    );
-
-  const alertProgress =
-    clamp(
-      (revealProgress -
-        0.18) /
-        0.52
-    );
-
-  const shareProgress =
-    clamp(
-      (revealProgress -
-        0.42) /
-        0.58
-    );
 
   const livePrice =
     typeof quote?.c ===
@@ -1420,10 +1494,34 @@ function WatchlistCard({
       ? `/stock/${stock.id}`
       : `/stock/ticker-${item.ticker}`;
 
+  function snapCard(
+    target
+  ) {
+    animate(
+      cardX,
+      target,
+      {
+        type:
+          "spring",
+
+        stiffness:
+          520,
+
+        damping:
+          46,
+
+        mass:
+          0.55,
+      }
+    );
+  }
+
   function onTouchStart(
     event
   ) {
-    if (deleting) {
+    if (
+      deleting
+    ) {
       return;
     }
 
@@ -1435,8 +1533,8 @@ function WatchlistCard({
       event.touches[0]
         .clientY;
 
-    startDragX.current =
-      dragX;
+    startingX.current =
+      cardX.get();
 
     dragging.current =
       false;
@@ -1477,7 +1575,8 @@ function WatchlistCard({
     }
 
     if (
-      Math.abs(dx) > 5
+      Math.abs(dx) >
+      4
     ) {
       dragging.current =
         true;
@@ -1492,11 +1591,13 @@ function WatchlistCard({
       return;
     }
 
-    event.stopPropagation();
-
-    setDragX(
+    /*
+     * No setState here.
+     * This is the main stutter fix.
+     */
+    cardX.set(
       clamp(
-        startDragX.current +
+        startingX.current +
           dx,
         -190,
         0
@@ -1505,30 +1606,40 @@ function WatchlistCard({
   }
 
   function onTouchEnd() {
-    if (deleting) {
+    if (
+      deleting
+    ) {
       return;
     }
+
+    const currentX =
+      cardX.get();
 
     const threshold =
       swiped
         ? revealWidth *
-          0.28
+          0.25
         : revealWidth *
-          0.42;
+          0.34;
 
     if (
       Math.abs(
-        dragX
+        currentX
       ) >= threshold
     ) {
-      setDragX(
+      snapCard(
         -revealWidth
       );
 
-      setSwiped(true);
+      setSwiped(
+        true
+      );
     } else {
-      setDragX(0);
-      setSwiped(false);
+      snapCard(0);
+
+      setSwiped(
+        false
+      );
     }
 
     touchX.current =
@@ -1545,13 +1656,16 @@ function WatchlistCard({
         suppressClick.current =
           false;
       },
-      100
+      90
     );
   }
 
   function closeSwipe() {
-    setDragX(0);
-    setSwiped(false);
+    snapCard(0);
+
+    setSwiped(
+      false
+    );
   }
 
   async function share(
@@ -1640,11 +1754,15 @@ function WatchlistCard({
     event.preventDefault();
     event.stopPropagation();
 
-    if (deleting) {
+    if (
+      deleting
+    ) {
       return;
     }
 
-    if (hasStock) {
+    if (
+      hasStock
+    ) {
       closeSwipe();
 
       onRequestPortfolioRemoval(
@@ -1655,17 +1773,31 @@ function WatchlistCard({
       return;
     }
 
-    setDeleting(true);
+    setDeleting(
+      true
+    );
 
-    setDragX(
-      -420
+    animate(
+      cardX,
+      -430,
+      {
+        duration:
+          0.22,
+
+        ease: [
+          0.4,
+          0,
+          1,
+          1,
+        ],
+      }
     );
 
     await new Promise(
       (resolve) =>
         window.setTimeout(
           resolve,
-          240
+          220
         )
     );
 
@@ -1674,10 +1806,18 @@ function WatchlistCard({
         item.id
       );
 
-    if (!removed) {
-      setDeleting(false);
+    if (
+      !removed
+    ) {
+      setDeleting(
+        false
+      );
 
-      closeSwipe();
+      snapCard(0);
+
+      setSwiped(
+        false
+      );
     }
   }
 
@@ -1728,7 +1868,7 @@ function WatchlistCard({
       layout
       initial={{
         opacity: 0,
-        y: 12,
+        y: 8,
       }}
       animate={{
         opacity:
@@ -1745,16 +1885,25 @@ function WatchlistCard({
       }}
       exit={{
         opacity: 0,
-        x: -70,
-        scale: 0.96,
+        height: 0,
+        scale: 0.97,
       }}
       transition={{
-        duration: 0.2,
+        opacity: {
+          duration:
+            0.16,
+        },
+
+        layout: {
+          duration:
+            0.18,
+        },
+
         delay:
           Math.min(
             index *
-              0.02,
-            0.12
+              0.015,
+            0.08
           ),
       }}
       className="
@@ -1763,6 +1912,7 @@ function WatchlistCard({
         rounded-[20px]
       "
     >
+      {/* SWIPE ACTIONS */}
       <div
         className="
           absolute
@@ -1770,16 +1920,24 @@ function WatchlistCard({
           right-0
           flex
           items-center
-          gap-2
-          pr-2
+          gap-[6px]
+          pr-[6px]
         "
       >
         <SwipeAction
           type="share"
           label="Share"
-          icon={Share2}
+          icon={
+            Share2
+          }
           progress={
-            shareProgress
+            revealProgress
+          }
+          start={
+            0.46
+          }
+          end={
+            0.86
           }
           disabled={
             deleting
@@ -1792,9 +1950,17 @@ function WatchlistCard({
         <SwipeAction
           type="alert"
           label="Alert"
-          icon={Bell}
+          icon={
+            Bell
+          }
           progress={
-            alertProgress
+            revealProgress
+          }
+          start={
+            0.22
+          }
+          end={
+            0.66
           }
           disabled={
             deleting
@@ -1807,9 +1973,17 @@ function WatchlistCard({
         <SwipeAction
           type="delete"
           label="Delete"
-          icon={Trash2}
+          icon={
+            Trash2
+          }
           progress={
-            deleteProgress
+            revealProgress
+          }
+          start={
+            0.02
+          }
+          end={
+            0.42
           }
           disabled={
             deleting
@@ -1831,7 +2005,23 @@ function WatchlistCard({
         }
         className="block cursor-pointer"
       >
-        <div
+        <motion.div
+          style={{
+            x:
+              cardX,
+
+            touchAction:
+              "pan-y",
+
+            willChange:
+              "transform",
+
+            WebkitBackfaceVisibility:
+              "hidden",
+
+            backfaceVisibility:
+              "hidden",
+          }}
           className="
             flex
             h-[88px]
@@ -1843,26 +2033,8 @@ function WatchlistCard({
             bg-card
             px-3
             py-2
-            shadow-[0_4px_10px_rgba(0,0,0,0.035)]
-            transition-[transform,box-shadow,border-color]
-            duration-150
-            active:scale-[0.995]
+            shadow-[0_3px_8px_rgba(0,0,0,0.032)]
           "
-          style={{
-            transform:
-              `translateX(${dragX}px)`,
-
-            transition:
-              dragging.current
-                ? "none"
-                : "transform .3s cubic-bezier(.22,1,.36,1)",
-
-            touchAction:
-              "pan-y",
-
-            willChange:
-              "transform",
-          }}
           onTouchStart={
             onTouchStart
           }
@@ -2051,19 +2223,31 @@ function WatchlistCard({
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </motion.div>
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* LOADING                                                                     */
+/* -------------------------------------------------------------------------- */
+
 function WatchlistSkeleton() {
   return (
-    <div className="space-y-2.5">
-      {[0, 1, 2, 3, 4].map(
+    <div className="space-y-[5px]">
+      {[
+        0,
+        1,
+        2,
+        3,
+        4,
+      ].map(
         (item) => (
           <div
-            key={item}
+            key={
+              item
+            }
             className="
               h-[88px]
               animate-pulse
@@ -2078,6 +2262,10 @@ function WatchlistSkeleton() {
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* PAGE                                                                         */
+/* -------------------------------------------------------------------------- */
 
 export default function Watchlist() {
   const {
@@ -2199,31 +2387,34 @@ export default function Watchlist() {
         let {
           data,
           error,
-        } = await supabase
-          .from(
-            "watchlists"
-          )
-          .select("*")
-          .eq(
-            "user_id",
-            user.id
-          )
-          .order(
-            "is_default",
-            {
-              ascending:
-                false,
-            }
-          )
-          .order(
-            "created_at",
-            {
-              ascending:
-                true,
-            }
-          );
+        } =
+          await supabase
+            .from(
+              "watchlists"
+            )
+            .select("*")
+            .eq(
+              "user_id",
+              user.id
+            )
+            .order(
+              "is_default",
+              {
+                ascending:
+                  false,
+              }
+            )
+            .order(
+              "created_at",
+              {
+                ascending:
+                  true,
+              }
+            );
 
-        if (error) {
+        if (
+          error
+        ) {
           throw error;
         }
 
@@ -2265,7 +2456,9 @@ export default function Watchlist() {
           }
 
           nextWatchlists =
-            [created];
+            [
+              created,
+            ];
         }
 
         setWatchlists(
@@ -2326,7 +2519,9 @@ export default function Watchlist() {
 
         return nextWatchlists;
       },
-      [user?.id]
+      [
+        user?.id,
+      ]
     );
 
   const refreshWatchlistQuotes =
@@ -2361,7 +2556,9 @@ export default function Watchlist() {
           );
         }
       },
-      [refreshQuotes]
+      [
+        refreshQuotes,
+      ]
     );
 
   const load =
@@ -2459,7 +2656,9 @@ export default function Watchlist() {
     );
 
   useEffect(() => {
-    if (!user?.id) {
+    if (
+      !user?.id
+    ) {
       setWatchlists([]);
       setActiveWatchlistId(
         null
@@ -2474,11 +2673,15 @@ export default function Watchlist() {
     let active =
       true;
 
-    setLoading(true);
+    setLoading(
+      true
+    );
 
     loadWatchlists().catch(
       (error) => {
-        if (!active) {
+        if (
+          !active
+        ) {
           return;
         }
 
@@ -2498,7 +2701,8 @@ export default function Watchlist() {
     );
 
     return () => {
-      active = false;
+      active =
+        false;
     };
   }, [
     user?.id,
@@ -2513,8 +2717,13 @@ export default function Watchlist() {
       !addDialogOpen ||
       !query
     ) {
-      setSuggestions([]);
-      setSearching(false);
+      setSuggestions(
+        []
+      );
+
+      setSearching(
+        false
+      );
 
       return undefined;
     }
@@ -2617,14 +2826,18 @@ export default function Watchlist() {
     let active =
       true;
 
-    setLoading(true);
+    setLoading(
+      true
+    );
 
     load()
       .then(
         (
           watchItems
         ) => {
-          if (active) {
+          if (
+            active
+          ) {
             refreshWatchlistQuotes(
               watchItems
             );
@@ -2633,7 +2846,9 @@ export default function Watchlist() {
       )
       .catch(
         (error) => {
-          if (active) {
+          if (
+            active
+          ) {
             console.error(
               error
             );
@@ -2644,16 +2859,21 @@ export default function Watchlist() {
           }
         }
       )
-      .finally(() => {
-        if (active) {
-          setLoading(
-            false
-          );
+      .finally(
+        () => {
+          if (
+            active
+          ) {
+            setLoading(
+              false
+            );
+          }
         }
-      });
+      );
 
     return () => {
-      active = false;
+      active =
+        false;
     };
   }, [
     user?.id,
@@ -2729,13 +2949,17 @@ export default function Watchlist() {
             }
           );
 
-      if (!error) {
+      if (
+        !error
+      ) {
         setItems(
-          data || []
+          data ||
+            []
         );
 
         refreshWatchlistQuotes(
-          data || []
+          data ||
+            []
         );
       }
     }
@@ -2755,10 +2979,13 @@ export default function Watchlist() {
             user.id
           );
 
-      if (!error) {
+      if (
+        !error
+      ) {
         setStocks(
           (
-            data || []
+            data ||
+            []
           ).filter(
             (
               stock
@@ -2779,9 +3006,12 @@ export default function Watchlist() {
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event:
+              "*",
+
             schema:
               "public",
+
             table:
               "watchlist_items",
 
@@ -2793,9 +3023,12 @@ export default function Watchlist() {
         .on(
           "postgres_changes",
           {
-            event: "*",
+            event:
+              "*",
+
             schema:
               "public",
+
             table:
               "stocks",
 
@@ -2877,7 +3110,10 @@ export default function Watchlist() {
       return;
     }
 
-    setLoading(true);
+    setLoading(
+      true
+    );
+
     setItems([]);
 
     setActiveWatchlistId(
@@ -2935,12 +3171,16 @@ export default function Watchlist() {
           .select("*")
           .single();
 
-      if (error) {
+      if (
+        error
+      ) {
         throw error;
       }
 
       setWatchlists(
-        (current) => [
+        (
+          current
+        ) => [
           ...current,
           data,
         ]
@@ -2952,7 +3192,9 @@ export default function Watchlist() {
 
       setItems([]);
 
-      setLoading(true);
+      setLoading(
+        true
+      );
 
       setActiveWatchlistId(
         data.id
@@ -3002,7 +3244,9 @@ export default function Watchlist() {
     );
 
     try {
-      const { error } =
+      const {
+        error,
+      } =
         await supabase
           .from(
             "watchlists"
@@ -3017,7 +3261,9 @@ export default function Watchlist() {
             user.id
           );
 
-      if (error) {
+      if (
+        error
+      ) {
         throw error;
       }
 
@@ -3051,7 +3297,9 @@ export default function Watchlist() {
         setItems([]);
 
         setLoading(
-          Boolean(next)
+          Boolean(
+            next
+          )
         );
 
         setActiveWatchlistId(
@@ -3090,7 +3338,8 @@ export default function Watchlist() {
   ) {
     const normalized =
       String(
-        symbol || ""
+        symbol ||
+          ""
       )
         .trim()
         .toUpperCase();
@@ -3120,7 +3369,9 @@ export default function Watchlist() {
       return false;
     }
 
-    setAdding(true);
+    setAdding(
+      true
+    );
 
     try {
       let companyName =
@@ -3156,7 +3407,9 @@ export default function Watchlist() {
         );
       }
 
-      const { error } =
+      const {
+        error,
+      } =
         await supabase
           .from(
             "watchlist_items"
@@ -3179,7 +3432,9 @@ export default function Watchlist() {
               normalized,
           });
 
-      if (error) {
+      if (
+        error
+      ) {
         throw error;
       }
 
@@ -3209,7 +3464,9 @@ export default function Watchlist() {
 
       return false;
     } finally {
-      setAdding(false);
+      setAdding(
+        false
+      );
     }
   }
 
@@ -3224,12 +3481,17 @@ export default function Watchlist() {
         (
           item
         ) =>
-          item.id !== id
+          item.id !==
+          id
       );
 
-    setItems(next);
+    setItems(
+      next
+    );
 
-    const { error } =
+    const {
+      error,
+    } =
       await supabase
         .from(
           "watchlist_items"
@@ -3244,7 +3506,9 @@ export default function Watchlist() {
           user.id
         );
 
-    if (error) {
+    if (
+      error
+    ) {
       setItems(
         previous
       );
@@ -3298,7 +3562,9 @@ export default function Watchlist() {
     );
 
     setStocks(
-      (value) =>
+      (
+        value
+      ) =>
         value.filter(
           (
             entry
@@ -3308,7 +3574,9 @@ export default function Watchlist() {
         )
     );
 
-    const { error } =
+    const {
+      error,
+    } =
       await supabase
         .from(
           "stocks"
@@ -3323,7 +3591,9 @@ export default function Watchlist() {
           user.id
         );
 
-    if (error) {
+    if (
+      error
+    ) {
       setStocks(
         previous
       );
@@ -3344,7 +3614,9 @@ export default function Watchlist() {
     item,
     stock
   ) {
-    if (stock) {
+    if (
+      stock
+    ) {
       requestPortfolioRemoval(
         item,
         stock
@@ -3368,7 +3640,9 @@ export default function Watchlist() {
 
   const stockForTicker =
     useCallback(
-      (value) =>
+      (
+        value
+      ) =>
         stocks.find(
           (
             stock
@@ -3376,13 +3650,17 @@ export default function Watchlist() {
             stock.ticker.toUpperCase() ===
             value.toUpperCase()
         ),
-      [stocks]
+      [
+        stocks,
+      ]
     );
 
   const sortedItems =
     useMemo(
       () =>
-        [...items].sort(
+        [
+          ...items,
+        ].sort(
           (
             a,
             b
@@ -3512,6 +3790,7 @@ export default function Watchlist() {
         )}
       </AnimatePresence>
 
+      {/* WATCHLIST SETTINGS */}
       <Dialog
         open={
           watchlistMenuOpen
@@ -3552,6 +3831,7 @@ export default function Watchlist() {
                     label:
                       "Percentage",
                   },
+
                   {
                     value:
                       "price",
@@ -3799,7 +4079,9 @@ export default function Watchlist() {
         onOpenChange={
           setAddDialogOpen
         }
-        ticker={ticker}
+        ticker={
+          ticker
+        }
         setTicker={
           setTicker
         }
@@ -3809,12 +4091,21 @@ export default function Watchlist() {
         searching={
           searching
         }
-        adding={adding}
-        items={items}
-        stocks={stocks}
-        onAdd={addTicker}
+        adding={
+          adding
+        }
+        items={
+          items
+        }
+        stocks={
+          stocks
+        }
+        onAdd={
+          addTicker
+        }
       />
 
+      {/* PORTFOLIO REMOVAL */}
       <Dialog
         open={Boolean(
           portfolioRemoval
@@ -3822,7 +4113,9 @@ export default function Watchlist() {
         onOpenChange={(
           open
         ) => {
-          if (!open) {
+          if (
+            !open
+          ) {
             setPortfolioRemoval(
               null
             );
@@ -3899,7 +4192,9 @@ export default function Watchlist() {
           onOpenChange={(
             open
           ) => {
-            if (!open) {
+            if (
+              !open
+            ) {
               setDialogItem(
                 null
               );
@@ -3924,6 +4219,7 @@ export default function Watchlist() {
         />
       )}
 
+      {/* HEADER */}
       <header
         className="
           sticky
@@ -4007,6 +4303,7 @@ export default function Watchlist() {
         </div>
       </header>
 
+      {/* CONTENT */}
       <main
         className="
           mx-auto
@@ -4014,7 +4311,7 @@ export default function Watchlist() {
           max-w-[430px]
           flex-1
           px-4
-          pt-4
+          pt-3
         "
         style={{
           paddingBottom:
@@ -4050,7 +4347,7 @@ export default function Watchlist() {
         ) : (
           <motion.div
             layout
-            className="space-y-2.5"
+            className="space-y-[5px]"
           >
             <AnimatePresence
               initial={
@@ -4067,7 +4364,9 @@ export default function Watchlist() {
                     key={
                       item.id
                     }
-                    item={item}
+                    item={
+                      item
+                    }
                     stock={stockForTicker(
                       item.ticker
                     )}
@@ -4096,6 +4395,7 @@ export default function Watchlist() {
         )}
       </main>
 
+      {/* ADD BUTTON */}
       <button
         type="button"
         aria-label="Add stock to watchlist"
