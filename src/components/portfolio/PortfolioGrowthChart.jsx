@@ -38,12 +38,6 @@ const PERIODS = [
   "All",
 ];
 
-const FIRST_PERIOD_ROW =
-  PERIODS.slice(0, 7);
-
-const SECOND_PERIOD_ROW =
-  PERIODS.slice(7);
-
 const PERIOD_CONFIG = {
   "1D": {
     resolution: "5",
@@ -1175,14 +1169,16 @@ function PeriodButton({
       className={[
         `
           flex
-          h-[30px]
-          min-w-[38px]
+          h-[27px]
+          min-w-0
+          flex-1
           items-center
           justify-center
-          rounded-[8px]
-          px-2
-          text-[11px]
+          rounded-[7px]
+          px-0.5
+          text-[9.5px]
           font-semibold
+          tracking-[-0.15px]
           transition-[transform,background-color,color]
           duration-150
           active:scale-[0.96]
@@ -1417,13 +1413,13 @@ export default function PortfolioGrowthChart({
     "portfolioGrowthGradient";
 
   return (
-    <section className="rounded-[22px] bg-card p-4 text-foreground">
+    <section className="rounded-[22px] bg-card p-5 text-foreground">
       <div>
         <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
           Portfolio Growth
         </p>
 
-        <p className="text-[26px] font-bold tracking-[-0.6px] text-foreground">
+        <p className="text-[28px] font-bold tracking-[-0.7px] text-foreground">
           {latestValue !==
           null
             ? formatCurrency(
@@ -1481,56 +1477,30 @@ export default function PortfolioGrowthChart({
         combined with real historical market prices.
       </p>
 
-      {/* TIME PERIODS */}
-      <div className="mt-4 space-y-1.5">
-        <div className="flex w-full items-center justify-between gap-1">
-          {FIRST_PERIOD_ROW.map(
-            (
-              periodOption
-            ) => (
-              <PeriodButton
-                key={
-                  periodOption
-                }
-                value={
-                  periodOption
-                }
-                currentPeriod={
-                  period
-                }
-                onSelect={
-                  setPeriod
-                }
-              />
-            )
-          )}
-        </div>
-
-        <div className="flex items-center gap-1">
-          {SECOND_PERIOD_ROW.map(
-            (
-              periodOption
-            ) => (
-              <PeriodButton
-                key={
-                  periodOption
-                }
-                value={
-                  periodOption
-                }
-                currentPeriod={
-                  period
-                }
-                onSelect={
-                  setPeriod
-                }
-              />
-            )
-          )}
-        </div>
+      <div className="mt-4 flex w-full items-center gap-[2px]">
+        {PERIODS.map(
+          (
+            periodOption
+          ) => (
+            <PeriodButton
+              key={
+                periodOption
+              }
+              value={
+                periodOption
+              }
+              currentPeriod={
+                period
+              }
+              onSelect={
+                setPeriod
+              }
+            />
+          )
+        )}
       </div>
 
-      <div className="mt-4 h-52 w-full">
+      <div className="mt-4 h-[270px] w-full">
         {loading ? (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1551,10 +1521,10 @@ export default function PortfolioGrowthChart({
                 chartData
               }
               margin={{
-                top: 4,
+                top: 8,
                 right: 4,
                 left: 0,
-                bottom: 0,
+                bottom: 2,
               }}
             >
               <defs>
