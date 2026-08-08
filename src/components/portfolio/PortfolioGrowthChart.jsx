@@ -3,6 +3,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+
 import {
   Area,
   AreaChart,
@@ -12,11 +13,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 import {
   Loader2,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+
 import {
   getCandlesRange,
 } from "@/lib/financialDatasets";
@@ -35,6 +38,12 @@ const PERIODS = [
   "All",
 ];
 
+const FIRST_PERIOD_ROW =
+  PERIODS.slice(0, 7);
+
+const SECOND_PERIOD_ROW =
+  PERIODS.slice(7);
+
 const PERIOD_CONFIG = {
   "1D": {
     resolution: "5",
@@ -42,51 +51,61 @@ const PERIOD_CONFIG = {
     displayDays: 1,
     latestSession: true,
   },
+
   "1W": {
     resolution: "60",
     requestDays: 14,
     displayDays: 7,
   },
+
   "1M": {
     resolution: "D",
     requestDays: 45,
     displayDays: 30,
   },
+
   "3M": {
     resolution: "D",
     requestDays: 110,
     displayDays: 90,
   },
+
   "6M": {
     resolution: "D",
     requestDays: 200,
     displayDays: 180,
   },
+
   YTD: {
     resolution: "D",
     requestDays: null,
     displayDays: null,
   },
+
   "1Y": {
     resolution: "D",
     requestDays: 390,
     displayDays: 365,
   },
+
   "2Y": {
     resolution: "W",
     requestDays: 780,
     displayDays: 730,
   },
+
   "5Y": {
     resolution: "W",
     requestDays: 1900,
     displayDays: 1825,
   },
+
   "10Y": {
     resolution: "M",
     requestDays: 3720,
     displayDays: 3650,
   },
+
   All: {
     resolution: "M",
     requestDays: null,
@@ -98,9 +117,12 @@ const MAX_RENDERED_POINTS = 180;
 const FETCH_BATCH_SIZE = 5;
 
 function getValidNumber(value) {
-  const numericValue = Number(value);
+  const numericValue =
+    Number(value);
 
-  return Number.isFinite(numericValue)
+  return Number.isFinite(
+    numericValue
+  )
     ? numericValue
     : null;
 }
@@ -113,47 +135,59 @@ function getTimestamp(value) {
   const timestamp =
     new Date(value).getTime();
 
-  return Number.isFinite(timestamp)
-    ? Math.floor(timestamp / 1000)
+  return Number.isFinite(
+    timestamp
+  )
+    ? Math.floor(
+        timestamp / 1000
+      )
     : null;
 }
 
 function normalizeTicker(value) {
-  return String(value || "")
+  return String(
+    value || ""
+  )
     .trim()
     .toUpperCase();
 }
 
 function normalizeHoldings(stocks) {
-  const grouped = new Map();
+  const grouped =
+    new Map();
 
-  for (const stock of stocks || []) {
-    const ticker = normalizeTicker(
-      stock?.ticker,
-    );
+  for (
+    const stock of
+    stocks || []
+  ) {
+    const ticker =
+      normalizeTicker(
+        stock?.ticker
+      );
 
-    const quantity = getValidNumber(
-      stock?.quantity,
-    );
+    const quantity =
+      getValidNumber(
+        stock?.quantity
+      );
 
     const purchasePrice =
       getValidNumber(
-        stock?.purchase_price,
+        stock?.purchase_price
       );
 
     const currentPrice =
       getValidNumber(
-        stock?.current_price,
+        stock?.current_price
       );
 
     const createdAt =
       getTimestamp(
-        stock?.created_at,
+        stock?.created_at
       );
 
     const updatedAt =
       getTimestamp(
-        stock?.updated_at,
+        stock?.updated_at
       );
 
     if (
@@ -168,7 +202,9 @@ function normalizeHoldings(stocks) {
     }
 
     const existing =
-      grouped.get(ticker) || {
+      grouped.get(
+        ticker
+      ) || {
         ticker,
         quantity: 0,
         totalCost: 0,
@@ -177,22 +213,28 @@ function normalizeHoldings(stocks) {
         currentPrice: null,
       };
 
-    existing.quantity += quantity;
+    existing.quantity +=
+      quantity;
+
     existing.totalCost +=
-      purchasePrice * quantity;
+      purchasePrice *
+      quantity;
 
     existing.createdAt =
       Math.min(
         existing.createdAt,
-        createdAt,
+        createdAt
       );
 
     if (
-      currentPrice !== null &&
+      currentPrice !==
+        null &&
       currentPrice > 0 &&
       (
-        existing.updatedAt === null ||
-        (updatedAt || createdAt) >=
+        existing.updatedAt ===
+          null ||
+        (updatedAt ||
+          createdAt) >=
           existing.updatedAt
       )
     ) {
@@ -200,19 +242,21 @@ function normalizeHoldings(stocks) {
         currentPrice;
 
       existing.updatedAt =
-        updatedAt || createdAt;
+        updatedAt ||
+        createdAt;
     }
 
     grouped.set(
       ticker,
-      existing,
+      existing
     );
   }
 
   return Array.from(
-    grouped.values(),
+    grouped.values()
   ).map((holding) => ({
     ...holding,
+
     purchasePrice:
       holding.totalCost /
       holding.quantity,
@@ -221,17 +265,25 @@ function normalizeHoldings(stocks) {
 
 function getRequestBounds(
   period,
-  earliestPurchase,
+  earliestPurchase
 ) {
-  const now = Math.floor(
-    Date.now() / 1000,
-  );
+  const now =
+    Math.floor(
+      Date.now() /
+        1000
+    );
 
   const config =
-    PERIOD_CONFIG[period] ||
-    PERIOD_CONFIG["1M"];
+    PERIOD_CONFIG[
+      period
+    ] ||
+    PERIOD_CONFIG[
+      "1M"
+    ];
 
-  if (period === "YTD") {
+  if (
+    period === "YTD"
+  ) {
     const currentDate =
       new Date();
 
@@ -244,32 +296,45 @@ function getRequestBounds(
           0,
           0,
           0,
-          0,
-        ).getTime() / 1000,
+          0
+        ).getTime() /
+          1000
       );
 
     return {
-      from: yearStart,
-      to: now,
+      from:
+        yearStart,
+
+      to:
+        now,
+
       resolution:
         config.resolution,
+
       provisionalChartStart:
         yearStart,
     };
   }
 
-  if (period === "All") {
-    const from = Math.max(
-      0,
-      earliestPurchase -
-        7 * 86400,
-    );
+  if (
+    period === "All"
+  ) {
+    const from =
+      Math.max(
+        0,
+        earliestPurchase -
+          7 * 86400
+      );
 
     return {
       from,
-      to: now,
+
+      to:
+        now,
+
       resolution:
         config.resolution,
+
       provisionalChartStart:
         earliestPurchase,
     };
@@ -280,9 +345,13 @@ function getRequestBounds(
       now -
       config.requestDays *
         86400,
-    to: now,
+
+    to:
+      now,
+
     resolution:
       config.resolution,
+
     provisionalChartStart:
       now -
       config.displayDays *
@@ -297,10 +366,12 @@ async function fetchTickerHistory({
   to,
   signal,
 }) {
-  if (signal?.aborted) {
+  if (
+    signal?.aborted
+  ) {
     throw new DOMException(
       "The operation was aborted.",
-      "AbortError",
+      "AbortError"
     );
   }
 
@@ -312,16 +383,18 @@ async function fetchTickerHistory({
       to,
     });
 
-  if (signal?.aborted) {
+  if (
+    signal?.aborted
+  ) {
     throw new DOMException(
       "The operation was aborted.",
-      "AbortError",
+      "AbortError"
     );
   }
 
   const candles =
     Array.isArray(
-      payload?.candles,
+      payload?.candles
     )
       ? payload.candles
       : [];
@@ -330,17 +403,18 @@ async function fetchTickerHistory({
     .map((candle) => {
       const timestamp =
         getValidNumber(
-          candle?.t,
+          candle?.t
         );
 
       const close =
         getValidNumber(
           candle?.v ??
-            candle?.c,
+            candle?.c
         );
 
       if (
-        timestamp === null ||
+        timestamp ===
+          null ||
         close === null ||
         close <= 0
       ) {
@@ -350,7 +424,7 @@ async function fetchTickerHistory({
       return {
         timestamp:
           Math.floor(
-            timestamp,
+            timestamp
           ),
 
         price:
@@ -361,57 +435,68 @@ async function fetchTickerHistory({
     .sort(
       (a, b) =>
         a.timestamp -
-        b.timestamp,
+        b.timestamp
     );
 }
-
 
 async function fetchHistories({
   holdings,
   bounds,
   signal,
 }) {
-  const result = new Map();
+  const result =
+    new Map();
 
   for (
     let index = 0;
-    index < holdings.length;
-    index += FETCH_BATCH_SIZE
+    index <
+    holdings.length;
+    index +=
+      FETCH_BATCH_SIZE
   ) {
     const batch =
       holdings.slice(
         index,
         index +
-          FETCH_BATCH_SIZE,
+          FETCH_BATCH_SIZE
       );
 
     const batchResults =
       await Promise.all(
         batch.map(
-          async (holding) => ({
+          async (
+            holding
+          ) => ({
             ticker:
               holding.ticker,
+
             points:
               await fetchTickerHistory({
                 ticker:
                   holding.ticker,
+
                 resolution:
                   bounds.resolution,
+
                 from:
                   bounds.from,
-                to: bounds.to,
+
+                to:
+                  bounds.to,
+
                 signal,
               }),
-          }),
-        ),
+          })
+        )
       );
 
     for (
-      const item of batchResults
+      const item of
+      batchResults
     ) {
       result.set(
         item.ticker,
-        item.points,
+        item.points
       );
     }
   }
@@ -420,11 +505,13 @@ async function fetchHistories({
 }
 
 function getUtcDayStart(
-  timestamp,
+  timestamp
 ) {
-  const date = new Date(
-    timestamp * 1000,
-  );
+  const date =
+    new Date(
+      timestamp *
+        1000
+    );
 
   return Math.floor(
     Date.UTC(
@@ -434,8 +521,8 @@ function getUtcDayStart(
       0,
       0,
       0,
-      0,
-    ) / 1000,
+      0
+    ) / 1000
   );
 }
 
@@ -454,14 +541,16 @@ function getChartStart({
     null;
 
   for (
-    const points of histories.values()
+    const points of
+    histories.values()
   ) {
     const latest =
       points.at(-1)
         ?.timestamp;
 
     if (
-      latest !== undefined &&
+      latest !==
+        undefined &&
       (
         latestMarketTimestamp ===
           null ||
@@ -475,13 +564,14 @@ function getChartStart({
   }
 
   if (
-    latestMarketTimestamp === null
+    latestMarketTimestamp ===
+    null
   ) {
     return provisionalChartStart;
   }
 
   return getUtcDayStart(
-    latestMarketTimestamp,
+    latestMarketTimestamp
   );
 }
 
@@ -502,7 +592,7 @@ function prepareHoldingSeries({
         point.timestamp >=
           acquisitionTime &&
         point.timestamp <=
-          chartEnd,
+          chartEnd
     );
 
   const series = [];
@@ -510,13 +600,16 @@ function prepareHoldingSeries({
   if (
     acquisitionTime >=
       chartStart &&
-    acquisitionTime <= chartEnd
+    acquisitionTime <=
+      chartEnd
   ) {
     series.push({
       timestamp:
         acquisitionTime,
+
       price:
         holding.purchasePrice,
+
       source:
         "entered-purchase",
     });
@@ -525,33 +618,42 @@ function prepareHoldingSeries({
   if (
     acquisitionTime <
       chartStart &&
-    eligibleHistory.length > 0
+    eligibleHistory.length >
+      0
   ) {
     series.push({
       timestamp:
         eligibleHistory[0]
           .timestamp,
+
       price:
         eligibleHistory[0]
           .price,
-      source: "market",
+
+      source:
+        "market",
     });
   }
 
   for (
-    const point of eligibleHistory
+    const point of
+    eligibleHistory
   ) {
     series.push({
       ...point,
-      source: "market",
+
+      source:
+        "market",
     });
   }
 
   if (
     holding.currentPrice !==
       null &&
-    holding.currentPrice > 0 &&
-    holding.updatedAt !== null &&
+    holding.currentPrice >
+      0 &&
+    holding.updatedAt !==
+      null &&
     holding.updatedAt >=
       chartStart &&
     holding.updatedAt >=
@@ -562,9 +664,12 @@ function prepareHoldingSeries({
     series.push({
       timestamp:
         holding.updatedAt,
+
       price:
         holding.currentPrice,
-      source: "market-quote",
+
+      source:
+        "market-quote",
     });
   }
 
@@ -572,36 +677,43 @@ function prepareHoldingSeries({
     new Map();
 
   for (
-    const point of series
+    const point of
+    series
   ) {
     byTimestamp.set(
       point.timestamp,
-      point,
+      point
     );
   }
 
   return Array.from(
-    byTimestamp.values(),
+    byTimestamp.values()
   ).sort(
     (a, b) =>
       a.timestamp -
-      b.timestamp,
+      b.timestamp
   );
 }
 
 function findPriceAtOrBefore(
   series,
-  timestamp,
+  timestamp
 ) {
   let low = 0;
+
   let high =
-    series.length - 1;
+    series.length -
+    1;
+
   let result = null;
 
-  while (low <= high) {
+  while (
+    low <= high
+  ) {
     const middle =
       Math.floor(
-        (low + high) / 2,
+        (low + high) /
+          2
       );
 
     const point =
@@ -611,10 +723,14 @@ function findPriceAtOrBefore(
       point.timestamp <=
       timestamp
     ) {
-      result = point.price;
-      low = middle + 1;
+      result =
+        point.price;
+
+      low =
+        middle + 1;
     } else {
-      high = middle - 1;
+      high =
+        middle - 1;
     }
   }
 
@@ -623,29 +739,41 @@ function findPriceAtOrBefore(
 
 function formatChartLabel(
   timestamp,
-  period,
+  period
 ) {
-  const date = new Date(
-    timestamp * 1000,
-  );
+  const date =
+    new Date(
+      timestamp *
+        1000
+    );
 
-  if (period === "1D") {
+  if (
+    period === "1D"
+  ) {
     return date.toLocaleTimeString(
       "en-US",
       {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      },
+        hour:
+          "numeric",
+
+        minute:
+          "2-digit",
+
+        hour12:
+          true,
+      }
     );
   }
 
-  if (period === "1W") {
+  if (
+    period === "1W"
+  ) {
     return date.toLocaleDateString(
       "en-US",
       {
-        weekday: "short",
-      },
+        weekday:
+          "short",
+      }
     );
   }
 
@@ -655,14 +783,19 @@ function formatChartLabel(
       "3M",
       "6M",
       "YTD",
-    ].includes(period)
+    ].includes(
+      period
+    )
   ) {
     return date.toLocaleDateString(
       "en-US",
       {
-        month: "short",
-        day: "numeric",
-      },
+        month:
+          "short",
+
+        day:
+          "numeric",
+      }
     );
   }
 
@@ -673,18 +806,24 @@ function formatChartLabel(
     return date.toLocaleDateString(
       "en-US",
       {
-        month: "short",
-        year: "numeric",
-      },
+        month:
+          "short",
+
+        year:
+          "numeric",
+      }
     );
   }
 
   return date.toLocaleDateString(
     "en-US",
     {
-      month: "short",
-      year: "2-digit",
-    },
+      month:
+        "short",
+
+      year:
+        "2-digit",
+    }
   );
 }
 
@@ -699,33 +838,38 @@ function buildPortfolioData({
     holdings.map(
       (holding) => ({
         holding,
+
         series:
           prepareHoldingSeries({
             holding,
+
             history:
               histories.get(
-                holding.ticker,
+                holding.ticker
               ) || [],
+
             chartStart,
+
             chartEnd,
           }),
-      }),
+      })
     );
 
   if (
     prepared.some(
       (item) =>
-        item.series.length ===
-        0,
+        item.series
+          .length === 0
     )
   ) {
     return {
       data: [],
+
       missingTicker:
         prepared.find(
           (item) =>
-            item.series.length ===
-            0,
+            item.series
+              .length === 0
         )?.holding.ticker ||
         null,
     };
@@ -735,43 +879,48 @@ function buildPortfolioData({
     new Set();
 
   for (
-    const item of prepared
+    const item of
+    prepared
   ) {
     for (
-      const point of item.series
+      const point of
+      item.series
     ) {
       timestampSet.add(
-        point.timestamp,
+        point.timestamp
       );
     }
   }
 
   const timestamps =
     Array.from(
-      timestampSet,
+      timestampSet
     )
       .filter(
         (timestamp) =>
           timestamp >=
             chartStart &&
           timestamp <=
-            chartEnd,
+            chartEnd
       )
       .sort(
-        (a, b) => a - b,
+        (a, b) =>
+          a - b
       );
 
   const data = [];
 
   for (
-    const timestamp of timestamps
+    const timestamp of
+    timestamps
   ) {
     let totalValue = 0;
     let hasPosition = false;
     let complete = true;
 
     for (
-      const item of prepared
+      const item of
+      prepared
     ) {
       const {
         holding,
@@ -785,18 +934,21 @@ function buildPortfolioData({
         continue;
       }
 
-      hasPosition = true;
+      hasPosition =
+        true;
 
       const price =
         findPriceAtOrBefore(
           series,
-          timestamp,
+          timestamp
         );
 
       if (
         price === null
       ) {
-        complete = false;
+        complete =
+          false;
+
         break;
       }
 
@@ -814,14 +966,17 @@ function buildPortfolioData({
 
     data.push({
       timestamp,
+
       label:
         formatChartLabel(
           timestamp,
-          period,
+          period
         ),
+
       value:
         Math.round(
-          totalValue * 100,
+          totalValue *
+            100
         ) / 100,
     });
   }
@@ -832,19 +987,23 @@ function buildPortfolioData({
   ) {
     return {
       data,
-      missingTicker: null,
+
+      missingTicker:
+        null,
     };
   }
 
-  const step = Math.ceil(
-    data.length /
-      MAX_RENDERED_POINTS,
-  );
+  const step =
+    Math.ceil(
+      data.length /
+        MAX_RENDERED_POINTS
+    );
 
   const reduced =
     data.filter(
       (_, index) =>
-        index % step === 0,
+        index % step ===
+        0
     );
 
   const finalPoint =
@@ -856,13 +1015,16 @@ function buildPortfolioData({
     finalPoint.timestamp
   ) {
     reduced.push(
-      finalPoint,
+      finalPoint
     );
   }
 
   return {
-    data: reduced,
-    missingTicker: null,
+    data:
+      reduced,
+
+    missingTicker:
+      null,
   };
 }
 
@@ -872,7 +1034,7 @@ function formatCurrency(value) {
     {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    },
+    }
   )}`;
 }
 
@@ -882,15 +1044,16 @@ function formatYAxisValue(value) {
 
   if (
     !Number.isFinite(
-      numericValue,
+      numericValue
     )
   ) {
     return "—";
   }
 
   if (
-    Math.abs(numericValue) >=
-    1_000_000
+    Math.abs(
+      numericValue
+    ) >= 1_000_000
   ) {
     return `$${(
       numericValue /
@@ -899,16 +1062,18 @@ function formatYAxisValue(value) {
   }
 
   if (
-    Math.abs(numericValue) >=
-    1000
+    Math.abs(
+      numericValue
+    ) >= 1000
   ) {
     return `$${(
-      numericValue / 1000
+      numericValue /
+      1000
     ).toFixed(0)}k`;
   }
 
   return `$${numericValue.toFixed(
-    0,
+    0
   )}`;
 }
 
@@ -927,18 +1092,22 @@ function PortfolioTooltip({
 
   const value =
     Number(
-      payload[0]?.value,
+      payload[0]
+        ?.value
     );
 
   if (
-    !Number.isFinite(value)
+    !Number.isFinite(
+      value
+    )
   ) {
     return null;
   }
 
   const gain =
     startValue > 0
-      ? value - startValue
+      ? value -
+        startValue
       : null;
 
   const gainPct =
@@ -954,16 +1123,19 @@ function PortfolioTooltip({
     gain >= 0;
 
   return (
-    <div className="min-w-[150px] rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg">
-      <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+    <div className="min-w-[150px] rounded-xl border border-border bg-card px-4 py-3 text-foreground shadow-lg">
+      <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
 
-      <p className="text-base font-bold text-gray-900">
-        {formatCurrency(value)}
+      <p className="text-base font-bold text-foreground">
+        {formatCurrency(
+          value
+        )}
       </p>
 
-      {gainPct !== null && (
+      {gainPct !==
+        null && (
         <p
           className={`mt-1 text-xs font-semibold ${
             positive
@@ -971,44 +1143,105 @@ function PortfolioTooltip({
               : "text-red-600"
           }`}
         >
-          {positive ? "+" : ""}
-          {gainPct.toFixed(2)}%
+          {positive
+            ? "+"
+            : ""}
+
+          {gainPct.toFixed(
+            2
+          )}
+          %
         </p>
       )}
     </div>
   );
 }
 
+function PeriodButton({
+  value,
+  currentPeriod,
+  onSelect,
+}) {
+  const active =
+    value ===
+    currentPeriod;
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onSelect(value)
+      }
+      className={[
+        `
+          flex
+          h-[30px]
+          min-w-[38px]
+          items-center
+          justify-center
+          rounded-[8px]
+          px-2
+          text-[11px]
+          font-semibold
+          transition-[transform,background-color,color]
+          duration-150
+          active:scale-[0.96]
+        `,
+        active
+          ? "bg-foreground text-background"
+          : "text-foreground hover:bg-muted",
+      ].join(" ")}
+    >
+      {value}
+    </button>
+  );
+}
+
 export default function PortfolioGrowthChart({
   stocks = [],
 }) {
-  const [period, setPeriod] =
-    useState("1M");
-
-  const [chartData, setChartData] =
-    useState([]);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const holdings = useMemo(
-    () =>
-      normalizeHoldings(
-        stocks,
-      ),
-    [stocks],
+  const [
+    period,
+    setPeriod,
+  ] = useState(
+    "1M"
   );
+
+  const [
+    chartData,
+    setChartData,
+  ] = useState([]);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  const holdings =
+    useMemo(
+      () =>
+        normalizeHoldings(
+          stocks
+        ),
+      [stocks]
+    );
 
   useEffect(() => {
     if (
-      holdings.length === 0
+      holdings.length ===
+      0
     ) {
-      setChartData([]);
+      setChartData(
+        []
+      );
+
       setError(
-        "Enter a valid quantity, purchase price, and purchase date for each holding.",
+        "Enter a valid quantity, purchase price, and purchase date for each holding."
       );
 
       return undefined;
@@ -1018,34 +1251,41 @@ export default function PortfolioGrowthChart({
       new AbortController();
 
     async function loadChart() {
-      setLoading(true);
+      setLoading(
+        true
+      );
+
       setError("");
 
       try {
         const earliestPurchase =
           Math.min(
             ...holdings.map(
-              (holding) =>
-                holding.createdAt,
-            ),
+              (
+                holding
+              ) =>
+                holding.createdAt
+            )
           );
 
         const bounds =
           getRequestBounds(
             period,
-            earliestPurchase,
+            earliestPurchase
           );
 
         const histories =
           await fetchHistories({
             holdings,
             bounds,
+
             signal:
               controller.signal,
           });
 
         if (
-          controller.signal.aborted
+          controller.signal
+            .aborted
         ) {
           return;
         }
@@ -1054,6 +1294,7 @@ export default function PortfolioGrowthChart({
           getChartStart({
             period,
             histories,
+
             provisionalChartStart:
               bounds.provisionalChartStart,
           });
@@ -1063,8 +1304,10 @@ export default function PortfolioGrowthChart({
             holdings,
             histories,
             chartStart,
+
             chartEnd:
               bounds.to,
+
             period,
           });
 
@@ -1072,22 +1315,25 @@ export default function PortfolioGrowthChart({
           result.missingTicker
         ) {
           throw new Error(
-            `Historical prices are unavailable for ${result.missingTicker} in this range.`,
+            `Historical prices are unavailable for ${result.missingTicker} in this range.`
           );
         }
 
         if (
-          result.data.length < 2
+          result.data
+            .length < 2
         ) {
           throw new Error(
-            "Not enough verified price history is available for this range.",
+            "Not enough verified price history is available for this range."
           );
         }
 
         setChartData(
-          result.data,
+          result.data
         );
-      } catch (loadError) {
+      } catch (
+        loadError
+      ) {
         if (
           loadError?.name ===
           "AbortError"
@@ -1097,21 +1343,25 @@ export default function PortfolioGrowthChart({
 
         console.error(
           "Portfolio growth load failed:",
-          loadError,
+          loadError
         );
 
-        setChartData([]);
+        setChartData(
+          []
+        );
 
         setError(
           loadError?.message ||
-            "Unable to load portfolio history.",
+            "Unable to load portfolio history."
         );
       } finally {
         if (
-          !controller.signal
-            .aborted
+          !controller
+            .signal.aborted
         ) {
-          setLoading(false);
+          setLoading(
+            false
+          );
         }
       }
     }
@@ -1126,22 +1376,27 @@ export default function PortfolioGrowthChart({
   ]);
 
   const firstValue =
-    chartData[0]?.value ??
+    chartData[0]
+      ?.value ??
     null;
 
   const latestValue =
-    chartData.at(-1)?.value ??
+    chartData.at(-1)
+      ?.value ??
     null;
 
   const periodGain =
-    firstValue !== null &&
-    latestValue !== null
+    firstValue !==
+      null &&
+    latestValue !==
+      null
       ? latestValue -
         firstValue
       : null;
 
   const periodGainPct =
-    periodGain !== null &&
+    periodGain !==
+      null &&
     firstValue > 0
       ? (periodGain /
           firstValue) *
@@ -1149,7 +1404,8 @@ export default function PortfolioGrowthChart({
       : null;
 
   const isPositive =
-    periodGain === null ||
+    periodGain ===
+      null ||
     periodGain >= 0;
 
   const chartColor =
@@ -1161,94 +1417,127 @@ export default function PortfolioGrowthChart({
     "portfolioGrowthGradient";
 
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+    <section className="rounded-[22px] bg-card p-4 text-foreground">
       <div>
-        <p className="mb-1 text-xs font-medium uppercase tracking-wider text-black">
+        <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
           Portfolio Growth
         </p>
 
-        <p className="font-heading text-3xl font-bold text-gray-900">
-          {latestValue !== null
+        <p className="text-[26px] font-bold tracking-[-0.6px] text-foreground">
+          {latestValue !==
+          null
             ? formatCurrency(
-                latestValue,
+                latestValue
               )
             : "—"}
         </p>
 
-        {periodGain !== null &&
+        {periodGain !==
+          null &&
           periodGainPct !==
             null && (
             <p
-              className={`mt-1 flex items-center gap-1 text-sm font-semibold ${
+              className={`mt-1 flex items-center gap-1 text-[13px] font-semibold ${
                 isPositive
                   ? "text-emerald-600"
                   : "text-red-600"
               }`}
             >
               {isPositive ? (
-                <TrendingUp className="h-4 w-4" />
+                <TrendingUp
+                  size={15}
+                />
               ) : (
-                <TrendingDown className="h-4 w-4" />
+                <TrendingDown
+                  size={15}
+                />
               )}
 
               {isPositive
                 ? "+"
                 : "-"}
+
               {formatCurrency(
                 Math.abs(
-                  periodGain,
-                ),
+                  periodGain
+                )
               )}{" "}
+
               (
               {isPositive
                 ? "+"
                 : ""}
+
               {periodGainPct.toFixed(
-                2,
+                2
               )}
               %)
             </p>
           )}
       </div>
 
-      <p className="mt-3 text-[11px] leading-4 text-black">
-        Based on your entered purchase
-        prices and dates, combined with
-        real historical market prices.
+      <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
+        Based on your entered purchase prices and dates,
+        combined with real historical market prices.
       </p>
 
-      <div className="mt-4 flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {PERIODS.map(
-          (periodOption) => (
-            <button
-              key={periodOption}
-              type="button"
-              onClick={() =>
-                setPeriod(
-                  periodOption,
-                )
-              }
-              className={`min-w-[38px] shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors ${
-                period ===
-                periodOption
-                  ? "bg-black text-white"
-                  : "text-black hover:bg-gray-100"
-              }`}
-            >
-              {periodOption}
-            </button>
-          ),
-        )}
+      {/* TIME PERIODS */}
+      <div className="mt-4 space-y-1.5">
+        <div className="flex w-full items-center justify-between gap-1">
+          {FIRST_PERIOD_ROW.map(
+            (
+              periodOption
+            ) => (
+              <PeriodButton
+                key={
+                  periodOption
+                }
+                value={
+                  periodOption
+                }
+                currentPeriod={
+                  period
+                }
+                onSelect={
+                  setPeriod
+                }
+              />
+            )
+          )}
+        </div>
+
+        <div className="flex items-center gap-1">
+          {SECOND_PERIOD_ROW.map(
+            (
+              periodOption
+            ) => (
+              <PeriodButton
+                key={
+                  periodOption
+                }
+                value={
+                  periodOption
+                }
+                currentPeriod={
+                  period
+                }
+                onSelect={
+                  setPeriod
+                }
+              />
+            )
+          )}
+        </div>
       </div>
 
       <div className="mt-4 h-52 w-full">
         {loading ? (
           <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 px-5 text-center">
-            <p className="max-w-md text-sm text-gray-500">
+          <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 px-5 text-center">
+            <p className="max-w-md text-sm text-muted-foreground">
               {error}
             </p>
           </div>
@@ -1258,7 +1547,9 @@ export default function PortfolioGrowthChart({
             height="100%"
           >
             <AreaChart
-              data={chartData}
+              data={
+                chartData
+              }
               margin={{
                 top: 4,
                 right: 4,
@@ -1268,7 +1559,9 @@ export default function PortfolioGrowthChart({
             >
               <defs>
                 <linearGradient
-                  id={gradientId}
+                  id={
+                    gradientId
+                  }
                   x1="0"
                   y1="0"
                   x2="0"
@@ -1289,27 +1582,38 @@ export default function PortfolioGrowthChart({
                     stopColor={
                       chartColor
                     }
-                    stopOpacity={0}
+                    stopOpacity={
+                      0
+                    }
                   />
                 </linearGradient>
               </defs>
 
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="#f3f4f6"
-                vertical={false}
+                stroke="hsl(var(--border))"
+                vertical={
+                  false
+                }
               />
 
               <XAxis
                 dataKey="label"
                 tick={{
                   fontSize: 10,
-                  fill: "#9ca3af",
+                  fill:
+                    "hsl(var(--muted-foreground))",
                 }}
-                tickLine={false}
-                axisLine={false}
+                tickLine={
+                  false
+                }
+                axisLine={
+                  false
+                }
                 interval="preserveStartEnd"
-                minTickGap={24}
+                minTickGap={
+                  24
+                }
               />
 
               <YAxis
@@ -1322,11 +1626,18 @@ export default function PortfolioGrowthChart({
                 }
                 tick={{
                   fontSize: 10,
-                  fill: "#9ca3af",
+                  fill:
+                    "hsl(var(--muted-foreground))",
                 }}
-                tickLine={false}
-                axisLine={false}
-                width={46}
+                tickLine={
+                  false
+                }
+                axisLine={
+                  false
+                }
+                width={
+                  46
+                }
               />
 
               <Tooltip
@@ -1345,14 +1656,21 @@ export default function PortfolioGrowthChart({
                 stroke={
                   chartColor
                 }
-                strokeWidth={2}
+                strokeWidth={
+                  2
+                }
                 fill={`url(#${gradientId})`}
-                dot={false}
+                dot={
+                  false
+                }
                 activeDot={{
                   r: 4,
+
                   fill:
                     chartColor,
-                  strokeWidth: 0,
+
+                  strokeWidth:
+                    0,
                 }}
                 isAnimationActive={
                   false
