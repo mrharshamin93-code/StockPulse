@@ -1,14 +1,18 @@
+// src/pages/StockDetail.jsx
+
 import React, {
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+
 import {
   useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
+
 import {
   Line,
   LineChart,
@@ -17,6 +21,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 import {
   ArrowLeft,
   Loader2,
@@ -27,16 +32,16 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
-import {
-  financialDatasetsRequest,
-} from "@/lib/financialDatasets";
 
+import { financialDatasetsRequest } from "@/lib/financialDatasets";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import {
   Dialog,
   DialogContent,
@@ -44,163 +49,304 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const PERIODS = [
-  "1D",
-  "1W",
-  "1M",
-  "3M",
-  "6M",
-  "YTD",
-  "1Y",
-  "2Y",
-  "5Y",
-  "10Y",
-  "All",
-];
+const PERIODS = ["1D","1W","1M","3M","6M","YTD","1Y","2Y","5Y","10Y","All"];
 
 const PERIOD_CONFIG = {
-  "1D": {
-    resolution: "5",
-    daysBack: 1,
-  },
-  "1W": {
-    resolution: "60",
-    daysBack: 7,
-  },
-  "1M": {
-    resolution: "D",
-    daysBack: 31,
-  },
-  "3M": {
-    resolution: "D",
-    daysBack: 93,
-  },
-  "6M": {
-    resolution: "D",
-    daysBack: 186,
-  },
-  YTD: {
-    resolution: "D",
-    daysBack: null,
-  },
-  "1Y": {
-    resolution: "D",
-    daysBack: 370,
-  },
-  "2Y": {
-    resolution: "W",
-    daysBack: 740,
-  },
-  "5Y": {
-    resolution: "W",
-    daysBack: 1840,
-  },
-  "10Y": {
-    resolution: "M",
-    daysBack: 3680,
-  },
-  All: {
-    resolution: "M",
-    daysBack: null,
-  },
+  "1D": { resolution: "5", daysBack: 1 },
+  "1W": { resolution: "60", daysBack: 7 },
+  "1M": { resolution: "D", daysBack: 31 },
+  "3M": { resolution: "D", daysBack: 93 },
+  "6M": { resolution: "D", daysBack: 186 },
+  YTD: { resolution: "D", daysBack: null },
+  "1Y": { resolution: "D", daysBack: 370 },
+  "2Y": { resolution: "W", daysBack: 740 },
+  "5Y": { resolution: "W", daysBack: 1840 },
+  "10Y": { resolution: "M", daysBack: 3680 },
+  All: { resolution: "M", daysBack: null },
 };
 
-const TOOLTIP_HIDE_DELAY = 2500;
-const UNAVAILABLE_VALUE = "\u2014";
-
 const FUNDAMENTAL_METRICS = [
-  {
-    label: "Market Cap",
-    keys: ["market_cap", "marketCap"],
-    format: "marketCap",
-  },
-  {
-    label: "P/E",
-    keys: [
-      "price_to_earnings_ratio",
-      "pe_ratio",
-      "price_to_earnings",
-      "pe",
-    ],
-    format: "number",
-  },
-  {
-    label: "Forward P/E",
-    keys: [
-      "forward_price_to_earnings_ratio",
-      "forward_pe_ratio",
-      "forward_pe",
-      "forwardPE",
-    ],
-    format: "number",
-  },
-  {
-    label: "Price/Sales",
-    keys: [
-      "price_to_sales_ratio",
-      "price_sales_ratio",
-      "price_to_sales",
-    ],
-    format: "number",
-  },
-  {
-    label: "PEG",
-    keys: ["peg_ratio", "peg"],
-    format: "number",
-  },
-  {
-    label: "EPS",
-    keys: [
-      "earnings_per_share",
-      "eps",
-      "eps_ttm",
-    ],
-    format: "currency",
-  },
-  {
-    label: "Revenue Growth",
-    keys: [
-      "revenue_growth",
-      "revenue_growth_yoy",
-    ],
-    format: "percent",
-  },
-  {
-    label: "Net Margin",
-    keys: ["net_margin"],
-    format: "percent",
-  },
-  {
-    label: "ROE",
-    keys: [
-      "return_on_equity",
-      "roe",
-    ],
-    format: "percent",
-  },
-  {
-    label: "Debt/Equity",
-    keys: ["debt_to_equity"],
-    format: "number",
-  },
-  {
-    label: "Dividend Yield",
-    keys: [
-      "dividend_yield",
-      "dividend_yield_percentage",
-    ],
-    format: "percent",
-  },
+  { label: "Market Cap", keys: ["market_cap", "marketCap"], format: "marketCap" },
+  { label: "P/E", keys: ["price_to_earnings_ratio","pe_ratio","price_to_earnings","pe"], format: "number" },
+  { label: "Forward P/E", keys: ["forward_price_to_earnings_ratio","forward_pe_ratio","forward_pe","forwardPE"], format: "number" },
+  { label: "Price/Sales", keys: ["price_to_sales_ratio","price_sales_ratio","price_to_sales"], format: "number" },
+  { label: "PEG", keys: ["peg_ratio", "peg"], format: "number" },
+  { label: "EPS", keys: ["earnings_per_share","eps","eps_ttm"], format: "currency" },
+  { label: "Revenue Growth", keys: ["revenue_growth","revenue_growth_yoy"], format: "percent" },
+  { label: "Net Margin", keys: ["net_margin"], format: "percent" },
+  { label: "ROE", keys: ["return_on_equity","roe"], format: "percent" },
+  { label: "Debt/Equity", keys: ["debt_to_equity"], format: "number" },
+  { label: "Dividend Yield", keys: ["dividend_yield","dividend_yield_percentage"], format: "percent" },
 ];
 
-function metricValue(
-  metrics,
-  keys,
-) {
-  for (const key of keys) {
-    const value = Number(
-      metrics?.[key],
+const MAX_COMPARISON_TICKERS = 4;
+const COMPARISON_COLORS = ["#6366f1","#f59e0b","#8b5cf6","#06b6d4"];
+const TOOLTIP_HIDE_DELAY = 2500;
+const UNAVAILABLE_VALUE = "—";
+
+function normalizeTickerInput(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function roundPrice(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.round((number + Number.EPSILON) * 100) / 100;
+}
+
+function normalizePrefetchedQuote(value) {
+  if (!value || typeof value !== "object") return null;
+
+  const currentPrice = Number(
+    value.c ?? value.currentPrice ?? value.current_price ?? value.price
+  );
+  const previousClose = Number(
+    value.pc ?? value.previousClose ?? value.previous_close
+  );
+  const dailyPercent = Number(
+    value.dp ?? value.dailyGain ?? value.dailyPercent ?? value.changePercent ?? value.change_percent
+  );
+  const dailyChange = Number(
+    value.d ?? value.dailyChange ?? value.change
+  );
+
+  const normalized = {
+    c: Number.isFinite(currentPrice) ? currentPrice : null,
+    pc: Number.isFinite(previousClose) ? previousClose : null,
+    dp: Number.isFinite(dailyPercent) ? dailyPercent : null,
+    d: Number.isFinite(dailyChange) ? dailyChange : null,
+  };
+
+  return Object.values(normalized).some(Number.isFinite) ? normalized : null;
+}
+
+async function marketDataProxy(body, signal) {
+  if (signal?.aborted) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  const payload = await financialDatasetsRequest(body);
+
+  if (signal?.aborted) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
+
+  return payload;
+}
+
+function getPeriodBounds(period) {
+  const config = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
+  const to = Math.floor(Date.now() / 1000);
+
+  if (period === "All") {
+    return { from: 1, to, resolution: config.resolution };
+  }
+
+  if (period === "YTD") {
+    const now = new Date();
+    return {
+      from: Math.floor(Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0) / 1000),
+      to,
+      resolution: config.resolution,
+    };
+  }
+
+  return {
+    from: to - config.daysBack * 86400,
+    to,
+    resolution: config.resolution,
+  };
+}
+
+function formatChartLabel(timestamp, period) {
+  const date = new Date(timestamp * 1000);
+
+  if (period === "1D") {
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+
+  if (["1W","1M","3M","6M","YTD"].includes(period)) {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+function getTimestampKey(timestamp, period) {
+  const date = new Date(timestamp * 1000);
+
+  if (period === "1D") {
+    const minutes = date.getUTCMinutes();
+    const bucketMinutes = Math.floor(minutes / 5) * 5;
+
+    return Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours(),
+      bucketMinutes
     );
+  }
+
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate()
+  );
+}
+
+async function fetchChartData(ticker, period, signal) {
+  const { from, to, resolution } = getPeriodBounds(period);
+
+  const result = await marketDataProxy(
+    {
+      action: "candles_range",
+      ticker,
+      period,
+      resolution,
+      from,
+      to,
+    },
+    signal
+  );
+
+  const candles = Array.isArray(result?.candles) ? result.candles : [];
+
+  const points = candles
+    .map((candle) => ({
+      timestamp: Number(candle?.t),
+      value: Number(candle?.c),
+    }))
+    .filter(
+      (point) =>
+        Number.isFinite(point.timestamp) &&
+        Number.isFinite(point.value)
+    )
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  if (points.length < 2) {
+    throw new Error(`No chart data returned for ${ticker} (${period})`);
+  }
+
+  return points.map((point) => ({
+    timestamp: point.timestamp,
+    key: getTimestampKey(point.timestamp, period),
+    label: formatChartLabel(point.timestamp, period),
+    value: point.value,
+  }));
+}
+
+function calculatePeriodReturn(points, period, officialDailyReturn) {
+  if (period === "1D" && Number.isFinite(officialDailyReturn)) {
+    return officialDailyReturn;
+  }
+
+  const first = points.find((point) => Number.isFinite(point?.value));
+  const last = [...points].reverse().find((point) => Number.isFinite(point?.value));
+
+  if (!first || !last) return null;
+
+  const startPrice = roundPrice(first.value);
+  const endPrice = roundPrice(last.value);
+
+  if (
+    !Number.isFinite(startPrice) ||
+    startPrice <= 0 ||
+    !Number.isFinite(endPrice)
+  ) {
+    return null;
+  }
+
+  return ((endPrice - startPrice) / startPrice) * 100;
+}
+
+function seriesDataKey(ticker) {
+  return `return_${String(ticker)
+    .replace(/[^A-Z0-9]/gi, "_")
+    .toUpperCase()}`;
+}
+
+function alignComparisonSeries(tickerSeries, primaryTicker) {
+  const entries = Object.entries(tickerSeries);
+
+  if (entries.length < 2) return [];
+
+  const keySets = entries.map(
+    ([, points]) => new Set(points.map((point) => point.key))
+  );
+
+  const primaryPoints = tickerSeries[primaryTicker] || [];
+
+  const sharedKeys = primaryPoints
+    .map((point) => point.key)
+    .filter((key) => keySets.every((set) => set.has(key)));
+
+  if (sharedKeys.length < 2) return [];
+
+  const pointMaps = Object.fromEntries(
+    entries.map(([ticker, points]) => [
+      ticker,
+      new Map(points.map((point) => [point.key, point])),
+    ])
+  );
+
+  const basePrices = {};
+
+  for (const [ticker] of entries) {
+    const firstPoint = pointMaps[ticker].get(sharedKeys[0]);
+    const basePrice = roundPrice(firstPoint?.value);
+
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      return [];
+    }
+
+    basePrices[ticker] = basePrice;
+  }
+
+  return sharedKeys.map((key) => {
+    const primaryPoint = pointMaps[primaryTicker].get(key);
+
+    const row = {
+      timestamp: primaryPoint.timestamp,
+      label: primaryPoint.label,
+    };
+
+    for (const [ticker] of entries) {
+      const point = pointMaps[ticker].get(key);
+      const displayedPrice = roundPrice(point?.value);
+
+      row[seriesDataKey(ticker)] = Number.isFinite(displayedPrice)
+        ? ((displayedPrice - basePrices[ticker]) / basePrices[ticker]) * 100
+        : null;
+    }
+
+    return row;
+  });
+}
+
+function getSeriesReturn(chartData, ticker) {
+  const key = seriesDataKey(ticker);
+
+  const lastValue = [...chartData]
+    .reverse()
+    .find((point) => Number.isFinite(point?.[key]))?.[key];
+
+  return Number.isFinite(lastValue) ? lastValue : null;
+}
+
+function metricValue(metrics, keys) {
+  for (const key of keys) {
+    const value = Number(metrics?.[key]);
 
     if (
       metrics?.[key] !== null &&
@@ -215,638 +361,34 @@ function metricValue(
   return null;
 }
 
-function formatFundamentalMetric(
-  value,
-  format,
-) {
-  if (!Number.isFinite(value)) {
-    return UNAVAILABLE_VALUE;
-  }
+function formatFundamentalMetric(value, format) {
+  if (!Number.isFinite(value)) return UNAVAILABLE_VALUE;
 
   if (format === "marketCap") {
-    return new Intl.NumberFormat(
-      "en-US",
-      {
-        style: "currency",
-        currency: "USD",
-        notation: "compact",
-        maximumFractionDigits: 2,
-      },
-    ).format(value);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      notation: "compact",
+      maximumFractionDigits: 2,
+    }).format(value);
   }
 
   if (format === "currency") {
-    return new Intl.NumberFormat(
-      "en-US",
-      {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      },
-    ).format(value);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
   }
 
   if (format === "percent") {
-    return `${(
-      value * 100
-    ).toFixed(2)}%`;
+    return `${(value * 100).toFixed(2)}%`;
   }
 
-  return value.toLocaleString(
-    "en-US",
-    {
-      maximumFractionDigits: 2,
-    },
-  );
-}
-
-function roundPrice(value) {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return null;
-  }
-
-  return (
-    Math.round(
-      (number + Number.EPSILON) * 100,
-    ) / 100
-  );
-}
-
-function normalizePrefetchedQuote(value) {
-  if (
-    !value ||
-    typeof value !== "object"
-  ) {
-    return null;
-  }
-
-  const currentPrice = Number(
-    value.c ??
-      value.currentPrice ??
-      value.current_price ??
-      value.price,
-  );
-
-  const previousClose = Number(
-    value.pc ??
-      value.previousClose ??
-      value.previous_close,
-  );
-
-  const dailyPercent = Number(
-    value.dp ??
-      value.dailyGain ??
-      value.dailyPercent ??
-      value.changePercent ??
-      value.change_percent,
-  );
-
-  const dailyChange = Number(
-    value.d ??
-      value.dailyChange ??
-      value.change,
-  );
-
-  const normalized = {
-    c: Number.isFinite(currentPrice)
-      ? currentPrice
-      : null,
-
-    pc: Number.isFinite(previousClose)
-      ? previousClose
-      : null,
-
-    dp: Number.isFinite(dailyPercent)
-      ? dailyPercent
-      : null,
-
-    d: Number.isFinite(dailyChange)
-      ? dailyChange
-      : null,
-  };
-
-  return Object.values(
-    normalized,
-  ).some(Number.isFinite)
-    ? normalized
-    : null;
-}
-
-async function marketDataProxy(
-  body,
-  signal,
-) {
-  if (signal?.aborted) {
-    throw new DOMException(
-      "The operation was aborted.",
-      "AbortError",
-    );
-  }
-
-  const payload =
-    await financialDatasetsRequest(
-      body,
-    );
-
-  if (signal?.aborted) {
-    throw new DOMException(
-      "The operation was aborted.",
-      "AbortError",
-    );
-  }
-
-  return payload;
-}
-
-function getPeriodBounds(period) {
-  const config =
-    PERIOD_CONFIG[period] ||
-    PERIOD_CONFIG["1M"];
-
-  const to = Math.floor(
-    Date.now() / 1000,
-  );
-
-  if (period === "All") {
-    return {
-      from: 1,
-      to,
-      resolution:
-        config.resolution,
-    };
-  }
-
-  if (period === "YTD") {
-    const now = new Date();
-
-    return {
-      from: Math.floor(
-        Date.UTC(
-          now.getUTCFullYear(),
-          0,
-          1,
-          0,
-          0,
-          0,
-          0,
-        ) / 1000,
-      ),
-
-      to,
-
-      resolution:
-        config.resolution,
-    };
-  }
-
-  return {
-    from:
-      to -
-      config.daysBack *
-        86400,
-
-    to,
-
-    resolution:
-      config.resolution,
-  };
-}
-
-function formatChartLabel(
-  timestamp,
-  period,
-) {
-  const date = new Date(
-    timestamp * 1000,
-  );
-
-  if (period === "1D") {
-    return date.toLocaleTimeString(
-      "en-US",
-      {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      },
-    );
-  }
-
-  if (
-    [
-      "1W",
-      "1M",
-      "3M",
-      "6M",
-      "YTD",
-    ].includes(period)
-  ) {
-    return date.toLocaleDateString(
-      "en-US",
-      {
-        month: "short",
-        day: "numeric",
-      },
-    );
-  }
-
-  return date.toLocaleDateString(
-    "en-US",
-    {
-      month: "short",
-      year: "2-digit",
-    },
-  );
-}
-
-function getTimestampKey(
-  timestamp,
-  period,
-) {
-  const date = new Date(
-    timestamp * 1000,
-  );
-
-  if (period === "1D") {
-    const minutes =
-      date.getUTCMinutes();
-
-    const bucketMinutes =
-      Math.floor(
-        minutes / 5,
-      ) * 5;
-
-    return Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      date.getUTCHours(),
-      bucketMinutes,
-    );
-  }
-
-  return Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-  );
-}
-
-async function fetchChartData(
-  ticker,
-  period,
-  signal,
-) {
-  const {
-    from,
-    to,
-    resolution,
-  } = getPeriodBounds(period);
-
-  const result =
-    await marketDataProxy(
-      {
-        action:
-          "candles_range",
-
-        ticker,
-
-        period,
-
-        resolution,
-
-        from,
-
-        to,
-      },
-      signal,
-    );
-
-  const candles =
-    Array.isArray(
-      result?.candles,
-    )
-      ? result.candles
-      : [];
-
-  const points = candles
-    .map((candle) => ({
-      timestamp:
-        Number(candle?.t),
-
-      value:
-        Number(candle?.c),
-    }))
-    .filter(
-      (point) =>
-        Number.isFinite(
-          point.timestamp,
-        ) &&
-        Number.isFinite(
-          point.value,
-        ),
-    )
-    .sort(
-      (a, b) =>
-        a.timestamp -
-        b.timestamp,
-    );
-
-  if (points.length < 2) {
-    throw new Error(
-      `No chart data returned for ${ticker} (${period})`,
-    );
-  }
-
-  return points.map(
-    (point) => ({
-      timestamp:
-        point.timestamp,
-
-      key:
-        getTimestampKey(
-          point.timestamp,
-          period,
-        ),
-
-      label:
-        formatChartLabel(
-          point.timestamp,
-          period,
-        ),
-
-      value:
-        point.value,
-    }),
-  );
-}
-
-function calculatePeriodReturn(
-  points,
-  period,
-  officialDailyReturn,
-) {
-  /*
-   * The Watchlist uses the provider-normalized daily return.
-   * Keep that exact value for 1D.
-   */
-  if (
-    period === "1D" &&
-    Number.isFinite(
-      officialDailyReturn,
-    )
-  ) {
-    return officialDailyReturn;
-  }
-
-  const first =
-    points.find(
-      (point) =>
-        Number.isFinite(
-          point?.value,
-        ),
-    );
-
-  const last =
-    [...points]
-      .reverse()
-      .find((point) =>
-        Number.isFinite(
-          point?.value,
-        ),
-      );
-
-  if (!first || !last) {
-    return null;
-  }
-
-  /*
-   * The UI displays prices to two decimals.
-   * Calculate the displayed return from those same
-   * visible values so the start price, end price,
-   * and percentage always agree.
-   */
-  const startPrice =
-    roundPrice(
-      first.value,
-    );
-
-  const endPrice =
-    roundPrice(
-      last.value,
-    );
-
-  if (
-    !Number.isFinite(
-      startPrice,
-    ) ||
-    startPrice <= 0 ||
-    !Number.isFinite(
-      endPrice,
-    )
-  ) {
-    return null;
-  }
-
-  return (
-    (
-      endPrice -
-      startPrice
-    ) /
-    startPrice
-  ) * 100;
-}
-
-const MAX_COMPARISON_TICKERS = 4;
-
-const COMPARISON_COLORS = [
-  "#6366f1",
-  "#f59e0b",
-  "#8b5cf6",
-  "#06b6d4",
-];
-
-function normalizeTickerInput(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase();
-}
-
-function seriesDataKey(ticker) {
-  return `return_${String(ticker)
-    .replace(/[^A-Z0-9]/gi, "_")
-    .toUpperCase()}`;
-}
-
-function alignComparisonSeries(
-  tickerSeries,
-  primaryTicker,
-) {
-  const entries =
-    Object.entries(tickerSeries);
-
-  if (entries.length < 2) {
-    return [];
-  }
-
-  const keySets =
-    entries.map(
-      ([, points]) =>
-        new Set(
-          points.map(
-            (point) =>
-              point.key,
-          ),
-        ),
-    );
-
-  const primaryPoints =
-    tickerSeries[
-      primaryTicker
-    ] || [];
-
-  const sharedKeys =
-    primaryPoints
-      .map(
-        (point) =>
-          point.key,
-      )
-      .filter(
-        (key) =>
-          keySets.every(
-            (set) =>
-              set.has(key),
-          ),
-      );
-
-  if (sharedKeys.length < 2) {
-    return [];
-  }
-
-  const pointMaps =
-    Object.fromEntries(
-      entries.map(
-        ([ticker, points]) => [
-          ticker,
-          new Map(
-            points.map(
-              (point) => [
-                point.key,
-                point,
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-
-  const basePrices = {};
-
-  for (
-    const [ticker] of
-      entries
-  ) {
-    const firstPoint =
-      pointMaps[ticker].get(
-        sharedKeys[0],
-      );
-
-    const basePrice =
-      roundPrice(
-        firstPoint?.value,
-      );
-
-    if (
-      !Number.isFinite(
-        basePrice,
-      ) ||
-      basePrice <= 0
-    ) {
-      return [];
-    }
-
-    basePrices[ticker] =
-      basePrice;
-  }
-
-  return sharedKeys.map(
-    (key) => {
-      const primaryPoint =
-        pointMaps[
-          primaryTicker
-        ].get(key);
-
-      const row = {
-        timestamp:
-          primaryPoint.timestamp,
-
-        label:
-          primaryPoint.label,
-      };
-
-      for (
-        const [ticker] of
-          entries
-      ) {
-        const point =
-          pointMaps[ticker].get(
-            key,
-          );
-
-        const displayedPrice =
-          roundPrice(
-            point?.value,
-          );
-
-        row[
-          seriesDataKey(
-            ticker,
-          )
-        ] =
-          Number.isFinite(
-            displayedPrice,
-          )
-            ? (
-                (
-                  displayedPrice -
-                  basePrices[ticker]
-                ) /
-                basePrices[ticker]
-              ) * 100
-            : null;
-      }
-
-      return row;
-    },
-  );
-}
-
-function getSeriesReturn(
-  chartData,
-  ticker,
-) {
-  const key =
-    seriesDataKey(
-      ticker,
-    );
-
-  const lastValue =
-    [...chartData]
-      .reverse()
-      .find(
-        (point) =>
-          Number.isFinite(
-            point?.[key],
-          ),
-      )?.[key];
-
-  return Number.isFinite(
-    lastValue,
-  )
-    ? lastValue
-    : null;
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
 }
 
 function ChartTooltip({
@@ -857,117 +399,56 @@ function ChartTooltip({
   ticker,
   periodStartPrice,
 }) {
-  if (
-    !active ||
-    !payload?.length
-  ) {
-    return null;
-  }
+  if (!active || !payload?.length) return null;
 
-  const displayedStartPrice =
-    roundPrice(
-      periodStartPrice,
-    );
+  const displayedStartPrice = roundPrice(periodStartPrice);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-lg">
-      <p className="mb-1 text-xs font-medium text-gray-500">
+    <div className="rounded-[14px] border border-border bg-card px-3 py-2.5 text-foreground shadow-xl">
+      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
         {label}
       </p>
 
-      {payload.map(
-        (entry) => {
-          const displayedValue =
-            roundPrice(
-              entry.value,
-            );
+      {payload.map((entry) => {
+        const displayedValue = roundPrice(entry.value);
 
-          if (
-            !Number.isFinite(
-              displayedValue,
-            )
-          ) {
-            return null;
-          }
+        if (!Number.isFinite(displayedValue)) return null;
 
-          const growthPct =
-            comparisonsActive
-              ? displayedValue
-              : Number.isFinite(
-                    displayedStartPrice,
-                  ) &&
-                  displayedStartPrice >
-                    0
-                ? (
-                    (
-                      displayedValue -
-                      displayedStartPrice
-                    ) /
-                    displayedStartPrice
-                  ) * 100
-                : 0;
+        const growthPct = comparisonsActive
+          ? displayedValue
+          : Number.isFinite(displayedStartPrice) && displayedStartPrice > 0
+            ? ((displayedValue - displayedStartPrice) / displayedStartPrice) * 100
+            : 0;
 
-          const positive =
-            growthPct >= 0;
+        const positive = growthPct >= 0;
 
-          return (
-            <div
-              key={
-                entry.dataKey
-              }
-              className="flex min-w-[170px] items-center justify-between gap-4 py-0.5 text-xs"
-            >
-              <span className="flex items-center gap-2 font-medium text-gray-600">
-                <span
-                  className="h-0.5 w-4 rounded-full"
-                  style={{
-                    backgroundColor:
-                      entry.color,
-                  }}
-                />
-
-                {entry.name ||
-                  ticker}
-              </span>
-
+        return (
+          <div
+            key={entry.dataKey}
+            className="flex min-w-[168px] items-center justify-between gap-4 py-0.5 text-xs"
+          >
+            <span className="flex items-center gap-2 font-medium text-muted-foreground">
               <span
-                className={`font-semibold ${
-                  positive
-                    ? "text-emerald-600"
-                    : "text-red-600"
-                }`}
-              >
-                {comparisonsActive
-                  ? `${
-                      positive
-                        ? "+"
-                        : ""
-                    }${displayedValue.toFixed(
-                      2,
-                    )}%`
-                  : `$${displayedValue.toFixed(
-                      2,
-                    )}`}
+                className="h-0.5 w-4 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
+              {entry.name || ticker}
+            </span>
 
-                {!comparisonsActive && (
-                  <span className="ml-2">
-                    {positive
-                      ? "▲"
-                      : "▼"}{" "}
-                    {positive
-                      ? "+"
-                      : ""}
-                    {growthPct.toFixed(
-                      2,
-                    )}
-                    %
-                  </span>
-                )}
-              </span>
-            </div>
-          );
-        },
-      )}
+            <span
+              className={
+                positive
+                  ? "font-semibold text-emerald-600"
+                  : "font-semibold text-red-600"
+              }
+            >
+              {comparisonsActive
+                ? `${positive ? "+" : ""}${displayedValue.toFixed(2)}%`
+                : `$${displayedValue.toFixed(2)}`}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -982,70 +463,23 @@ function StockChart({
   onDailyReturnChange,
   initialDailyReturn,
 }) {
-  const [
-    compareTickers,
-    setCompareTickers,
-  ] = useState([]);
-
-  const [
-    compareInput,
-    setCompareInput,
-  ] = useState("");
-
-  const [
-    compareError,
-    setCompareError,
-  ] = useState("");
-
-  const [
-    showInput,
-    setShowInput,
-  ] = useState(false);
-
-  const [
-    chartData,
-    setChartData,
-  ] = useState([]);
-
-  const [
-    chartLoading,
-    setChartLoading,
-  ] = useState(false);
-
-  const [
-    chartError,
-    setChartError,
-  ] = useState("");
-
-  const [
-    primaryReturn,
-    setPrimaryReturn,
-  ] = useState(
-    activePeriod ===
-      "1D" &&
-      Number.isFinite(
-        initialDailyReturn,
-      )
+  const [compareTickers, setCompareTickers] = useState([]);
+  const [compareInput, setCompareInput] = useState("");
+  const [compareError, setCompareError] = useState("");
+  const [showInput, setShowInput] = useState(false);
+  const [chartData, setChartData] = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
+  const [chartError, setChartError] = useState("");
+  const [primaryReturn, setPrimaryReturn] = useState(
+    activePeriod === "1D" && Number.isFinite(initialDailyReturn)
       ? initialDailyReturn
-      : null,
+      : null
   );
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const tooltipTimerRef = useRef(null);
 
-  const [
-    tooltipVisible,
-    setTooltipVisible,
-  ] = useState(false);
-
-  const tooltipTimerRef =
-    useRef(null);
-
-  const primaryTicker =
-    normalizeTickerInput(
-      ticker,
-    );
-
-  const comparisonsActive =
-    compareTickers.length >
-    0;
+  const primaryTicker = normalizeTickerInput(ticker);
+  const comparisonsActive = compareTickers.length > 0;
 
   useEffect(() => {
     setCompareTickers([]);
@@ -1055,234 +489,127 @@ function StockChart({
   }, [primaryTicker]);
 
   function clearTooltipTimer() {
-    if (
-      tooltipTimerRef.current
-    ) {
-      window.clearTimeout(
-        tooltipTimerRef.current,
-      );
-
-      tooltipTimerRef.current =
-        null;
+    if (tooltipTimerRef.current) {
+      window.clearTimeout(tooltipTimerRef.current);
+      tooltipTimerRef.current = null;
     }
   }
 
   function hideTooltip() {
     clearTooltipTimer();
-
-    setTooltipVisible(
-      false,
-    );
+    setTooltipVisible(false);
   }
 
   function showTooltipTemporarily() {
     clearTooltipTimer();
+    setTooltipVisible(true);
 
-    setTooltipVisible(
-      true,
-    );
-
-    tooltipTimerRef.current =
-      window.setTimeout(
-        () => {
-          setTooltipVisible(
-            false,
-          );
-
-          tooltipTimerRef.current =
-            null;
-        },
-        TOOLTIP_HIDE_DELAY,
-      );
+    tooltipTimerRef.current = window.setTimeout(() => {
+      setTooltipVisible(false);
+      tooltipTimerRef.current = null;
+    }, TOOLTIP_HIDE_DELAY);
   }
 
   useEffect(() => {
-    return () => {
-      clearTooltipTimer();
-    };
+    return () => clearTooltipTimer();
   }, []);
 
   useEffect(() => {
     hideTooltip();
 
     const fallbackReturn =
-      activePeriod ===
-        "1D" &&
-      Number.isFinite(
-        initialDailyReturn,
-      )
+      activePeriod === "1D" && Number.isFinite(initialDailyReturn)
         ? initialDailyReturn
         : null;
 
-    setPrimaryReturn(
-      fallbackReturn,
-    );
+    setPrimaryReturn(fallbackReturn);
+    onPeriodReturnChange(fallbackReturn);
 
-    onPeriodReturnChange(
-      fallbackReturn,
-    );
-
-    const controller =
-      new AbortController();
+    const controller = new AbortController();
 
     async function loadChart() {
       setChartLoading(true);
       setChartError("");
 
       try {
-        const requestedTickers = [
-          primaryTicker,
-          ...compareTickers,
-        ];
+        const requestedTickers = [primaryTicker, ...compareTickers];
 
-        const seriesResults =
-          await Promise.all(
-            requestedTickers.map(
-              async (
-                requestedTicker,
-              ) => [
-                requestedTicker,
-                await fetchChartData(
-                  requestedTicker,
-                  activePeriod,
-                  controller.signal,
-                ),
-              ],
+        const seriesResults = await Promise.all(
+          requestedTickers.map(async (requestedTicker) => [
+            requestedTicker,
+            await fetchChartData(
+              requestedTicker,
+              activePeriod,
+              controller.signal
             ),
-          );
-
-        const tickerSeries =
-          Object.fromEntries(
-            seriesResults,
-          );
-
-        const primary =
-          tickerSeries[
-            primaryTicker
-          ];
-
-        const nextReturn =
-          calculatePeriodReturn(
-            primary,
-            activePeriod,
-            initialDailyReturn,
-          );
-
-        setPrimaryReturn(
-          nextReturn,
+          ])
         );
 
-        onPeriodReturnChange(
-          nextReturn,
+        const tickerSeries = Object.fromEntries(seriesResults);
+        const primary = tickerSeries[primaryTicker];
+
+        const nextReturn = calculatePeriodReturn(
+          primary,
+          activePeriod,
+          initialDailyReturn
         );
+
+        setPrimaryReturn(nextReturn);
+        onPeriodReturnChange(nextReturn);
 
         if (
-          activePeriod ===
-            "1D" &&
-          !Number.isFinite(
-            initialDailyReturn,
-          ) &&
-          Number.isFinite(
-            nextReturn,
-          )
+          activePeriod === "1D" &&
+          !Number.isFinite(initialDailyReturn) &&
+          Number.isFinite(nextReturn)
         ) {
-          onDailyReturnChange(
-            nextReturn,
-          );
+          onDailyReturnChange(nextReturn);
         }
 
-        if (
-          comparisonsActive
-        ) {
-          const aligned =
-            alignComparisonSeries(
-              tickerSeries,
-              primaryTicker,
-            );
+        if (comparisonsActive) {
+          const aligned = alignComparisonSeries(
+            tickerSeries,
+            primaryTicker
+          );
 
-          if (
-            aligned.length < 2
-          ) {
+          if (aligned.length < 2) {
             throw new Error(
-              "Could not align the selected tickers on shared trading dates.",
+              "Could not align the selected tickers on shared trading dates."
             );
           }
 
-          setChartData(
-            aligned,
-          );
+          setChartData(aligned);
         } else {
           setChartData(
-            primary.map(
-              (point) => ({
-                timestamp:
-                  point.timestamp,
-
-                label:
-                  point.label,
-
-                primaryValue:
-                  point.value,
-              }),
-            ),
+            primary.map((point) => ({
+              timestamp: point.timestamp,
+              label: point.label,
+              primaryValue: point.value,
+            }))
           );
         }
       } catch (error) {
-        if (
-          error?.name ===
-          "AbortError"
-        ) {
-          return;
-        }
+        if (error?.name === "AbortError") return;
 
-        console.error(
-          "Chart load failed:",
-          error,
-        );
+        console.error("Chart load failed:", error);
 
         setChartData([]);
-
-        setPrimaryReturn(
-          fallbackReturn,
-        );
-
-        onPeriodReturnChange(
-          fallbackReturn,
-        );
-
-        if (
-          activePeriod ===
-            "1D" &&
-          !Number.isFinite(
-            initialDailyReturn,
-          )
-        ) {
-          onDailyReturnChange(
-            null,
-          );
-        }
+        setPrimaryReturn(fallbackReturn);
+        onPeriodReturnChange(fallbackReturn);
 
         setChartError(
           error?.message ||
-            "Unable to load chart data",
+            "Unable to load chart data"
         );
       } finally {
-        if (
-          !controller
-            .signal
-            .aborted
-        ) {
-          setChartLoading(
-            false,
-          );
+        if (!controller.signal.aborted) {
+          setChartLoading(false);
         }
       }
     }
 
     loadChart();
 
-    return () =>
-      controller.abort();
+    return () => controller.abort();
   }, [
     primaryTicker,
     activePeriod,
@@ -1293,541 +620,309 @@ function StockChart({
     initialDailyReturn,
   ]);
 
-  const periodStartPrice =
-    useMemo(() => {
-      if (comparisonsActive) {
-        return 0;
-      }
+  const periodStartPrice = useMemo(() => {
+    if (comparisonsActive) return 0;
 
-      return (
-        chartData.find(
-          (point) =>
-            Number.isFinite(
-              point.primaryValue,
-            ),
-        )?.primaryValue ||
-        currentPrice ||
-        0
-      );
-    }, [
-      chartData,
-      comparisonsActive,
-      currentPrice,
-    ]);
+    return (
+      chartData.find((point) =>
+        Number.isFinite(point.primaryValue)
+      )?.primaryValue ||
+      currentPrice ||
+      0
+    );
+  }, [chartData, comparisonsActive, currentPrice]);
 
-  const chartPositive =
-    Number.isFinite(
-      primaryReturn,
-    )
-      ? primaryReturn >= 0
-      : fallbackPositive;
+  const chartPositive = Number.isFinite(primaryReturn)
+    ? primaryReturn >= 0
+    : fallbackPositive;
 
-  const primaryColor =
-    chartPositive
-      ? "#10b981"
-      : "#ef4444";
+  const primaryColor = chartPositive ? "#10b981" : "#ef4444";
 
   const comparisonLegendItems = [
     {
-      ticker:
-        primaryTicker,
-      color:
-        primaryColor,
-      removable:
-        false,
-      value:
-        getSeriesReturn(
-          chartData,
-          primaryTicker,
-        ),
+      ticker: primaryTicker,
+      color: primaryColor,
+      removable: false,
+      value: getSeriesReturn(chartData, primaryTicker),
     },
 
-    ...compareTickers.map(
-      (
-        comparisonTicker,
-        index,
-      ) => ({
-        ticker:
-          comparisonTicker,
-        color:
-          COMPARISON_COLORS[
-            index
-          ],
-        removable:
-          true,
-        value:
-          getSeriesReturn(
-            chartData,
-            comparisonTicker,
-          ),
-      }),
-    ),
+    ...compareTickers.map((comparisonTicker, index) => ({
+      ticker: comparisonTicker,
+      color: COMPARISON_COLORS[index],
+      removable: true,
+      value: getSeriesReturn(chartData, comparisonTicker),
+    })),
   ];
 
-  function handleAddCompare(
-    event,
-  ) {
+  function handleAddCompare(event) {
     event.preventDefault();
 
-    const normalized =
-      normalizeTickerInput(
-        compareInput,
-      );
+    const normalized = normalizeTickerInput(compareInput);
 
-    if (!normalized) {
+    if (!normalized) return;
+
+    if (normalized === primaryTicker) {
+      setCompareError(`${primaryTicker} is already the primary ticker.`);
       return;
     }
 
-    if (
-      normalized ===
-        primaryTicker
-    ) {
-      setCompareError(
-        `${primaryTicker} is already the primary ticker.`,
-      );
+    if (compareTickers.includes(normalized)) {
+      setCompareError(`${normalized} is already being compared.`);
       return;
     }
 
-    if (
-      compareTickers.includes(
-        normalized,
-      )
-    ) {
-      setCompareError(
-        `${normalized} is already being compared.`,
-      );
+    if (compareTickers.length >= MAX_COMPARISON_TICKERS) {
+      setCompareError(`Maximum ${MAX_COMPARISON_TICKERS} comparison tickers.`);
       return;
     }
 
-    if (
-      compareTickers.length >=
-      MAX_COMPARISON_TICKERS
-    ) {
-      setCompareError(
-        `Maximum ${MAX_COMPARISON_TICKERS} comparison tickers.`,
-      );
-      return;
-    }
-
-    setCompareTickers(
-      (previous) => [
-        ...previous,
-        normalized,
-      ],
-    );
+    setCompareTickers((previous) => [
+      ...previous,
+      normalized,
+    ]);
 
     setCompareInput("");
     setCompareError("");
     setShowInput(false);
   }
 
-  function removeCompare(
-    comparisonTicker,
-  ) {
+  function removeCompare(comparisonTicker) {
     hideTooltip();
 
-    setCompareTickers(
-      (previous) =>
-        previous.filter(
-          (item) =>
-            item !==
-            comparisonTicker,
-        ),
-    );
-
-    setCompareError("");
-  }
-
-  function selectPeriod(
-    period,
-  ) {
-    hideTooltip();
-
-    const fallbackReturn =
-      period === "1D" &&
-      Number.isFinite(
-        initialDailyReturn,
+    setCompareTickers((previous) =>
+      previous.filter(
+        (item) => item !== comparisonTicker
       )
-        ? initialDailyReturn
-        : null;
-
-    setPrimaryReturn(
-      fallbackReturn,
-    );
-
-    onPeriodReturnChange(
-      fallbackReturn,
-    );
-
-    onPeriodChange(
-      period,
     );
   }
 
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h2 className="text-base font-semibold text-gray-900">
-          Price Chart
-        </h2>
+    <section className="rounded-[22px] border border-border bg-card p-4 shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+            Price Chart
+          </p>
 
-        {!comparisonsActive && (
-          <span
-            className={`text-sm font-semibold ${
-              Number.isFinite(
-                primaryReturn,
-              )
-                ? primaryReturn >=
-                  0
+          <p
+            className={[
+              "mt-1 text-[14px] font-semibold",
+              Number.isFinite(primaryReturn)
+                ? primaryReturn >= 0
                   ? "text-emerald-600"
                   : "text-red-600"
-                : "text-gray-400"
-            }`}
+                : "text-muted-foreground",
+            ].join(" ")}
           >
-            {Number.isFinite(
-              primaryReturn,
-            )
-              ? `${
-                  primaryReturn >=
-                  0
-                    ? "+"
-                    : ""
-                }${primaryReturn.toFixed(
-                  2,
-                )}%`
+            {Number.isFinite(primaryReturn)
+              ? `${primaryReturn >= 0 ? "+" : ""}${primaryReturn.toFixed(2)}%`
               : "—"}
-          </span>
-        )}
-      </div>
+          </p>
+        </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-1">
-        {PERIODS.map(
-          (period) => (
-            <button
-              key={period}
-              type="button"
-              onClick={() =>
-                selectPeriod(
-                  period,
-                )
-              }
-              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                activePeriod ===
-                period
-                  ? "bg-gray-900 text-white"
-                  : "text-gray-500 hover:bg-gray-100"
-              }`}
-            >
-              {period}
-            </button>
-          ),
-        )}
-
-        {compareTickers.length <
-          MAX_COMPARISON_TICKERS &&
+        {compareTickers.length < MAX_COMPARISON_TICKERS &&
           !showInput && (
             <button
               type="button"
-              onClick={() => {
-                setCompareError(
-                  "",
-                );
-
-                setShowInput(
-                  true,
-                );
-              }}
-              className="ml-auto inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900"
+              onClick={() => setShowInput(true)}
+              className="inline-flex h-[34px] items-center gap-1 rounded-[10px] bg-muted px-3 text-[11px] font-semibold text-foreground transition-transform active:scale-[0.96]"
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-3.5 w-3.5" />
               Compare
             </button>
           )}
-
-        {showInput && (
-          <form
-            onSubmit={
-              handleAddCompare
-            }
-            className="ml-auto flex items-center gap-1"
-          >
-            <Input
-              value={
-                compareInput
-              }
-              onChange={(
-                event,
-              ) => {
-                setCompareInput(
-                  event.target.value.toUpperCase(),
-                );
-
-                setCompareError(
-                  "",
-                );
-              }}
-              placeholder="TICKER"
-              className="h-7 w-24 px-2 text-xs uppercase"
-              maxLength={8}
-              autoFocus
-            />
-
-            <Button
-              type="submit"
-              size="sm"
-              className="h-7 px-2 text-xs"
-            >
-              Add
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowInput(
-                  false,
-                );
-
-                setCompareInput(
-                  "",
-                );
-
-                setCompareError(
-                  "",
-                );
-              }}
-              className="text-gray-400 hover:text-gray-900"
-              aria-label="Cancel comparison"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </form>
-        )}
-
-        {compareTickers.length >=
-          MAX_COMPARISON_TICKERS && (
-          <span className="ml-auto text-[11px] font-medium text-gray-400">
-            Maximum 4 comparisons
-          </span>
-        )}
       </div>
 
+      <div className="mt-3 flex w-full items-center gap-[2px]">
+        {PERIODS.map((period) => (
+          <button
+            key={period}
+            type="button"
+            onClick={() => onPeriodChange(period)}
+            className={[
+              "flex h-[28px] min-w-0 flex-1 items-center justify-center rounded-[7px] px-0.5 text-[9.5px] font-semibold tracking-[-0.15px] transition-[transform,background-color,color] duration-150 active:scale-[0.96]",
+              activePeriod === period
+                ? "bg-foreground text-background"
+                : "text-foreground hover:bg-muted",
+            ].join(" ")}
+          >
+            {period}
+          </button>
+        ))}
+      </div>
+
+      {showInput && (
+        <form
+          onSubmit={handleAddCompare}
+          className="mt-3 flex items-center gap-2"
+        >
+          <Input
+            value={compareInput}
+            onChange={(event) => {
+              setCompareInput(event.target.value.toUpperCase());
+              setCompareError("");
+            }}
+            placeholder="TICKER"
+            maxLength={8}
+            autoFocus
+            className="h-[38px] rounded-[11px] text-xs uppercase"
+          />
+
+          <Button
+            type="submit"
+            className="h-[38px] rounded-[11px] px-3 text-xs"
+          >
+            Add
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowInput(false);
+              setCompareInput("");
+              setCompareError("");
+            }}
+            className="flex h-[38px] w-[38px] items-center justify-center rounded-[11px] bg-muted text-muted-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </form>
+      )}
+
       {compareError && (
-        <p className="mb-3 text-xs font-medium text-red-600">
+        <p className="mt-2 text-[12px] font-medium text-red-600">
           {compareError}
         </p>
       )}
 
       {compareTickers.length > 0 && (
-        <>
-          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            {comparisonLegendItems.map(
-              (item) => {
-                const positive =
-                  Number.isFinite(
-                    item.value,
-                  )
-                    ? item.value >=
-                      0
-                    : null;
+        <div className="mt-3 flex flex-wrap gap-2">
+          {comparisonLegendItems.map((item) => {
+            const positive = Number.isFinite(item.value)
+              ? item.value >= 0
+              : null;
 
-                return (
-                  <div
-                    key={
-                      item.ticker
-                    }
-                    className="inline-flex items-center gap-2 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1.5"
+            return (
+              <div
+                key={item.ticker}
+                className="inline-flex items-center gap-2 rounded-[10px] border border-border bg-background px-2.5 py-1.5"
+              >
+                <span
+                  className="h-0.5 w-4 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
+
+                <span className="text-[11px] font-semibold text-foreground">
+                  {item.ticker}
+                </span>
+
+                <span
+                  className={[
+                    "text-[10px] font-semibold",
+                    positive === null
+                      ? "text-muted-foreground"
+                      : positive
+                        ? "text-emerald-600"
+                        : "text-red-600",
+                  ].join(" ")}
+                >
+                  {Number.isFinite(item.value)
+                    ? `${positive ? "+" : ""}${item.value.toFixed(2)}%`
+                    : "—"}
+                </span>
+
+                {item.removable && (
+                  <button
+                    type="button"
+                    onClick={() => removeCompare(item.ticker)}
+                    className="text-muted-foreground"
                   >
-                    <span
-                      className="h-0.5 w-5 rounded-full"
-                      style={{
-                        backgroundColor:
-                          item.color,
-                      }}
-                    />
-
-                    <span className="text-xs font-semibold text-gray-700">
-                      {item.ticker}
-                    </span>
-
-                    <span
-                      className={`text-[11px] font-semibold ${
-                        positive ===
-                        null
-                          ? "text-gray-400"
-                          : positive
-                            ? "text-emerald-600"
-                            : "text-red-600"
-                      }`}
-                    >
-                      {Number.isFinite(
-                        item.value,
-                      )
-                        ? `${
-                            positive
-                              ? "+"
-                              : ""
-                          }${item.value.toFixed(
-                            2,
-                          )}%`
-                        : "—"}
-                    </span>
-
-                    {item.removable && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeCompare(
-                            item.ticker,
-                          )
-                        }
-                        className="-mr-1 text-gray-400 transition-colors hover:text-gray-900"
-                        aria-label={`Remove ${item.ticker} comparison`}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                );
-              },
-            )}
-          </div>
-
-          <p className="mb-2 text-xs text-gray-400">
-            Showing percentage return from the first shared trading date.
-          </p>
-        </>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      <div className="relative h-[300px] w-full">
+      <div className="relative mt-4 h-[300px] w-full">
         {chartLoading && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
-            <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         )}
 
         {chartError ? (
-          <div className="flex h-full items-center justify-center text-center">
+          <div className="flex h-full items-center justify-center rounded-[16px] border border-dashed border-border bg-muted/25 px-5 text-center">
             <div>
-              <p className="text-sm font-semibold text-gray-700">
+              <p className="text-[14px] font-semibold text-foreground">
                 Chart unavailable
               </p>
 
-              <p className="mt-1 max-w-md text-xs text-gray-400">
+              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
                 {chartError}
               </p>
             </div>
           </div>
         ) : (
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-          >
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={
-                chartData
-              }
+              data={chartData}
               margin={{
-                top: 10,
+                top: 8,
                 right: 0,
                 bottom: 0,
-                left: 8,
+                left: 4,
               }}
-              onMouseMove={
-                showTooltipTemporarily
-              }
-              onMouseLeave={
-                hideTooltip
-              }
-              onTouchStart={
-                showTooltipTemporarily
-              }
-              onTouchMove={
-                showTooltipTemporarily
-              }
+              onMouseMove={showTooltipTemporarily}
+              onMouseLeave={hideTooltip}
+              onTouchStart={showTooltipTemporarily}
+              onTouchMove={showTooltipTemporarily}
               onTouchEnd={() => {
                 clearTooltipTimer();
-
-                tooltipTimerRef.current =
-                  window.setTimeout(
-                    () => {
-                      setTooltipVisible(
-                        false,
-                      );
-
-                      tooltipTimerRef.current =
-                        null;
-                    },
-                    TOOLTIP_HIDE_DELAY,
-                  );
+                tooltipTimerRef.current = window.setTimeout(
+                  () => setTooltipVisible(false),
+                  TOOLTIP_HIDE_DELAY
+                );
               }}
             >
               <XAxis
                 dataKey="label"
-                minTickGap={
-                  28
-                }
+                minTickGap={28}
                 tick={{
                   fontSize: 10,
-                  fill:
-                    "#9ca3af",
+                  fill: "hsl(var(--muted-foreground))",
                 }}
-                tickLine={
-                  false
-                }
-                axisLine={
-                  false
-                }
+                tickLine={false}
+                axisLine={false}
               />
 
               <YAxis
                 orientation="right"
-                domain={[
-                  "auto",
-                  "auto",
-                ]}
-                tickFormatter={(
-                  value,
-                ) =>
+                domain={["auto", "auto"]}
+                tickFormatter={(value) =>
                   comparisonsActive
-                    ? `${value.toFixed(
-                        0,
-                      )}%`
-                    : `$${value.toFixed(
-                        0,
-                      )}`
+                    ? `${value.toFixed(0)}%`
+                    : `$${value.toFixed(0)}`
                 }
                 tick={{
                   fontSize: 10,
-                  fill:
-                    "#9ca3af",
+                  fill: "hsl(var(--muted-foreground))",
                 }}
-                tickLine={
-                  false
-                }
-                axisLine={
-                  false
-                }
-                width={48}
+                tickLine={false}
+                axisLine={false}
+                width={46}
               />
 
               <Tooltip
-                active={
-                  tooltipVisible
-                }
-                isAnimationActive={
-                  false
-                }
+                active={tooltipVisible}
+                isAnimationActive={false}
                 content={
                   <ChartTooltip
-                    comparisonsActive={
-                      comparisonsActive
-                    }
-                    ticker={
-                      primaryTicker
-                    }
-                    periodStartPrice={
-                      periodStartPrice
-                    }
+                    comparisonsActive={comparisonsActive}
+                    ticker={primaryTicker}
+                    periodStartPrice={periodStartPrice}
                   />
                 }
               />
@@ -1836,71 +931,32 @@ function StockChart({
                 type="monotone"
                 dataKey={
                   comparisonsActive
-                    ? seriesDataKey(
-                        primaryTicker,
-                      )
+                    ? seriesDataKey(primaryTicker)
                     : "primaryValue"
                 }
-                name={
-                  primaryTicker
-                }
-                stroke={
-                  primaryColor
-                }
-                strokeWidth={
-                  2
-                }
+                name={primaryTicker}
+                stroke={primaryColor}
+                strokeWidth={2.25}
                 dot={false}
-                activeDot={{
-                  r: 4,
-                }}
-                isAnimationActive={
-                  false
-                }
-                connectNulls={
-                  false
-                }
+                activeDot={{ r: 4 }}
+                isAnimationActive={false}
+                connectNulls={false}
               />
 
-              {compareTickers.map(
-                (
-                  comparisonTicker,
-                  index,
-                ) => (
-                  <Line
-                    key={
-                      comparisonTicker
-                    }
-                    type="monotone"
-                    dataKey={
-                      seriesDataKey(
-                        comparisonTicker,
-                      )
-                    }
-                    name={
-                      comparisonTicker
-                    }
-                    stroke={
-                      COMPARISON_COLORS[
-                        index
-                      ]
-                    }
-                    strokeWidth={
-                      2
-                    }
-                    dot={false}
-                    activeDot={{
-                      r: 4,
-                    }}
-                    isAnimationActive={
-                      false
-                    }
-                    connectNulls={
-                      false
-                    }
-                  />
-                ),
-              )}
+              {compareTickers.map((comparisonTicker, index) => (
+                <Line
+                  key={comparisonTicker}
+                  type="monotone"
+                  dataKey={seriesDataKey(comparisonTicker)}
+                  name={comparisonTicker}
+                  stroke={COMPARISON_COLORS[index]}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                  isAnimationActive={false}
+                  connectNulls={false}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         )}
@@ -1915,70 +971,34 @@ function BuyDetailDialog({
   stock,
   onDone,
 }) {
-  const [
-    quantity,
-    setQuantity,
-  ] = useState("");
-
-  const [
-    price,
-    setPrice,
-  ] = useState("");
-
-  const [
-    loading,
-    setLoading,
-  ] = useState(false);
+  const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (open) {
       setPrice(
-        Number(
-          stock?.current_price,
-        ) > 0
-          ? Number(
-              stock.current_price,
-            ).toFixed(2)
-          : Number(
-                stock?.purchase_price,
-              ) > 0
-            ? Number(
-                stock.purchase_price,
-              ).toFixed(2)
-            : "",
+        Number(stock?.current_price) > 0
+          ? Number(stock.current_price).toFixed(2)
+          : Number(stock?.purchase_price) > 0
+            ? Number(stock.purchase_price).toFixed(2)
+            : ""
       );
     }
-  }, [
-    open,
-    stock,
-  ]);
+  }, [open, stock]);
 
-  async function handleSubmit(
-    event,
-  ) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    const parsedQuantity =
-      Number(quantity);
+    const parsedQuantity = Number(quantity);
+    const parsedPrice = Number(price);
 
-    const parsedPrice =
-      Number(price);
-
-    if (
-      !(parsedQuantity > 0) ||
-      !(parsedPrice > 0)
-    ) {
-      return;
-    }
+    if (!(parsedQuantity > 0) || !(parsedPrice > 0)) return;
 
     setLoading(true);
 
     try {
-      await onDone(
-        parsedQuantity,
-        parsedPrice,
-      );
-
+      await onDone(parsedQuantity, parsedPrice);
       setQuantity("");
     } finally {
       setLoading(false);
@@ -1986,86 +1006,53 @@ function BuyDetailDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={
-        onOpenChange
-      }
-    >
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100%-24px)] max-w-[380px] rounded-[22px] border-border bg-card p-5 text-foreground">
         <DialogHeader>
-          <DialogTitle>
-            Buy{" "}
-            {stock?.ticker}
+          <DialogTitle className="text-[20px] font-bold tracking-[-0.35px]">
+            Buy {stock?.ticker}
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-sm text-gray-500">
+        <p className="-mt-2 truncate text-[13px] text-muted-foreground">
           {stock?.company_name}
         </p>
 
-        <form
-          onSubmit={
-            handleSubmit
-          }
-          className="space-y-4"
-        >
-          <div>
-            <Label htmlFor="buy-quantity">
-              Shares
-            </Label>
-
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="buy-quantity">Shares</Label>
             <Input
               id="buy-quantity"
               type="number"
               min="0.000001"
               step="any"
-              value={
-                quantity
-              }
-              onChange={(
-                event,
-              ) =>
-                setQuantity(
-                  event.target.value,
-                )
-              }
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              className="h-[46px] rounded-[13px]"
               required
             />
           </div>
 
-          <div>
-            <Label htmlFor="buy-price">
-              Purchase Price
-            </Label>
-
+          <div className="space-y-2">
+            <Label htmlFor="buy-price">Purchase Price</Label>
             <Input
               id="buy-price"
               type="number"
               min="0.01"
               step="0.01"
               value={price}
-              onChange={(
-                event,
-              ) =>
-                setPrice(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setPrice(event.target.value)}
+              className="h-[46px] rounded-[13px]"
               required
             />
           </div>
 
           <Button
             type="submit"
-            disabled={
-              loading
-            }
-            className="w-full"
+            disabled={loading}
+            className="h-[48px] w-full rounded-[14px]"
           >
-            {loading && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Buy
           </Button>
         </form>
@@ -2080,43 +1067,21 @@ function SellDetailDialog({
   stock,
   onDone,
 }) {
-  const [
-    quantity,
-    setQuantity,
-  ] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [loading, setLoading] = useState(false);
+  const max = Number(stock?.quantity) || 0;
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(false);
-
-  const max =
-    Number(
-      stock?.quantity,
-    ) || 0;
-
-  async function handleSubmit(
-    event,
-  ) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    const parsedQuantity =
-      Number(quantity);
+    const parsedQuantity = Number(quantity);
 
-    if (
-      !(parsedQuantity > 0) ||
-      parsedQuantity > max
-    ) {
-      return;
-    }
+    if (!(parsedQuantity > 0) || parsedQuantity > max) return;
 
     setLoading(true);
 
     try {
-      await onDone(
-        parsedQuantity,
-      );
-
+      await onDone(parsedQuantity);
       setQuantity("");
     } finally {
       setLoading(false);
@@ -2124,35 +1089,21 @@ function SellDetailDialog({
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={
-        onOpenChange
-      }
-    >
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100%-24px)] max-w-[380px] rounded-[22px] border-border bg-card p-5 text-foreground">
         <DialogHeader>
-          <DialogTitle>
-            Sell{" "}
-            {stock?.ticker}
+          <DialogTitle className="text-[20px] font-bold tracking-[-0.35px]">
+            Sell {stock?.ticker}
           </DialogTitle>
         </DialogHeader>
 
-        <p className="text-sm text-gray-500">
-          {stock?.company_name}{" "}
-          · {max} shares held
+        <p className="-mt-2 text-[13px] text-muted-foreground">
+          {stock?.company_name} · {max} shares held
         </p>
 
-        <form
-          onSubmit={
-            handleSubmit
-          }
-          className="space-y-4"
-        >
-          <div>
-            <Label htmlFor="sell-quantity">
-              Shares to Sell
-            </Label>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="sell-quantity">Shares to Sell</Label>
 
             <div className="relative">
               <Input
@@ -2161,44 +1112,28 @@ function SellDetailDialog({
                 min="0.000001"
                 max={max}
                 step="any"
-                value={
-                  quantity
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setQuantity(
-                    event.target.value,
-                  )
-                }
-                className="pr-12"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                className="h-[46px] rounded-[13px] pr-14"
                 required
               />
 
               <button
                 type="button"
-                onClick={() =>
-                  setQuantity(
-                    String(max),
-                  )
-                }
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 hover:text-gray-900"
+                onClick={() => setQuantity(String(max))}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
               >
-                all
+                All
               </button>
             </div>
           </div>
 
           <Button
             type="submit"
-            disabled={
-              loading
-            }
-            className="w-full"
+            disabled={loading}
+            className="h-[48px] w-full rounded-[14px]"
           >
-            {loading && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Sell
           </Button>
         </form>
@@ -2207,499 +1142,243 @@ function SellDetailDialog({
   );
 }
 
+function SectionHeading({ children }) {
+  return (
+    <h2 className="mb-2 px-2 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+      {children}
+    </h2>
+  );
+}
+
 export default function StockDetail() {
-  const {
-    ticker: routeValue,
-  } = useParams();
+  const { ticker: routeValue } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
+  const { quotes = {}, fetchQuotes } = useMarketData();
 
-  const navigate =
-    useNavigate();
+  const [stock, setStock] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
+  const [fundamentals, setFundamentals] = useState(null);
+  const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
+  const [fundamentalsError, setFundamentalsError] = useState("");
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const [sellOpen, setSellOpen] = useState(false);
+  const [activePeriod, setActivePeriod] = useState("1D");
+  const [, setPeriodReturn] = useState(null);
+  const [dailyReturn, setDailyReturn] = useState(null);
 
-  const location =
-    useLocation();
+  const isTickerRoute = routeValue?.startsWith("ticker-");
 
-  const { user } =
-    useAuth();
+  const tickerFromRoute = isTickerRoute
+    ? routeValue.replace("ticker-", "").toUpperCase()
+    : null;
 
-  const {
-    quotes = {},
-    fetchQuotes,
-  } = useMarketData();
+  const stockId = isTickerRoute ? null : routeValue;
 
-  const [
-    stock,
-    setStock,
-  ] = useState(null);
-
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
-
-  const [
-    pageError,
-    setPageError,
-  ] = useState("");
-
-  const [
-    fundamentals,
-    setFundamentals,
-  ] = useState(null);
-
-  const [
-    fundamentalsLoading,
-    setFundamentalsLoading,
-  ] = useState(false);
-
-  const [
-    fundamentalsError,
-    setFundamentalsError,
-  ] = useState("");
-
-  const [
-    news,
-    setNews,
-  ] = useState([]);
-
-  const [
-    newsLoading,
-    setNewsLoading,
-  ] = useState(false);
-
-  const [
-    buyOpen,
-    setBuyOpen,
-  ] = useState(false);
-
-  const [
-    sellOpen,
-    setSellOpen,
-  ] = useState(false);
-
-  const [
-    activePeriod,
-    setActivePeriod,
-  ] = useState("1D");
-
-  const [
-    periodReturn,
-    setPeriodReturn,
-  ] = useState(null);
-
-  const [
-    dailyReturn,
-    setDailyReturn,
-  ] = useState(null);
-
-  const isTickerRoute =
-    routeValue?.startsWith(
-      "ticker-",
-    );
-
-  const tickerFromRoute =
-    isTickerRoute
-      ? routeValue
-          .replace(
-            "ticker-",
-            "",
-          )
-          .toUpperCase()
-      : null;
-
-  const stockId =
-    isTickerRoute
-      ? null
-      : routeValue;
-
-  const routeStateQuote =
-    useMemo(
-      () =>
-        normalizePrefetchedQuote(
+  const routeStateQuote = useMemo(
+    () =>
+      normalizePrefetchedQuote(
+        location.state?.quote ??
+          location.state?.cachedQuote ??
+          location.state?.marketQuote ??
+          location.state?.marketData ??
           location.state
-            ?.quote ??
-            location.state
-              ?.cachedQuote ??
-            location.state
-              ?.marketQuote ??
-            location.state
-              ?.marketData ??
-            location.state,
-        ),
-      [
-        location.state,
-      ],
-    );
+      ),
+    [location.state]
+  );
 
-  const routeStateTicker =
-    String(
-      location.state
-        ?.ticker ||
-        location.state
-          ?.symbol ||
-        "",
-    )
-      .trim()
-      .toUpperCase();
+  const routeStateTicker = String(
+    location.state?.ticker ||
+      location.state?.symbol ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
 
   const routeStateCompanyName =
-    location.state
-      ?.companyName ||
-    location.state
-      ?.company_name ||
+    location.state?.companyName ||
+    location.state?.company_name ||
     "";
 
   function handleBack() {
     const hasPreviousAppPage =
-      typeof window !==
-        "undefined" &&
-      Number(
-        window.history.state
-          ?.idx,
-      ) > 0;
+      typeof window !== "undefined" &&
+      Number(window.history.state?.idx) > 0;
 
-    if (
-      hasPreviousAppPage
-    ) {
+    if (hasPreviousAppPage) {
       navigate(-1);
       return;
     }
 
     const fallbackRoute =
-      location.state?.from ===
-      "/watchlist"
+      location.state?.from === "/watchlist"
         ? "/watchlist"
-        : location.state
-              ?.from ===
-            "/portfolio"
+        : location.state?.from === "/portfolio"
           ? "/portfolio"
           : isTickerRoute
             ? "/watchlist"
             : "/home";
 
-    navigate(
-      fallbackRoute,
-      {
-        replace: true,
-      },
-    );
+    navigate(fallbackRoute, { replace: true });
   }
 
   useEffect(() => {
-    const controller =
-      new AbortController();
+    const controller = new AbortController();
 
     async function loadStock() {
       setLoading(true);
       setPageError("");
-      setActivePeriod(
-        "1D",
-      );
-      setPeriodReturn(
-        null,
-      );
+      setActivePeriod("1D");
+      setPeriodReturn(null);
 
-      const cachedTicker =
-        tickerFromRoute ||
-        routeStateTicker;
+      const cachedTicker = tickerFromRoute || routeStateTicker;
 
       const cachedQuote =
         routeStateQuote ||
-        normalizePrefetchedQuote(
-          quotes[
-            cachedTicker
-          ],
-        );
+        normalizePrefetchedQuote(quotes[cachedTicker]);
 
-      if (
-        Number.isFinite(
-          cachedQuote?.dp,
-        )
-      ) {
-        setDailyReturn(
-          cachedQuote.dp,
-        );
+      if (Number.isFinite(cachedQuote?.dp)) {
+        setDailyReturn(cachedQuote.dp);
       } else {
-        setDailyReturn(
-          null,
-        );
+        setDailyReturn(null);
       }
 
       if (isTickerRoute) {
         const cachedPrice =
-          Number.isFinite(
-            cachedQuote?.c,
-          ) &&
-          cachedQuote.c > 0
+          Number.isFinite(cachedQuote?.c) && cachedQuote.c > 0
             ? cachedQuote.c
             : 0;
 
         setStock({
-          ticker:
-            tickerFromRoute,
-
-          company_name:
-            routeStateCompanyName ||
-            tickerFromRoute,
-
+          ticker: tickerFromRoute,
+          company_name: routeStateCompanyName || tickerFromRoute,
           sector: "",
-
           logo_url: "",
-
-          current_price:
-            cachedPrice,
-
-          purchase_price:
-            Number.isFinite(
-              cachedQuote?.pc,
-            )
-              ? cachedQuote.pc
-              : cachedPrice,
-
+          current_price: cachedPrice,
+          purchase_price: Number.isFinite(cachedQuote?.pc)
+            ? cachedQuote.pc
+            : cachedPrice,
           quantity: 0,
-
-          _watchlistOnly:
-            true,
+          _watchlistOnly: true,
         });
 
-        setLoading(
-          false,
-        );
+        setLoading(false);
       }
 
       try {
         if (isTickerRoute) {
-          const [
-            quoteResult,
-            profileResult,
-          ] =
-            await Promise.allSettled(
-              [
-                marketDataProxy(
-                  {
-                    action:
-                      "quote",
+          const [quoteResult, profileResult] = await Promise.allSettled([
+            marketDataProxy(
+              { action: "quote", ticker: tickerFromRoute },
+              controller.signal
+            ),
+            marketDataProxy(
+              { action: "profile", ticker: tickerFromRoute },
+              controller.signal
+            ),
+          ]);
 
-                    ticker:
-                      tickerFromRoute,
-                  },
-                  controller
-                    .signal,
-                ),
-
-                marketDataProxy(
-                  {
-                    action:
-                      "profile",
-
-                    ticker:
-                      tickerFromRoute,
-                  },
-                  controller
-                    .signal,
-                ),
-              ],
-            );
-
-          if (
-            controller.signal
-              .aborted
-          ) {
-            return;
-          }
+          if (controller.signal.aborted) return;
 
           const quote =
-            quoteResult.status ===
-              "fulfilled"
+            quoteResult.status === "fulfilled"
               ? quoteResult.value
               : null;
 
           const profile =
-            profileResult.status ===
-              "fulfilled"
+            profileResult.status === "fulfilled"
               ? profileResult.value
               : null;
 
-          if (
-            quoteResult.status ===
-              "rejected" ||
-            profileResult.status ===
-              "rejected"
-          ) {
-            console.warn(
-              "Stock detail market data is partially unavailable:",
-              quoteResult.status ===
-                "rejected"
-                ? quoteResult.reason
-                : profileResult.reason,
-            );
-
-            setPageError(
-              "Market data is temporarily unavailable. Showing available stock details.",
-            );
-          }
-
           const resolvedQuote =
-            normalizePrefetchedQuote(
-              quote,
-            ) ||
+            normalizePrefetchedQuote(quote) ||
             cachedQuote;
 
-          if (
-            Number.isFinite(
-              resolvedQuote?.dp,
-            )
-          ) {
-            setDailyReturn(
-              resolvedQuote.dp,
-            );
+          if (Number.isFinite(resolvedQuote?.dp)) {
+            setDailyReturn(resolvedQuote.dp);
           }
 
           setStock({
-            ticker:
-              tickerFromRoute,
-
+            ticker: tickerFromRoute,
             company_name:
               profile?.name ||
               routeStateCompanyName ||
               tickerFromRoute,
-
             sector:
               profile?.industry ||
               profile?.sector ||
               "",
-
-            logo_url:
-              profile?.logo ||
-              "",
-
-            current_price:
-              Number(
-                resolvedQuote?.c,
-              ) || 0,
-
+            logo_url: profile?.logo || "",
+            current_price: Number(resolvedQuote?.c) || 0,
             purchase_price:
-              Number(
-                resolvedQuote?.pc ||
-                  resolvedQuote?.c,
-              ) || 0,
-
+              Number(resolvedQuote?.pc || resolvedQuote?.c) || 0,
             quantity: 0,
-
-            _watchlistOnly:
-              true,
+            _watchlistOnly: true,
           });
         } else {
-          const {
-            data,
-            error,
-          } =
-            await supabase
-              .from(
-                "stocks",
-              )
-              .select("*")
-              .eq(
-                "id",
-                stockId,
-              )
-              .single();
+          const { data, error } = await supabase
+            .from("stocks")
+            .select("*")
+            .eq("id", stockId)
+            .single();
 
-          if (error) {
-            throw error;
-          }
+          if (error) throw error;
 
           if (!data) {
             setStock(null);
             return;
           }
 
-          const normalizedTicker =
-            String(
-              data.ticker ||
-                "",
-            )
-              .trim()
-              .toUpperCase();
+          const normalizedTicker = String(data.ticker || "")
+            .trim()
+            .toUpperCase();
 
           const cachedPortfolioQuote =
             routeStateQuote ||
-            normalizePrefetchedQuote(
-              quotes[
-                normalizedTicker
-              ],
-            );
+            normalizePrefetchedQuote(quotes[normalizedTicker]);
 
-          if (
-            Number.isFinite(
-              cachedPortfolioQuote
-                ?.dp,
-            )
-          ) {
-            setDailyReturn(
-              cachedPortfolioQuote.dp,
-            );
+          if (Number.isFinite(cachedPortfolioQuote?.dp)) {
+            setDailyReturn(cachedPortfolioQuote.dp);
           }
 
           setStock({
             ...data,
-
             current_price:
-              Number.isFinite(
-                cachedPortfolioQuote
-                  ?.c,
-              ) &&
-              cachedPortfolioQuote
-                .c > 0
+              Number.isFinite(cachedPortfolioQuote?.c) &&
+              cachedPortfolioQuote.c > 0
                 ? cachedPortfolioQuote.c
                 : data.current_price,
-
-            _watchlistOnly:
-              false,
+            _watchlistOnly: false,
           });
         }
       } catch (error) {
-        if (
-          error?.name ===
-          "AbortError"
-        ) {
-          return;
-        }
+        if (error?.name === "AbortError") return;
 
-        console.error(
-          "Stock detail load failed:",
-          error,
-        );
+        console.error("Stock detail load failed:", error);
 
         if (isTickerRoute) {
           setPageError(
-            "Market data is temporarily unavailable. Showing available stock details.",
+            "Market data is temporarily unavailable. Showing available stock details."
           );
           return;
         }
 
         setStock(null);
-
-        setPageError(
-          error?.message ||
-            "Unable to load stock",
-        );
+        setPageError(error?.message || "Unable to load stock");
       } finally {
-        if (
-          !controller
-            .signal
-            .aborted
-        ) {
-          setLoading(
-            false,
-          );
+        if (!controller.signal.aborted) {
+          setLoading(false);
         }
       }
     }
 
     loadStock();
 
-    return () =>
-      controller.abort();
+    return () => controller.abort();
   }, [
     isTickerRoute,
     stockId,
@@ -2707,128 +1386,66 @@ export default function StockDetail() {
   ]);
 
   useEffect(() => {
-    const normalizedTicker =
-      String(
-        stock?.ticker ||
-          "",
-      )
-        .trim()
-        .toUpperCase();
+    const normalizedTicker = String(stock?.ticker || "")
+      .trim()
+      .toUpperCase();
 
-    if (
-      !normalizedTicker
-    ) {
-      return undefined;
-    }
+    if (!normalizedTicker) return undefined;
 
     let active = true;
 
-    function applyQuote(
-      value,
-    ) {
-      if (!active) {
-        return;
+    function applyQuote(value) {
+      if (!active) return;
+
+      const quote = normalizePrefetchedQuote(value);
+
+      if (!quote) return;
+
+      if (Number.isFinite(quote.dp)) {
+        setDailyReturn(quote.dp);
       }
 
-      const quote =
-        normalizePrefetchedQuote(
-          value,
-        );
+      if (Number.isFinite(quote.c) && quote.c > 0) {
+        setStock((previous) => {
+          if (
+            !previous ||
+            previous.ticker?.toUpperCase() !== normalizedTicker
+          ) {
+            return previous;
+          }
 
-      if (!quote) {
-        return;
-      }
-
-      if (
-        Number.isFinite(
-          quote.dp,
-        )
-      ) {
-        setDailyReturn(
-          quote.dp,
-        );
-      }
-
-      if (
-        Number.isFinite(
-          quote.c,
-        ) &&
-        quote.c > 0
-      ) {
-        setStock(
-          (previous) => {
-            if (
-              !previous ||
-              previous.ticker
-                ?.toUpperCase() !==
-                normalizedTicker
-            ) {
-              return previous;
-            }
-
-            return {
-              ...previous,
-
-              current_price:
-                quote.c,
-
-              purchase_price:
-                previous
-                  ._watchlistOnly &&
-                Number.isFinite(
-                  quote.pc,
-                )
-                  ? quote.pc
-                  : previous.purchase_price,
-            };
-          },
-        );
+          return {
+            ...previous,
+            current_price: quote.c,
+            purchase_price:
+              previous._watchlistOnly &&
+              Number.isFinite(quote.pc)
+                ? quote.pc
+                : previous.purchase_price,
+          };
+        });
       }
     }
 
-    const stateQuoteMatches =
-      !routeStateTicker ||
-      routeStateTicker ===
-        normalizedTicker;
-
-    if (
-      stateQuoteMatches &&
-      routeStateQuote
-    ) {
-      applyQuote(
-        routeStateQuote,
-      );
+    if (!routeStateTicker || routeStateTicker === normalizedTicker) {
+      applyQuote(routeStateQuote);
     }
 
-    applyQuote(
-      quotes[
-        normalizedTicker
-      ],
-    );
+    applyQuote(quotes[normalizedTicker]);
 
-    fetchQuotes([
-      normalizedTicker,
-    ])
-      .then(
-        (result) => {
-          applyQuote(
-            result?.[
-              normalizedTicker
-            ] ||
-              quotes[
-                normalizedTicker
-              ],
-          );
-        },
-      )
-      .catch(
-        (error) => {
-          console.warn(
-            "Stock detail quote prefetch failed:",
-            error,
-          );
-        },
-      );
+    fetchQuotes([normalizedTicker])
+      .then((result) => {
+        applyQuote(
+          result?.[normalizedTicker] ||
+            quotes[normalizedTicker]
+        );
+      })
+      .catch((error) => {
+        console.warn(
+          "Stock detail quote prefetch failed:",
+          error
+        );
+      });
 
     return () => {
       active = false;
@@ -2855,53 +1472,35 @@ export default function StockDetail() {
       setFundamentalsError("");
 
       try {
-        const result =
-          await financialDatasetsRequest({
-            action: "metrics",
-            ticker: stock.ticker,
-          });
+        const result = await financialDatasetsRequest({
+          action: "metrics",
+          ticker: stock.ticker,
+        });
 
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
-        const metrics =
-          result?.snapshot ??
-          result?.metrics;
+        const metrics = result?.snapshot ?? result?.metrics;
 
-        if (
-          !metrics ||
-          typeof metrics !==
-            "object"
-        ) {
+        if (!metrics || typeof metrics !== "object") {
           throw new Error(
-            "Fundamentals are unavailable for this stock.",
+            "Fundamentals are unavailable for this stock."
           );
         }
 
-        setFundamentals(
-          metrics,
-        );
+        setFundamentals(metrics);
       } catch (error) {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
-        console.warn(
-          "Fundamentals fetch failed:",
-          error,
-        );
+        console.warn("Fundamentals fetch failed:", error);
 
         setFundamentals(null);
         setFundamentalsError(
           error?.message ||
-            "Unable to load fundamentals.",
+            "Unable to load fundamentals."
         );
       } finally {
         if (active) {
-          setFundamentalsLoading(
-            false,
-          );
+          setFundamentalsLoading(false);
         }
       }
     }
@@ -2914,486 +1513,243 @@ export default function StockDetail() {
   }, [stock?.ticker]);
 
   useEffect(() => {
-    if (
-      !stock?.ticker
-    ) {
-      return undefined;
-    }
+    if (!stock?.ticker) return undefined;
 
-    const controller =
-      new AbortController();
+    const controller = new AbortController();
 
     async function loadNews() {
-      setNewsLoading(
-        true,
-      );
+      setNewsLoading(true);
 
       try {
-        const result =
-          await marketDataProxy(
-            {
-              action:
-                "news",
-
-              ticker:
-                stock.ticker,
-            },
-            controller
-              .signal,
-          );
+        const result = await marketDataProxy(
+          {
+            action: "news",
+            ticker: stock.ticker,
+          },
+          controller.signal
+        );
 
         setNews(
-          Array.isArray(
-            result?.articles,
-          )
+          Array.isArray(result?.articles)
             ? result.articles
-            : [],
+            : []
         );
       } catch (error) {
-        if (
-          error?.name !==
-          "AbortError"
-        ) {
-          console.warn(
-            "News fetch failed:",
-            error,
-          );
-
+        if (error?.name !== "AbortError") {
+          console.warn("News fetch failed:", error);
           setNews([]);
         }
       } finally {
-        if (
-          !controller
-            .signal
-            .aborted
-        ) {
-          setNewsLoading(
-            false,
-          );
+        if (!controller.signal.aborted) {
+          setNewsLoading(false);
         }
       }
     }
 
     loadNews();
 
-    return () =>
-      controller.abort();
-  }, [
-    stock?.ticker,
-  ]);
+    return () => controller.abort();
+  }, [stock?.ticker]);
 
   async function refreshNews() {
-    if (
-      !stock?.ticker
-    ) {
-      return;
-    }
+    if (!stock?.ticker) return;
 
-    setNewsLoading(
-      true,
-    );
+    setNewsLoading(true);
 
     try {
-      const result =
-        await marketDataProxy({
-          action:
-            "news",
-
-          ticker:
-            stock.ticker,
-        });
+      const result = await marketDataProxy({
+        action: "news",
+        ticker: stock.ticker,
+      });
 
       setNews(
-        Array.isArray(
-          result?.articles,
-        )
+        Array.isArray(result?.articles)
           ? result.articles
-          : [],
+          : []
       );
-    } catch (error) {
-      console.warn(
-        "News refresh failed:",
-        error,
-      );
-
-      setNews([]);
     } finally {
-      setNewsLoading(
-        false,
-      );
+      setNewsLoading(false);
     }
   }
 
-  async function handleBuyDone(
-    quantity,
-    price,
-  ) {
-    if (
-      !user ||
-      !stock
-    ) {
-      return;
-    }
+  async function handleBuyDone(quantity, price) {
+    if (!user || !stock) return;
 
-    const oldQuantity =
-      Number(
-        stock.quantity,
-      ) || 0;
+    const oldQuantity = Number(stock.quantity) || 0;
+    const oldAverageCost = Number(stock.purchase_price) || 0;
+    const newQuantity = oldQuantity + quantity;
 
-    const oldAverageCost =
-      Number(
-        stock.purchase_price,
-      ) || 0;
+    const newAverageCost = oldQuantity
+      ? (
+          oldAverageCost * oldQuantity +
+          price * quantity
+        ) / newQuantity
+      : price;
 
-    const newQuantity =
-      oldQuantity +
-      quantity;
-
-    const newAverageCost =
-      oldQuantity
-        ? (
-            oldAverageCost *
-              oldQuantity +
-            price *
-              quantity
-          ) /
-          newQuantity
-        : price;
-
-    let currentPrice =
-      price;
+    let currentPrice = price;
 
     try {
-      const quote =
-        await marketDataProxy({
-          action:
-            "quote",
+      const quote = await marketDataProxy({
+        action: "quote",
+        ticker: stock.ticker,
+      });
 
-          ticker:
-            stock.ticker,
-        });
-
-      if (
-        Number(
-          quote?.c,
-        ) > 0
-      ) {
-        currentPrice =
-          Number(
-            quote.c,
-          );
+      if (Number(quote?.c) > 0) {
+        currentPrice = Number(quote.c);
       }
     } catch (error) {
       console.warn(
         "Quote refresh failed during buy:",
-        error,
+        error
       );
     }
 
-    const {
-      error:
-        transactionError,
-    } =
-      await supabase
-        .from(
-          "stock_transactions",
-        )
-        .insert({
-          user_id:
-            user.id,
-
-          ticker:
-            stock.ticker.toUpperCase(),
-
-          company_name:
-            stock.company_name,
-
-          type:
-            "buy",
-
-          quantity,
-
-          price,
-
-          total:
-            quantity *
-            price,
-        });
-
-    if (
-      transactionError
-    ) {
-      console.warn(
-        "Transaction log failed:",
-        transactionError,
-      );
-    }
-
-    if (
-      stock._watchlistOnly
-    ) {
-      const {
-        data,
-        error,
-      } =
-        await supabase
-          .from(
-            "stocks",
-          )
-          .insert({
-            user_id:
-              user.id,
-
-            ticker:
-              stock.ticker.toUpperCase(),
-
-            company_name:
-              stock.company_name,
-
-            quantity,
-
-            purchase_price:
-              price,
-
-            current_price:
-              currentPrice,
-
-            sector:
-              stock.sector ||
-              "",
-          })
-          .select()
-          .single();
-
-      if (error) {
-        throw error;
-      }
-
-      setStock({
-        ...data,
-
-        _watchlistOnly:
-          false,
+    await supabase
+      .from("stock_transactions")
+      .insert({
+        user_id: user.id,
+        ticker: stock.ticker.toUpperCase(),
+        company_name: stock.company_name,
+        type: "buy",
+        quantity,
+        price,
+        total: quantity * price,
       });
 
-      setBuyOpen(
-        false,
-      );
-
-      return;
-    }
-
-    const {
-      data,
-      error,
-    } =
-      await supabase
+    if (stock._watchlistOnly) {
+      const { data, error } = await supabase
         .from("stocks")
-        .update({
-          quantity:
-            newQuantity,
-
-          purchase_price:
-            +newAverageCost.toFixed(
-              4,
-            ),
-
-          current_price:
-            currentPrice,
+        .insert({
+          user_id: user.id,
+          ticker: stock.ticker.toUpperCase(),
+          company_name: stock.company_name,
+          quantity,
+          purchase_price: price,
+          current_price: currentPrice,
+          sector: stock.sector || "",
         })
-        .eq(
-          "id",
-          stockId,
-        )
         .select()
         .single();
 
-    if (error) {
-      throw error;
+      if (error) throw error;
+
+      setStock({
+        ...data,
+        _watchlistOnly: false,
+      });
+
+      setBuyOpen(false);
+      return;
     }
+
+    const { data, error } = await supabase
+      .from("stocks")
+      .update({
+        quantity: newQuantity,
+        purchase_price: +newAverageCost.toFixed(4),
+        current_price: currentPrice,
+      })
+      .eq("id", stockId)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     setStock({
       ...data,
-
-      _watchlistOnly:
-        false,
+      _watchlistOnly: false,
     });
 
     setBuyOpen(false);
   }
 
-  async function handleSellDone(
-    quantity,
-  ) {
-    if (
-      !user ||
-      !stock ||
-      stock._watchlistOnly
-    ) {
-      return;
-    }
+  async function handleSellDone(quantity) {
+    if (!user || !stock || stock._watchlistOnly) return;
 
-    const heldQuantity =
-      Number(
-        stock.quantity,
-      ) || 0;
-
+    const heldQuantity = Number(stock.quantity) || 0;
     const sellPrice =
-      Number(
-        stock.current_price,
-      ) ||
-      Number(
-        stock.purchase_price,
-      ) ||
+      Number(stock.current_price) ||
+      Number(stock.purchase_price) ||
       0;
 
-    const soldQuantity =
-      Math.min(
-        quantity,
-        heldQuantity,
-      );
+    const soldQuantity = Math.min(quantity, heldQuantity);
 
     const remainingQuantity =
       +Math.max(
         0,
-        heldQuantity -
-          soldQuantity,
+        heldQuantity - soldQuantity
       ).toFixed(6);
 
-    const {
-      error:
-        transactionError,
-    } =
-      await supabase
-        .from(
-          "stock_transactions",
-        )
-        .insert({
-          user_id:
-            user.id,
+    await supabase
+      .from("stock_transactions")
+      .insert({
+        user_id: user.id,
+        ticker: stock.ticker.toUpperCase(),
+        company_name: stock.company_name,
+        type: "sell",
+        quantity: soldQuantity,
+        price: sellPrice,
+        total: soldQuantity * sellPrice,
+      });
 
-          ticker:
-            stock.ticker.toUpperCase(),
+    if (remainingQuantity <= 0) {
+      const { error } = await supabase
+        .from("stocks")
+        .delete()
+        .eq("id", stockId);
 
-          company_name:
-            stock.company_name,
+      if (error) throw error;
 
-          type:
-            "sell",
-
-          quantity:
-            soldQuantity,
-
-          price:
-            sellPrice,
-
-          total:
-            soldQuantity *
-            sellPrice,
-        });
-
-    if (
-      transactionError
-    ) {
-      console.warn(
-        "Transaction log failed:",
-        transactionError,
-      );
-    }
-
-    if (
-      remainingQuantity <=
-      0
-    ) {
-      const {
-        error,
-      } =
-        await supabase
-          .from(
-            "stocks",
-          )
-          .delete()
-          .eq(
-            "id",
-            stockId,
-          );
-
-      if (error) {
-        throw error;
-      }
-
-      setSellOpen(
-        false,
-      );
-
-      navigate(
-        "/home",
-      );
-
+      setSellOpen(false);
+      navigate("/home");
       return;
     }
 
-    const {
-      data,
-      error,
-    } =
-      await supabase
-        .from("stocks")
-        .update({
-          quantity:
-            remainingQuantity,
-        })
-        .eq(
-          "id",
-          stockId,
-        )
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from("stocks")
+      .update({
+        quantity: remainingQuantity,
+      })
+      .eq("id", stockId)
+      .select()
+      .single();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     setStock({
       ...data,
-
-      _watchlistOnly:
-        false,
+      _watchlistOnly: false,
     });
 
-    setSellOpen(
-      false,
-    );
+    setSellOpen(false);
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
+      <div className="flex min-h-full items-center justify-center bg-background text-foreground">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (!stock) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="flex min-h-full items-center justify-center bg-background px-5 text-foreground">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900">
+          <h1 className="text-[20px] font-bold">
             Stock not found
           </h1>
 
           {pageError && (
-            <p className="mt-2 max-w-md text-sm text-gray-500">
+            <p className="mt-2 max-w-[300px] text-[13px] leading-5 text-muted-foreground">
               {pageError}
             </p>
           )}
 
           <button
             type="button"
-            onClick={
-              handleBack
-            }
-            className="mt-4 inline-block text-sm font-semibold text-gray-900 underline"
+            onClick={handleBack}
+            className="mt-4 text-[13px] font-semibold underline"
           >
             Go Back
           </button>
@@ -3402,107 +1758,85 @@ export default function StockDetail() {
     );
   }
 
-  const quantity =
-    Number(
-      stock.quantity,
-    ) || 0;
-
-  const currentPrice =
-    Number(
-      stock.current_price,
-    ) || 0;
-
-  const purchasePrice =
-    Number(
-      stock.purchase_price,
-    ) || 0;
-
-  const totalValue =
-    currentPrice *
-    quantity;
-
-  const totalCost =
-    purchasePrice *
-    quantity;
-
-  const gain =
-    totalValue -
-    totalCost;
-
-  const hasDailyReturn =
-    Number.isFinite(
-      dailyReturn,
-    );
-
-  const displayReturn =
-    hasDailyReturn
-      ? dailyReturn
-      : null;
-
-  const displayPositive =
-    hasDailyReturn
-      ? displayReturn >= 0
-      : gain >= 0;
+  const quantity = Number(stock.quantity) || 0;
+  const currentPrice = Number(stock.current_price) || 0;
+  const purchasePrice = Number(stock.purchase_price) || 0;
+  const totalValue = currentPrice * quantity;
+  const totalCost = purchasePrice * quantity;
+  const gain = totalValue - totalCost;
+  const hasDailyReturn = Number.isFinite(dailyReturn);
+  const displayPositive = hasDailyReturn
+    ? dailyReturn >= 0
+    : gain >= 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <button
-        type="button"
-        onClick={
-          handleBack
-        }
-        aria-label="Go back"
-        className="m-3 inline-flex min-h-[36px] items-center gap-1.5 px-2 py-1.5 text-sm font-semibold text-gray-900 transition-all hover:opacity-70 active:scale-95"
+    <div className="min-h-full bg-background text-foreground">
+      <header
+        className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur-xl"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <ArrowLeft
-          className="h-4 w-4"
-          strokeWidth={2}
-        />
-        Back
-      </button>
+        <div className="mx-auto grid h-[58px] w-full max-w-[430px] grid-cols-[44px_1fr_44px] items-end px-4 pb-2.5">
+          <button
+            type="button"
+            onClick={handleBack}
+            aria-label="Go back"
+            className="flex h-10 w-10 items-center justify-center rounded-[12px] text-foreground transition-[transform,background-color] active:scale-90 active:bg-muted"
+          >
+            <ArrowLeft size={21} strokeWidth={2} />
+          </button>
 
-      <main className="mx-auto max-w-6xl space-y-5 px-4 pb-10 sm:px-6">
-        {pageError &&
-          isTickerRoute && (
-            <div
-              role="status"
-              className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-            >
-              {pageError}
-            </div>
-          )}
+          <div className="min-w-0 text-center">
+            <p className="truncate text-[15px] font-bold tracking-[-0.2px]">
+              {stock.ticker}
+            </p>
+          </div>
 
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-7">
+          <div />
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-[430px] space-y-5 px-4 pb-[calc(28px+env(safe-area-inset-bottom))] pt-4">
+        {pageError && isTickerRoute && (
+          <div
+            role="status"
+            className="rounded-[16px] border border-amber-300/70 bg-amber-50 px-4 py-3 text-[12px] leading-5 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+          >
+            {pageError}
+          </div>
+        )}
+
+        <section className="rounded-[22px] border border-border bg-card p-5 shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2.5">
-                {stock.logo_url && (
-                  <img
-                    src={
-                      stock.logo_url
-                    }
-                    alt=""
-                    className="h-9 w-9 shrink-0 rounded-lg border border-gray-100 object-contain"
-                  />
-                )}
+            <div className="flex min-w-0 items-center gap-3">
+              {stock.logo_url ? (
+                <img
+                  src={stock.logo_url}
+                  alt=""
+                  className="h-11 w-11 shrink-0 rounded-[13px] border border-border bg-background object-contain p-1"
+                />
+              ) : (
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-border bg-background text-[13px] font-bold">
+                  {String(stock.ticker || "").slice(0, 2)}
+                </div>
+              )}
 
-                <h1 className="min-w-0 truncate text-xl font-bold leading-tight text-gray-900 sm:text-2xl">
-                  {
-                    stock.company_name
-                  }
+              <div className="min-w-0">
+                <h1 className="truncate text-[20px] font-bold tracking-[-0.45px]">
+                  {stock.company_name}
                 </h1>
+
+                <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
+                  {stock.ticker}
+                  {stock.sector ? ` · ${stock.sector}` : ""}
+                </p>
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex shrink-0 gap-1.5">
               <Button
                 type="button"
-                onClick={() =>
-                  setBuyOpen(
-                    true,
-                  )
-                }
-                className="h-8 min-w-[58px] rounded-md bg-black px-3 text-[11px] font-semibold text-white hover:bg-gray-800 sm:min-w-[64px] sm:text-xs"
+                onClick={() => setBuyOpen(true)}
+                className="h-[36px] rounded-[11px] px-3 text-[11px] font-semibold"
               >
                 Buy
               </Button>
@@ -3511,12 +1845,8 @@ export default function StockDetail() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
-                    setSellOpen(
-                      true,
-                    )
-                  }
-                  className="h-8 min-w-[58px] rounded-md px-3 text-[11px] font-semibold sm:min-w-[64px] sm:text-xs"
+                  onClick={() => setSellOpen(true)}
+                  className="h-[36px] rounded-[11px] px-3 text-[11px] font-semibold"
                 >
                   Sell
                 </Button>
@@ -3524,23 +1854,21 @@ export default function StockDetail() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col items-start gap-1.5">
-            <p className="text-[1.7rem] font-bold leading-none tracking-tight text-gray-900 sm:text-3xl">
-              {currentPrice >
-              0
-                ? `$${currentPrice.toFixed(
-                    2,
-                  )}`
+          <div className="mt-5">
+            <p className="text-[34px] font-bold leading-none tracking-[-1px]">
+              {currentPrice > 0
+                ? `$${currentPrice.toFixed(2)}`
                 : "—"}
             </p>
 
-            <div className="flex items-end gap-3">
+            <div className="mt-2 flex items-center gap-2">
               <div
-                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-semibold ${
+                className={[
+                  "inline-flex h-[30px] items-center gap-1 rounded-[9px] px-2.5 text-[13px] font-semibold",
                   displayPositive
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-red-50 text-red-600"
-                }`}
+                    ? "bg-emerald-500/10 text-emerald-600"
+                    : "bg-red-500/10 text-red-600",
+                ].join(" ")}
               >
                 {hasDailyReturn &&
                   (displayPositive ? (
@@ -3550,334 +1878,215 @@ export default function StockDetail() {
                   ))}
 
                 {hasDailyReturn
-                  ? `${
-                      displayPositive
-                        ? "+"
-                        : ""
-                    }${displayReturn.toFixed(
-                      2,
-                    )}%`
+                  ? `${displayPositive ? "+" : ""}${dailyReturn.toFixed(2)}%`
                   : "—"}
               </div>
 
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-medium leading-none text-gray-400">
-                  After-hours
-                </span>
-
-                <span className="text-sm font-semibold leading-none text-gray-400">
-                  N/A
-                </span>
-              </div>
+              <span className="text-[11px] font-medium text-muted-foreground">
+                Today
+              </span>
             </div>
           </div>
 
           {!stock._watchlistOnly && (
-            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-2">
               {[
                 {
-                  label:
-                    "Shares",
-
-                  value:
-                    quantity,
+                  label: "Shares",
+                  value: quantity,
                 },
-
                 {
-                  label:
-                    "Avg. Cost",
-
-                  value:
-                    `$${purchasePrice.toFixed(
-                      2,
-                    )}`,
+                  label: "Avg. Cost",
+                  value: `$${purchasePrice.toFixed(2)}`,
                 },
-
                 {
-                  label:
-                    "Total Value",
-
-                  value:
-                    `$${totalValue.toLocaleString(
-                      undefined,
-                      {
-                        minimumFractionDigits:
-                          2,
-
-                        maximumFractionDigits:
-                          2,
-                      },
-                    )}`,
+                  label: "Total Value",
+                  value: `$${totalValue.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`,
                 },
-
                 {
-                  label:
-                    "Gain/Loss",
-
-                  value:
-                    `${
-                      gain >= 0
-                        ? "+"
-                        : "-"
-                    }$${Math.abs(
-                      gain,
-                    ).toFixed(
-                      2,
-                    )}`,
-
+                  label: "Gain/Loss",
+                  value: `${gain >= 0 ? "+" : "-"}$${Math.abs(gain).toFixed(2)}`,
                   color:
                     gain >= 0
                       ? "text-emerald-600"
                       : "text-red-600",
                 },
-              ].map(
-                (item) => (
-                  <div
-                    key={
-                      item.label
-                    }
-                  >
-                    <p className="text-xs font-medium text-gray-400">
-                      {
-                        item.label
-                      }
-                    </p>
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[15px] border border-border/70 bg-background/45 px-3 py-3"
+                >
+                  <p className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                    {item.label}
+                  </p>
 
-                    <p
-                      className={`mt-1 text-sm font-semibold ${
-                        item.color ||
-                        "text-gray-900"
-                      }`}
-                    >
-                      {
-                        item.value
-                      }
-                    </p>
-                  </div>
-                ),
-              )}
+                  <p
+                    className={[
+                      "mt-1 truncate text-[14px] font-bold",
+                      item.color || "text-foreground",
+                    ].join(" ")}
+                  >
+                    {item.value}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
         </section>
 
         <StockChart
-          ticker={
-            stock.ticker
-          }
-          currentPrice={
-            currentPrice
-          }
+          ticker={stock.ticker}
+          currentPrice={currentPrice}
           fallbackPositive={
-            Number.isFinite(
-              dailyReturn,
-            )
-              ? dailyReturn >=
-                0
+            Number.isFinite(dailyReturn)
+              ? dailyReturn >= 0
               : gain >= 0
           }
-          activePeriod={
-            activePeriod
-          }
-          onPeriodChange={
-            setActivePeriod
-          }
-          onPeriodReturnChange={
-            setPeriodReturn
-          }
-          onDailyReturnChange={
-            setDailyReturn
-          }
-          initialDailyReturn={
-            dailyReturn
-          }
+          activePeriod={activePeriod}
+          onPeriodChange={setActivePeriod}
+          onPeriodReturnChange={setPeriodReturn}
+          onDailyReturnChange={setDailyReturn}
+          initialDailyReturn={dailyReturn}
         />
 
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-gray-900">
-              Fundamentals
-            </h2>
+        <section>
+          <SectionHeading>Fundamentals</SectionHeading>
 
-            {fundamentalsLoading && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Loading metrics…
-              </span>
+          <div className="rounded-[22px] border border-border bg-card p-4 shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[14px] font-bold tracking-[-0.2px]">
+                Key Metrics
+              </p>
+
+              {fundamentalsLoading && (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+
+            {fundamentalsError && (
+              <p className="mb-3 rounded-[12px] bg-red-500/10 px-3 py-2 text-[12px] text-red-600">
+                {fundamentalsError}
+              </p>
             )}
-          </div>
 
-          {fundamentalsError && (
-            <p
-              role="status"
-              className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600"
-            >
-              {fundamentalsError}
-            </p>
-          )}
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
-            {FUNDAMENTAL_METRICS.map(
-              (metric) => {
-                const value =
-                  metricValue(
-                    fundamentals,
-                    metric.keys,
-                  );
+            <div className="grid grid-cols-2 gap-2">
+              {FUNDAMENTAL_METRICS.map((metric) => {
+                const value = metricValue(
+                  fundamentals,
+                  metric.keys
+                );
 
                 return (
                   <div
-                    key={
-                      metric.label
-                    }
-                    className="min-w-0"
+                    key={metric.label}
+                    className="min-w-0 rounded-[15px] border border-border/70 bg-background/45 px-3 py-3"
                   >
-                    <p className="text-xs font-medium text-gray-400">
+                    <p className="truncate text-[10px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
                       {metric.label}
                     </p>
 
-                    <p className="mt-1 truncate text-sm font-semibold text-gray-900 sm:text-base">
+                    <p className="mt-1 truncate text-[14px] font-bold">
                       {formatFundamentalMetric(
                         value,
-                        metric.format,
+                        metric.format
                       )}
                     </p>
                   </div>
                 );
-              },
-            )}
+              })}
+            </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-              <Newspaper className="h-4 w-4" />
-              Recent News
-            </h2>
+        <section>
+          <SectionHeading>Recent News</SectionHeading>
 
-            <button
-              type="button"
-              onClick={
-                refreshNews
-              }
-              disabled={
-                newsLoading
-              }
-              className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${
-                  newsLoading
-                    ? "animate-spin"
-                    : ""
-                }`}
-              />
-              Refresh
-            </button>
-          </div>
+          <div className="overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_4px_12px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3.5">
+              <div className="flex items-center gap-2">
+                <Newspaper className="h-4 w-4 text-muted-foreground" />
+                <p className="text-[14px] font-bold tracking-[-0.2px]">
+                  Latest
+                </p>
+              </div>
 
-          {newsLoading ? (
-            <div className="flex items-center gap-2 py-6 text-sm text-gray-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading news…
+              <button
+                type="button"
+                onClick={refreshNews}
+                disabled={newsLoading}
+                className="flex h-[34px] items-center gap-1.5 rounded-[10px] bg-muted px-2.5 text-[11px] font-semibold text-foreground transition-transform active:scale-[0.96] disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={[
+                    "h-3.5 w-3.5",
+                    newsLoading ? "animate-spin" : "",
+                  ].join(" ")}
+                />
+                Refresh
+              </button>
             </div>
-          ) : news.length >
-            0 ? (
-            <div>
-              {news.map(
-                (
-                  item,
-                  index,
-                ) => (
-                  <React.Fragment
-                    key={`${
-                      item.url ||
-                      item.title
-                    }-${index}`}
+
+            {newsLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading news…
+              </div>
+            ) : news.length > 0 ? (
+              <div>
+                {news.map((item, index) => (
+                  <a
+                    key={`${item.url || item.title}-${index}`}
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={[
+                      "block px-4 py-4 transition-colors active:bg-muted/50",
+                      index < news.length - 1
+                        ? "border-b border-border"
+                        : "",
+                    ].join(" ")}
                   >
-                    <a
-                      href={
-                        item.url
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block py-4"
-                    >
-                      <h3 className="text-sm font-semibold text-gray-900 hover:underline">
-                        {
-                          item.title
-                        }
-                      </h3>
+                    <h3 className="text-[14px] font-semibold leading-[1.35] text-foreground">
+                      {item.title}
+                    </h3>
 
-                      {item.summary && (
-                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-500">
-                          {
-                            item.summary
-                          }
-                        </p>
-                      )}
-
-                      <div className="mt-2 flex gap-2 text-[11px] text-gray-400">
-                        {item.source && (
-                          <span>
-                            {
-                              item.source
-                            }
-                          </span>
-                        )}
-
-                        {item.date && (
-                          <span>
-                            {
-                              item.date
-                            }
-                          </span>
-                        )}
-                      </div>
-                    </a>
-
-                    {index <
-                      news.length -
-                        1 && (
-                      <div className="h-px bg-gray-100" />
+                    {item.summary && (
+                      <p className="mt-1.5 line-clamp-2 text-[12px] leading-5 text-muted-foreground">
+                        {item.summary}
+                      </p>
                     )}
-                  </React.Fragment>
-                ),
-              )}
-            </div>
-          ) : (
-            <p className="py-6 text-sm text-gray-400">
-              No recent news
-              available.
-            </p>
-          )}
+
+                    <div className="mt-2 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+                      {item.source && <span>{item.source}</span>}
+                      {item.date && <span>{item.date}</span>}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">
+                No recent news available.
+              </p>
+            )}
+          </div>
         </section>
       </main>
 
       <BuyDetailDialog
-        open={
-          buyOpen
-        }
-        onOpenChange={
-          setBuyOpen
-        }
+        open={buyOpen}
+        onOpenChange={setBuyOpen}
         stock={stock}
-        onDone={
-          handleBuyDone
-        }
+        onDone={handleBuyDone}
       />
 
       <SellDetailDialog
-        open={
-          sellOpen
-        }
-        onOpenChange={
-          setSellOpen
-        }
+        open={sellOpen}
+        onOpenChange={setSellOpen}
         stock={stock}
-        onDone={
-          handleSellDone
-        }
+        onDone={handleSellDone}
       />
     </div>
   );
