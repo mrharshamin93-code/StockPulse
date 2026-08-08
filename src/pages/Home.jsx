@@ -1,13 +1,17 @@
+// src/pages/Home.jsx
+
 import React, {
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
+
 import {
   AnimatePresence,
   motion,
 } from "framer-motion";
+
 import {
   Briefcase,
   Loader2,
@@ -16,6 +20,7 @@ import {
 
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
+
 import StockCard from "@/components/portfolio/StockCard";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
 import PortfolioGrowthChart from "@/components/portfolio/PortfolioGrowthChart";
@@ -38,7 +43,7 @@ function hasSeenPortfolioOnboarding(user) {
   try {
     return (
       window.localStorage.getItem(
-        onboardingStorageKey(user?.id),
+        onboardingStorageKey(user?.id)
       ) === "true"
     );
   } catch {
@@ -50,7 +55,7 @@ async function markPortfolioOnboardingSeen(userId) {
   try {
     window.localStorage.setItem(
       onboardingStorageKey(userId),
-      "true",
+      "true"
     );
   } catch {
     // Supabase metadata remains the cross-device source of truth.
@@ -70,31 +75,121 @@ async function markPortfolioOnboardingSeen(userId) {
 
     console.warn(
       "Failed to persist portfolio onboarding state:",
-      error,
+      error
     );
   } catch (error) {
     console.warn(
       "Failed to persist portfolio onboarding state:",
-      error,
+      error
     );
   }
 }
 
 function EmptyPortfolio() {
   return (
-    <div className="mx-auto flex max-w-sm flex-col items-center justify-center px-4 py-16 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100">
-        <Briefcase className="h-7 w-7 text-gray-500" />
+    <div className="mx-auto flex w-full max-w-[340px] flex-col items-center justify-center px-5 py-16 text-center">
+      <div
+        className="
+          flex
+          h-[58px]
+          w-[58px]
+          items-center
+          justify-center
+          rounded-[18px]
+          border
+          border-border
+          bg-card
+          shadow-[0_4px_12px_rgba(0,0,0,0.045)]
+        "
+      >
+        <Briefcase
+          size={25}
+          strokeWidth={2}
+          className="text-foreground"
+        />
       </div>
 
-      <h2 className="mt-5 font-heading text-xl font-bold text-gray-900">
+      <h2 className="mt-5 text-[20px] font-bold tracking-[-0.4px] text-foreground">
         Empty portfolio
       </h2>
 
-      <p className="mt-2 text-sm text-gray-500">
-        Star a stock in your Watchlist to add it
-        to your Portfolio.
+      <p className="mt-2 max-w-[260px] text-[14px] leading-5 text-muted-foreground">
+        Star a stock in your Watchlist to add it to your
+        Portfolio.
       </p>
+    </div>
+  );
+}
+
+function PortfolioLoading() {
+  return (
+    <div className="space-y-4">
+      <div
+        className="
+          h-[154px]
+          animate-pulse
+          rounded-[22px]
+          border
+          border-border
+          bg-card
+        "
+      />
+
+      <div
+        className="
+          h-[250px]
+          animate-pulse
+          rounded-[22px]
+          border
+          border-border
+          bg-card
+        "
+      />
+
+      <div className="space-y-3 pt-1">
+        <div className="mx-auto h-3 w-24 animate-pulse rounded-full bg-muted" />
+
+        <div
+          className="
+            h-[82px]
+            animate-pulse
+            rounded-[20px]
+            border
+            border-border
+            bg-card
+          "
+        />
+
+        <div
+          className="
+            h-[82px]
+            animate-pulse
+            rounded-[20px]
+            border
+            border-border
+            bg-card
+          "
+        />
+      </div>
+    </div>
+  );
+}
+
+function SectionHeading({
+  children,
+  count,
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between px-2">
+      <h2 className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        {children}
+      </h2>
+
+      {typeof count === "number" ? (
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {count}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -183,39 +278,34 @@ export default function Home() {
             (watchlistResult.data || [])
               .map((item) =>
                 String(
-                  item?.ticker || "",
+                  item?.ticker || ""
                 )
                   .trim()
-                  .toUpperCase(),
+                  .toUpperCase()
               )
-              .filter(Boolean),
+              .filter(Boolean)
           );
 
-        /*
-         * The stocks table represents highlighted stars.
-         * The Watchlist table confirms that ticker still
-         * belongs to one of the user's Watchlists.
-         */
         const nextStocks =
           (stocksResult.data || [])
             .filter(
               (stock) =>
                 stock?.id &&
-                stock.id !== "undefined",
+                stock.id !== "undefined"
             )
             .filter((stock) =>
               watchlistTickers.has(
                 String(
-                  stock?.ticker || "",
+                  stock?.ticker || ""
                 )
                   .trim()
-                  .toUpperCase(),
-              ),
+                  .toUpperCase()
+              )
             );
 
         const alreadySeen =
           hasSeenPortfolioOnboarding(
-            user,
+            user
           );
 
         setStocks(nextStocks);
@@ -231,7 +321,7 @@ export default function Home() {
             true;
 
           setShowPortfolioOnboarding(
-            showFirstVisit,
+            showFirstVisit
           );
 
           if (showFirstVisit) {
@@ -239,7 +329,7 @@ export default function Home() {
               true;
 
             void markPortfolioOnboardingSeen(
-              user.id,
+              user.id
             );
           }
         }
@@ -253,17 +343,17 @@ export default function Home() {
             true;
 
           setShowPortfolioOnboarding(
-            false,
+            false
           );
 
           void markPortfolioOnboardingSeen(
-            user.id,
+            user.id
           );
         }
       } catch (error) {
         console.error(
           "Error loading portfolio:",
-          error,
+          error
         );
 
         setStocks([]);
@@ -298,7 +388,7 @@ export default function Home() {
 
     const channel = supabase
       .channel(
-        `portfolio-realtime-${user.id}`,
+        `portfolio-realtime-${user.id}`
       )
       .on(
         "postgres_changes",
@@ -311,7 +401,7 @@ export default function Home() {
         },
         () => {
           void loadStocks();
-        },
+        }
       )
       .on(
         "postgres_changes",
@@ -324,7 +414,7 @@ export default function Home() {
         },
         () => {
           void loadStocks();
-        },
+        }
       )
       .subscribe();
 
@@ -361,8 +451,8 @@ export default function Home() {
       setPullDistance(
         Math.min(
           delta * 0.5,
-          PULL_THRESHOLD + 20,
-        ),
+          PULL_THRESHOLD + 20
+        )
       );
     }
   }
@@ -385,37 +475,36 @@ export default function Home() {
 
   const pullProgress = Math.min(
     pullDistance / PULL_THRESHOLD,
-    1,
+    1
   );
 
   return (
-    <div
-      className="flex min-h-screen flex-col"
-      style={{
-        paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 64px)",
-      }}
-    >
+    <div className="flex min-h-full flex-col bg-background text-foreground">
+      {/* HEADER */}
       <header
-        className="sticky top-0 z-10 border-b border-gray-100 bg-background"
+        className="
+          sticky
+          top-0
+          z-20
+          shrink-0
+          border-b
+          border-border/70
+          bg-background/95
+          backdrop-blur-xl
+        "
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-1.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900">
-              <Briefcase className="h-5 w-5 text-white" />
-            </div>
-
-            <h1 className="font-heading text-2xl font-bold tracking-tight">
-              Portfolio
-            </h1>
-          </div>
+        <div className="mx-auto flex h-[62px] w-full max-w-[390px] items-end justify-center px-6 pb-3">
+          <h1 className="text-[24px] font-bold tracking-[-0.5px] text-foreground">
+            Portfolio
+          </h1>
         </div>
       </header>
 
+      {/* PULL TO REFRESH */}
       <AnimatePresence>
         {(pullDistance > 0 ||
           refreshing) && (
@@ -426,31 +515,52 @@ export default function Home() {
             }}
             animate={{
               height: refreshing
-                ? 48
+                ? 44
                 : pullDistance,
               opacity: 1,
             }}
-            className="flex items-center justify-center bg-gray-50/50"
+            exit={{
+              height: 0,
+              opacity: 0,
+            }}
+            transition={{
+              duration: 0.15,
+            }}
+            className="flex shrink-0 items-center justify-center bg-background"
           >
             <RefreshCw
-              className={`h-5 w-5 ${
-                pullProgress >= 1 ||
-                refreshing
-                  ? "text-gray-900"
-                  : "text-gray-400"
-              } ${
+              size={19}
+              strokeWidth={2}
+              className={[
                 refreshing
                   ? "animate-spin"
-                  : ""
-              }`}
+                  : "",
+                pullProgress >= 1 ||
+                refreshing
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+              ].join(" ")}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* CONTENT */}
       <main
         ref={scrollRef}
-        className="mx-auto flex w-full max-w-5xl flex-1 flex-col space-y-8 overflow-y-auto px-4 py-8 sm:px-6"
+        className="
+          mx-auto
+          flex
+          w-full
+          max-w-[390px]
+          flex-1
+          flex-col
+          overflow-y-auto
+          overscroll-y-contain
+          px-6
+          pb-7
+          pt-4
+        "
         onTouchStart={
           handleTouchStart
         }
@@ -462,9 +572,7 @@ export default function Home() {
         }
       >
         {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-          </div>
+          <PortfolioLoading />
         ) : stocks.length === 0 ? (
           showPortfolioOnboarding ? (
             <PortfolioOnboarding />
@@ -472,37 +580,134 @@ export default function Home() {
             <EmptyPortfolio />
           )
         ) : (
-          <>
-            <PortfolioSummary
-              stocks={stocks}
-            />
+          <motion.div
+            initial={{
+              opacity: 0,
+              y: 6,
+            }}
+            animate={{
+              opacity: 1,
+              y: 0,
+            }}
+            transition={{
+              duration: 0.22,
+              ease: "easeOut",
+            }}
+            className="space-y-5"
+          >
+            {/* PORTFOLIO SUMMARY */}
+            <section>
+              <SectionHeading>
+                Overview
+              </SectionHeading>
 
-            <PortfolioGrowthChart
-              stocks={stocks}
-            />
-
-            <div>
-              <h2 className="mb-4 text-center font-heading text-sm font-semibold uppercase tracking-wider text-gray-500">
-                Holdings ·{" "}
-                {stocks.length}
-              </h2>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {stocks.map(
-                  (stock) => (
-                    <StockCard
-                      key={stock.id}
-                      stock={stock}
-                      onRefresh={
-                        loadStocks
-                      }
-                    />
-                  ),
-                )}
+              <div
+                className="
+                  overflow-hidden
+                  rounded-[22px]
+                  border
+                  border-border
+                  bg-card
+                  shadow-[0_4px_12px_rgba(0,0,0,0.04)]
+                "
+              >
+                <PortfolioSummary
+                  stocks={stocks}
+                />
               </div>
-            </div>
-          </>
+            </section>
+
+            {/* PORTFOLIO CHART */}
+            <section>
+              <SectionHeading>
+                Performance
+              </SectionHeading>
+
+              <div
+                className="
+                  overflow-hidden
+                  rounded-[22px]
+                  border
+                  border-border
+                  bg-card
+                  shadow-[0_4px_12px_rgba(0,0,0,0.04)]
+                "
+              >
+                <PortfolioGrowthChart
+                  stocks={stocks}
+                />
+              </div>
+            </section>
+
+            {/* HOLDINGS */}
+            <section>
+              <SectionHeading
+                count={stocks.length}
+              >
+                Holdings
+              </SectionHeading>
+
+              <div className="space-y-3">
+                <AnimatePresence
+                  initial={false}
+                >
+                  {stocks.map(
+                    (stock, index) => (
+                      <motion.div
+                        key={stock.id}
+                        layout
+                        initial={{
+                          opacity: 0,
+                          y: 8,
+                        }}
+                        animate={{
+                          opacity: 1,
+                          y: 0,
+                        }}
+                        exit={{
+                          opacity: 0,
+                          scale: 0.98,
+                        }}
+                        transition={{
+                          duration: 0.18,
+                          delay:
+                            Math.min(
+                              index * 0.025,
+                              0.15
+                            ),
+                        }}
+                        className="
+                          overflow-hidden
+                          rounded-[20px]
+                          border
+                          border-border
+                          bg-card
+                          shadow-[0_4px_10px_rgba(0,0,0,0.035)]
+                          transition-[transform,box-shadow]
+                          duration-150
+                          active:scale-[0.995]
+                        "
+                      >
+                        <StockCard
+                          stock={stock}
+                          onRefresh={
+                            loadStocks
+                          }
+                        />
+                      </motion.div>
+                    )
+                  )}
+                </AnimatePresence>
+              </div>
+            </section>
+          </motion.div>
         )}
+
+        {loading ? (
+          <div className="pointer-events-none fixed inset-x-0 top-1/2 z-[-1] flex -translate-y-1/2 justify-center opacity-0">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : null}
       </main>
     </div>
   );
