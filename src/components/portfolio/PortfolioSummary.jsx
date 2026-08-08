@@ -1,6 +1,5 @@
-// src/components/portfolio/PortfolioSummary.jsx
-
 import React from "react";
+
 import {
   BarChart3,
   TrendingDown,
@@ -9,9 +8,12 @@ import {
 } from "lucide-react";
 
 function getValidNumber(value) {
-  const numericValue = Number(value);
+  const numericValue =
+    Number(value);
 
-  return Number.isFinite(numericValue)
+  return Number.isFinite(
+    numericValue
+  )
     ? numericValue
     : null;
 }
@@ -36,9 +38,10 @@ export default function PortfolioSummary({
     stocks.length > 0;
 
   for (const stock of stocks) {
-    const quantity = getValidNumber(
-      stock?.quantity
-    );
+    const quantity =
+      getValidNumber(
+        stock?.quantity
+      );
 
     const purchasePrice =
       getValidNumber(
@@ -61,7 +64,8 @@ export default function PortfolioSummary({
     }
 
     totalCost +=
-      purchasePrice * quantity;
+      purchasePrice *
+      quantity;
 
     if (
       currentPrice === null ||
@@ -72,18 +76,21 @@ export default function PortfolioSummary({
     }
 
     totalValue +=
-      currentPrice * quantity;
+      currentPrice *
+      quantity;
   }
 
   const totalGain =
     marketPricesAvailable
-      ? totalValue - totalCost
+      ? totalValue -
+        totalCost
       : null;
 
   const gainPct =
     marketPricesAvailable &&
     totalCost > 0
-      ? (totalGain / totalCost) *
+      ? (totalGain /
+          totalCost) *
         100
       : null;
 
@@ -93,7 +100,8 @@ export default function PortfolioSummary({
 
   const stats = [
     {
-      label: "Portfolio Value",
+      label:
+        "Portfolio Value",
 
       value:
         marketPricesAvailable
@@ -102,14 +110,16 @@ export default function PortfolioSummary({
             )
           : "—",
 
-      icon: Wallet,
+      icon:
+        Wallet,
 
       color:
         "text-foreground",
     },
 
     {
-      label: "Total Return",
+      label:
+        "Total Return",
 
       value:
         gainPct !== null
@@ -122,7 +132,8 @@ export default function PortfolioSummary({
             )}%`
           : "—",
 
-      icon: BarChart3,
+      icon:
+        BarChart3,
 
       color:
         gainPct === null
@@ -133,7 +144,8 @@ export default function PortfolioSummary({
     },
 
     {
-      label: "Total Growth",
+      label:
+        "Total Growth",
 
       value:
         totalGain !== null
@@ -164,7 +176,7 @@ export default function PortfolioSummary({
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-2 p-2">
+    <div className="grid grid-cols-3 gap-2.5">
       {stats.map((stat) => {
         const Icon =
           stat.icon;
@@ -175,23 +187,37 @@ export default function PortfolioSummary({
             className="
               flex
               min-w-0
+              min-h-[82px]
               flex-col
               items-center
               justify-center
               rounded-[18px]
-              bg-background/45
+              bg-card
               px-2
-              py-4
+              py-3.5
               text-center
-              transition-colors
+              shadow-[0_4px_10px_rgba(0,0,0,0.045)]
+              transition-[transform,box-shadow]
               duration-150
+              ease-out
+              active:scale-[0.99]
             "
           >
-            <div className="mb-1.5 flex min-w-0 items-center justify-center gap-1">
+            <div
+              className="
+                mb-1.5
+                flex
+                min-w-0
+                items-center
+                justify-center
+                gap-1
+              "
+            >
               <Icon
                 size={13}
                 strokeWidth={2}
                 className="shrink-0 text-muted-foreground"
+                aria-hidden="true"
               />
 
               <span
@@ -200,7 +226,7 @@ export default function PortfolioSummary({
                   text-[9px]
                   font-medium
                   uppercase
-                  tracking-[0.07em]
+                  tracking-[0.055em]
                   text-muted-foreground
                 "
               >
@@ -210,7 +236,13 @@ export default function PortfolioSummary({
 
             <p
               className={[
-                "max-w-full truncate text-[15px] font-bold tracking-[-0.25px]",
+                `
+                  max-w-full
+                  truncate
+                  text-[15px]
+                  font-bold
+                  tracking-[-0.25px]
+                `,
                 stat.color,
               ].join(" ")}
             >
