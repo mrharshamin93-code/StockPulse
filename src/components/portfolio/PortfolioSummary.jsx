@@ -176,7 +176,7 @@ export default function PortfolioSummary({
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-2.5">
+    <div className="grid grid-cols-3 gap-2">
       {stats.map((stat) => {
         const Icon =
           stat.icon;
@@ -186,17 +186,17 @@ export default function PortfolioSummary({
             key={stat.label}
             className="
               flex
-              min-h-[82px]
+              min-h-[94px]
               min-w-0
               flex-col
               items-center
               justify-center
-              rounded-[18px]
+              rounded-[19px]
               border
               border-border/70
               bg-card
-              px-2
-              py-3.5
+              px-3
+              py-4
               text-center
               shadow-[0_3px_8px_rgba(0,0,0,0.035)]
               transition-[transform,box-shadow]
@@ -207,7 +207,7 @@ export default function PortfolioSummary({
           >
             <div
               className="
-                mb-1.5
+                mb-2
                 flex
                 min-w-0
                 items-center
@@ -224,11 +224,11 @@ export default function PortfolioSummary({
 
               <span
                 className="
-                  truncate
+                  whitespace-nowrap
                   text-[9px]
                   font-medium
                   uppercase
-                  tracking-[0.055em]
+                  tracking-[0.035em]
                   text-muted-foreground
                 "
               >
@@ -240,10 +240,10 @@ export default function PortfolioSummary({
               className={[
                 `
                   max-w-full
-                  truncate
+                  whitespace-nowrap
                   text-[15px]
                   font-bold
-                  tracking-[-0.25px]
+                  tracking-[-0.3px]
                 `,
                 stat.color,
               ].join(" ")}
