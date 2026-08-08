@@ -122,16 +122,17 @@ function EmptyPortfolio() {
 function PortfolioLoading() {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-3 gap-2">
         {[0, 1, 2].map((item) => (
           <div
             key={item}
             className="
-              h-[82px]
+              h-[92px]
               animate-pulse
               rounded-[18px]
+              border
+              border-border/70
               bg-card
-              shadow-[0_4px_10px_rgba(0,0,0,0.04)]
             "
           />
         ))}
@@ -139,7 +140,7 @@ function PortfolioLoading() {
 
       <div
         className="
-          h-[250px]
+          h-[360px]
           animate-pulse
           rounded-[22px]
           border
@@ -480,7 +481,7 @@ export default function Home() {
             "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto flex h-[62px] w-full max-w-[390px] items-end justify-center px-6 pb-3">
+        <div className="mx-auto flex h-[62px] w-full max-w-[430px] items-end justify-center px-4 pb-3">
           <h1 className="text-[24px] font-bold tracking-[-0.5px] text-foreground">
             Portfolio
           </h1>
@@ -533,12 +534,12 @@ export default function Home() {
           mx-auto
           flex
           w-full
-          max-w-[390px]
+          max-w-[430px]
           flex-1
           flex-col
           overflow-y-auto
           overscroll-y-contain
-          px-6
+          px-4
           pb-7
           pt-4
         "
@@ -576,7 +577,6 @@ export default function Home() {
             }}
             className="space-y-5"
           >
-            {/* OVERVIEW */}
             <section>
               <SectionHeading>
                 Overview
@@ -587,7 +587,6 @@ export default function Home() {
               />
             </section>
 
-            {/* PERFORMANCE */}
             <section>
               <SectionHeading>
                 Performance
@@ -609,7 +608,6 @@ export default function Home() {
               </div>
             </section>
 
-            {/* HOLDINGS */}
             <section>
               <SectionHeading
                 count={stocks.length}
