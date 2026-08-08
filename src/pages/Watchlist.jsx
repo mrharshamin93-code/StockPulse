@@ -2235,7 +2235,7 @@ function WatchlistCard({
 
 function WatchlistSkeleton() {
   return (
-    <div className="space-y-[5px]">
+    <div className="space-y-[2px]">
       {[
         0,
         1,
@@ -4347,7 +4347,7 @@ export default function Watchlist() {
         ) : (
           <motion.div
             layout
-            className="space-y-[5px]"
+            className="space-y-[2px]"
           >
             <AnimatePresence
               initial={
