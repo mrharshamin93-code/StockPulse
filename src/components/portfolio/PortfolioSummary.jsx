@@ -186,17 +186,19 @@ export default function PortfolioSummary({
             key={stat.label}
             className="
               flex
-              min-w-0
               min-h-[82px]
+              min-w-0
               flex-col
               items-center
               justify-center
               rounded-[18px]
+              border
+              border-border/70
               bg-card
               px-2
               py-3.5
               text-center
-              shadow-[0_4px_10px_rgba(0,0,0,0.045)]
+              shadow-[0_3px_8px_rgba(0,0,0,0.035)]
               transition-[transform,box-shadow]
               duration-150
               ease-out
