@@ -1,3 +1,5 @@
+// src/components/portfolio/PortfolioSummary.jsx
+
 import React from "react";
 import {
   BarChart3,
@@ -20,7 +22,7 @@ function formatCurrency(value) {
     {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    },
+    }
   )}`;
 }
 
@@ -29,22 +31,23 @@ export default function PortfolioSummary({
 }) {
   let totalValue = 0;
   let totalCost = 0;
+
   let marketPricesAvailable =
     stocks.length > 0;
 
   for (const stock of stocks) {
     const quantity = getValidNumber(
-      stock?.quantity,
+      stock?.quantity
     );
 
     const purchasePrice =
       getValidNumber(
-        stock?.purchase_price,
+        stock?.purchase_price
       );
 
     const currentPrice =
       getValidNumber(
-        stock?.current_price,
+        stock?.current_price
       );
 
     if (
@@ -91,53 +94,69 @@ export default function PortfolioSummary({
   const stats = [
     {
       label: "Portfolio Value",
+
       value:
         marketPricesAvailable
           ? formatCurrency(
-              totalValue,
+              totalValue
             )
           : "—",
+
       icon: Wallet,
-      color: "text-gray-900",
+
+      color:
+        "text-foreground",
     },
+
     {
       label: "Total Return",
+
       value:
         gainPct !== null
           ? `${
-              isPositive ? "+" : ""
+              isPositive
+                ? "+"
+                : ""
             }${gainPct.toFixed(
-              2,
+              2
             )}%`
           : "—",
+
       icon: BarChart3,
+
       color:
         gainPct === null
-          ? "text-gray-400"
+          ? "text-muted-foreground"
           : isPositive
             ? "text-emerald-600"
             : "text-red-600",
     },
+
     {
       label: "Total Growth",
+
       value:
         totalGain !== null
           ? `${
-              isPositive ? "+" : "-"
+              isPositive
+                ? "+"
+                : "-"
             }${formatCurrency(
               Math.abs(
-                totalGain,
-              ),
+                totalGain
+              )
             )}`
           : "—",
+
       icon:
         totalGain === null ||
         isPositive
           ? TrendingUp
           : TrendingDown,
+
       color:
         totalGain === null
-          ? "text-gray-400"
+          ? "text-muted-foreground"
           : isPositive
             ? "text-emerald-600"
             : "text-red-600",
@@ -145,27 +164,61 @@ export default function PortfolioSummary({
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {stats.map((stat) => (
-        <div
-          key={stat.label}
-          className="flex flex-col items-center rounded-2xl border border-gray-100 bg-white p-4 text-center shadow-sm"
-        >
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <stat.icon className="h-3.5 w-3.5 text-gray-400" />
+    <div className="grid grid-cols-3 gap-2 p-2">
+      {stats.map((stat) => {
+        const Icon =
+          stat.icon;
 
-            <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
-              {stat.label}
-            </span>
-          </div>
-
-          <p
-            className={`font-heading text-base font-bold ${stat.color}`}
+        return (
+          <div
+            key={stat.label}
+            className="
+              flex
+              min-w-0
+              flex-col
+              items-center
+              justify-center
+              rounded-[18px]
+              bg-background/45
+              px-2
+              py-4
+              text-center
+              transition-colors
+              duration-150
+            "
           >
-            {stat.value}
-          </p>
-        </div>
-      ))}
+            <div className="mb-1.5 flex min-w-0 items-center justify-center gap-1">
+              <Icon
+                size={13}
+                strokeWidth={2}
+                className="shrink-0 text-muted-foreground"
+              />
+
+              <span
+                className="
+                  truncate
+                  text-[9px]
+                  font-medium
+                  uppercase
+                  tracking-[0.07em]
+                  text-muted-foreground
+                "
+              >
+                {stat.label}
+              </span>
+            </div>
+
+            <p
+              className={[
+                "max-w-full truncate text-[15px] font-bold tracking-[-0.25px]",
+                stat.color,
+              ].join(" ")}
+            >
+              {stat.value}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }
