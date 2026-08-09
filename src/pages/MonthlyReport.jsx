@@ -1,9 +1,12 @@
+// src/pages/MonthlyReport.jsx
+
 import React, {
   useCallback,
   useEffect,
   useMemo,
   useState,
 } from "react";
+
 import {
   AlertCircle,
   CalendarDays,
@@ -16,6 +19,8 @@ import {
   Mail,
   RefreshCw,
   Trash2,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -142,39 +147,62 @@ function formatFileSize(value) {
   }
 
   if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${Math.max(
+      1,
+      Math.round(bytes / 1024),
+    )} KB`;
   }
 
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(
+    bytes /
+    (1024 * 1024)
+  ).toFixed(1)} MB`;
 }
 
 function reportTone(status) {
-  if (status === "ready" || status === "sent") {
+  if (
+    status === "ready" ||
+    status === "sent"
+  ) {
     return {
       icon: CheckCircle2,
-      iconClass: "text-emerald-600",
-      backgroundClass: "bg-emerald-50",
-      textClass: "text-emerald-700",
+      iconClass:
+        "text-emerald-600",
+      backgroundClass:
+        "bg-emerald-500/10",
+      textClass:
+        "text-emerald-600",
+      borderClass:
+        "border-emerald-500/20",
     };
   }
 
   if (status === "failed") {
     return {
       icon: AlertCircle,
-      iconClass: "text-red-600",
-      backgroundClass: "bg-red-50",
-      textClass: "text-red-700",
+      iconClass:
+        "text-red-600",
+      backgroundClass:
+        "bg-red-500/10",
+      textClass:
+        "text-red-600",
+      borderClass:
+        "border-red-500/20",
     };
   }
 
   return {
     icon: Clock3,
-    iconClass: "text-blue-600",
-    backgroundClass: "bg-blue-50",
-    textClass: "text-blue-700",
+    iconClass:
+      "text-blue-600",
+    backgroundClass:
+      "bg-blue-500/10",
+    textClass:
+      "text-blue-600",
+    borderClass:
+      "border-blue-500/20",
   };
 }
-
 
 async function getFunctionErrorMessage(
   functionError,
@@ -186,7 +214,8 @@ async function getFunctionErrorMessage(
 
     if (
       response &&
-      typeof response.clone === "function"
+      typeof response.clone ===
+        "function"
     ) {
       const payload =
         await response
@@ -196,14 +225,16 @@ async function getFunctionErrorMessage(
 
       if (
         payload?.error &&
-        typeof payload.error === "string"
+        typeof payload.error ===
+          "string"
       ) {
         return payload.error;
       }
 
       if (
         payload?.message &&
-        typeof payload.message === "string"
+        typeof payload.message ===
+          "string"
       ) {
         return payload.message;
       }
@@ -221,120 +252,244 @@ async function getFunctionErrorMessage(
   );
 }
 
-async function createReportSignedUrl(storagePath) {
-  const { data, error } = await supabase.storage
-    .from(REPORT_BUCKET)
-    .createSignedUrl(storagePath, 60);
+async function createReportSignedUrl(
+  storagePath,
+) {
+  const { data, error } =
+    await supabase.storage
+      .from(REPORT_BUCKET)
+      .createSignedUrl(
+        storagePath,
+        60,
+      );
 
   if (error) {
     throw error;
   }
 
   if (!data?.signedUrl) {
-    throw new Error("A secure report link could not be created.");
+    throw new Error(
+      "A secure report link could not be created.",
+    );
   }
 
   return data.signedUrl;
 }
 
+function SectionLabel({ children }) {
+  return (
+    <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      {children}
+    </h2>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone = "default",
+  icon: Icon,
+}) {
+  const toneClass =
+    tone === "positive"
+      ? "text-emerald-600"
+      : tone === "negative"
+        ? "text-red-600"
+        : "text-foreground";
+
+  return (
+    <div className="rounded-[17px] border border-border/80 bg-card px-3.5 py-3.5 shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          {label}
+        </p>
+
+        {Icon ? (
+          <Icon
+            size={15}
+            strokeWidth={2}
+            className={toneClass}
+          />
+        ) : null}
+      </div>
+
+      <p
+        className={[
+          "mt-1.5 truncate text-[16px] font-bold tracking-[-0.3px]",
+          toneClass,
+        ].join(" ")}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 export default function MonthlyReport() {
   const { user } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [busyReportId, setBusyReportId] = useState("");
-  const [autoReport, setAutoReport] = useState(false);
-  const [timezone, setTimezone] = useState(getLocalTimezone);
-  const [currency] = useState(getCurrency);
-  const [reports, setReports] = useState([]);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] =
+    useState(true);
 
-  const loadSettings = useCallback(async () => {
-    if (!user?.id) {
-      return;
-    }
+  const [saving, setSaving] =
+    useState(false);
 
-    setLoading(true);
-    setError("");
+  const [
+    generating,
+    setGenerating,
+  ] = useState(false);
 
-    try {
-      const [profileResult, reportsResult] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select(
-            "monthly_report_opt_in,report_timezone,report_currency,monthly_report_last_generated_at",
-          )
-          .eq("id", user.id)
-          .maybeSingle(),
+  const [
+    busyReportId,
+    setBusyReportId,
+  ] = useState("");
 
-        supabase
-          .from("monthly_report_deliveries")
-          .select(
-            "id,report_month,delivery_kind,status,report_currency,storage_path,file_name,file_size_bytes,portfolio_value,cost_basis,gain_loss,gain_loss_percent,generated_at,created_at,error_message",
-          )
-          .eq("user_id", user.id)
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(12),
-      ]);
+  const [
+    autoReport,
+    setAutoReport,
+  ] = useState(false);
 
-      if (profileResult.error) {
-        throw profileResult.error;
+  const [timezone, setTimezone] =
+    useState(getLocalTimezone);
+
+  const [currency] =
+    useState(getCurrency);
+
+  const [reports, setReports] =
+    useState([]);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const loadSettings =
+    useCallback(async () => {
+      if (!user?.id) {
+        return;
       }
 
-      if (reportsResult.error) {
-        throw reportsResult.error;
+      setLoading(true);
+      setError("");
+
+      try {
+        const [
+          profileResult,
+          reportsResult,
+        ] = await Promise.all([
+          supabase
+            .from("profiles")
+            .select(
+              "monthly_report_opt_in,report_timezone,report_currency,monthly_report_last_generated_at",
+            )
+            .eq(
+              "id",
+              user.id,
+            )
+            .maybeSingle(),
+
+          supabase
+            .from(
+              "monthly_report_deliveries",
+            )
+            .select(
+              "id,report_month,delivery_kind,status,report_currency,storage_path,file_name,file_size_bytes,portfolio_value,cost_basis,gain_loss,gain_loss_percent,generated_at,created_at,error_message",
+            )
+            .eq(
+              "user_id",
+              user.id,
+            )
+            .order(
+              "created_at",
+              {
+                ascending: false,
+              },
+            )
+            .limit(12),
+        ]);
+
+        if (
+          profileResult.error
+        ) {
+          throw profileResult.error;
+        }
+
+        if (
+          reportsResult.error
+        ) {
+          throw reportsResult.error;
+        }
+
+        const profile =
+          profileResult.data ||
+          null;
+
+        setAutoReport(
+          Boolean(
+            profile?.monthly_report_opt_in,
+          ),
+        );
+
+        setTimezone(
+          profile?.report_timezone ||
+            getLocalTimezone(),
+        );
+
+        setReports(
+          reportsResult.data ||
+            [],
+        );
+      } catch (loadError) {
+        console.error(
+          "Monthly report settings failed:",
+          loadError,
+        );
+
+        setError(
+          loadError?.message ||
+            "Unable to load report settings.",
+        );
+      } finally {
+        setLoading(false);
       }
-
-      const profile =
-        profileResult.data || null;
-
-      setAutoReport(
-        Boolean(profile?.monthly_report_opt_in),
-      );
-      setTimezone(
-        profile?.report_timezone || getLocalTimezone(),
-      );
-      setReports(reportsResult.data || []);
-    } catch (loadError) {
-      console.error(
-        "Monthly report settings failed:",
-        loadError,
-      );
-
-      setError(
-        loadError?.message ||
-          "Unable to load report settings.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
+    }, [user?.id]);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
-  const readyReports = useMemo(
-    () =>
-      reports.filter(
-        (report) =>
-          report.status === "ready" &&
-          report.storage_path,
-      ),
-    [reports],
-  );
+  const readyReports =
+    useMemo(
+      () =>
+        reports.filter(
+          (report) =>
+            report.status ===
+              "ready" &&
+            report.storage_path,
+        ),
+      [reports],
+    );
 
-  async function toggleAutoReport(enabled) {
-    if (!user?.id || saving) {
+  const latestReadyReport =
+    readyReports[0] ||
+    null;
+
+  async function toggleAutoReport(
+    enabled,
+  ) {
+    if (
+      !user?.id ||
+      saving
+    ) {
       return;
     }
 
-    const previous = autoReport;
-    const localTimezone = getLocalTimezone();
+    const previous =
+      autoReport;
+
+    const localTimezone =
+      getLocalTimezone();
 
     setAutoReport(enabled);
     setSaving(true);
@@ -344,7 +499,8 @@ export default function MonthlyReport() {
     try {
       const authMetadata =
         user?.user_metadata &&
-        typeof user.user_metadata === "object"
+        typeof user.user_metadata ===
+          "object"
           ? user.user_metadata
           : {};
 
@@ -354,25 +510,33 @@ export default function MonthlyReport() {
         authMetadata?.name ||
         null;
 
-      const { error: updateError } = await supabase
+      const {
+        error: updateError,
+      } = await supabase
         .from("profiles")
         .upsert(
           {
             id: user.id,
+
             email:
               user?.email ||
               null,
+
             full_name:
               fullName,
+
             monthly_report_opt_in:
               enabled,
+
             report_timezone:
               localTimezone,
+
             report_currency:
               currency,
           },
           {
-            onConflict: "id",
+            onConflict:
+              "id",
           },
         );
 
@@ -380,22 +544,30 @@ export default function MonthlyReport() {
         throw updateError;
       }
 
-      setTimezone(localTimezone);
+      setTimezone(
+        localTimezone,
+      );
+
       localStorage.setItem(
         "monthlyReport",
         String(enabled),
       );
+
       setMessage(
         enabled
-          ? "Automatic monthly report generation is enabled."
-          : "Automatic monthly report generation is disabled.",
+          ? "Automatic monthly reports are enabled."
+          : "Automatic monthly reports are disabled.",
       );
     } catch (saveError) {
       console.error(
         "Monthly report preference failed:",
         saveError,
       );
-      setAutoReport(previous);
+
+      setAutoReport(
+        previous,
+      );
+
       setError(
         saveError?.message ||
           "Unable to update the report preference.",
@@ -406,24 +578,39 @@ export default function MonthlyReport() {
   }
 
   async function handleGenerateNow() {
-    if (!user?.id || generating) {
+    if (
+      !user?.id ||
+      generating
+    ) {
       return;
     }
 
     setGenerating(true);
     setError("");
-    setMessage("Generating your private PDF in Supabase…");
+    setMessage(
+      "Generating your private PDF…",
+    );
 
     try {
-      const localTimezone = getLocalTimezone();
-      const { data, error: functionError } =
+      const localTimezone =
+        getLocalTimezone();
+
+      const {
+        data,
+        error:
+          functionError,
+      } =
         await supabase.functions.invoke(
           "monthly-report",
           {
             body: {
-              action: "request",
+              action:
+                "request",
+
               currency,
-              timezone: localTimezone,
+
+              timezone:
+                localTimezone,
             },
           },
         );
@@ -444,17 +631,23 @@ export default function MonthlyReport() {
         );
       }
 
-      setTimezone(localTimezone);
+      setTimezone(
+        localTimezone,
+      );
+
       setMessage(
         "Your report is ready and stored privately in StockPulse.",
       );
+
       await loadSettings();
     } catch (generateError) {
       console.error(
         "Monthly report generation failed:",
         generateError,
       );
+
       setMessage("");
+
       setError(
         generateError?.message ||
           "The report could not be generated. Please try again.",
@@ -464,25 +657,38 @@ export default function MonthlyReport() {
     }
   }
 
-  async function handleView(report) {
-    if (!report?.storage_path) {
+  async function handleView(
+    report,
+  ) {
+    if (
+      !report?.storage_path
+    ) {
       return;
     }
 
-    setBusyReportId(report.id);
+    setBusyReportId(
+      report.id,
+    );
+
     setError("");
 
     try {
-      const signedUrl = await createReportSignedUrl(
-        report.storage_path,
-      );
+      const signedUrl =
+        await createReportSignedUrl(
+          report.storage_path,
+        );
+
       window.open(
         signedUrl,
         "_blank",
         "noopener,noreferrer",
       );
     } catch (viewError) {
-      console.error("Report open failed:", viewError);
+      console.error(
+        "Report open failed:",
+        viewError,
+      );
+
       setError(
         viewError?.message ||
           "The report could not be opened.",
@@ -492,40 +698,77 @@ export default function MonthlyReport() {
     }
   }
 
-  async function handleDownload(report) {
-    if (!report?.storage_path) {
+  async function handleDownload(
+    report,
+  ) {
+    if (
+      !report?.storage_path
+    ) {
       return;
     }
 
-    setBusyReportId(report.id);
+    setBusyReportId(
+      report.id,
+    );
+
     setError("");
 
     try {
-      const signedUrl = await createReportSignedUrl(
-        report.storage_path,
-      );
-      const response = await fetch(signedUrl);
+      const signedUrl =
+        await createReportSignedUrl(
+          report.storage_path,
+        );
+
+      const response =
+        await fetch(
+          signedUrl,
+        );
 
       if (!response.ok) {
-        throw new Error("The report download failed.");
+        throw new Error(
+          "The report download failed.",
+        );
       }
 
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
+      const blob =
+        await response.blob();
+
+      const objectUrl =
+        URL.createObjectURL(
+          blob,
+        );
+
+      const link =
+        document.createElement(
+          "a",
+        );
+
+      link.href =
+        objectUrl;
+
       link.download =
         report.file_name ||
-        `StockPulse-${report.report_month.slice(0, 7)}-Portfolio-Report.pdf`;
-      document.body.appendChild(link);
+        `StockPulse-${report.report_month.slice(
+          0,
+          7,
+        )}-Portfolio-Report.pdf`;
+
+      document.body.appendChild(
+        link,
+      );
+
       link.click();
       link.remove();
-      URL.revokeObjectURL(objectUrl);
+
+      URL.revokeObjectURL(
+        objectUrl,
+      );
     } catch (downloadError) {
       console.error(
         "Report download failed:",
         downloadError,
       );
+
       setError(
         downloadError?.message ||
           "The report could not be downloaded.",
@@ -535,7 +778,9 @@ export default function MonthlyReport() {
     }
   }
 
-  async function handleEmail(report) {
+  async function handleEmail(
+    report,
+  ) {
     if (
       !report?.storage_path ||
       busyReportId
@@ -543,14 +788,19 @@ export default function MonthlyReport() {
       return;
     }
 
-    setBusyReportId(report.id);
+    setBusyReportId(
+      report.id,
+    );
+
     setError("");
     setMessage("");
 
     try {
       if (
-        typeof navigator === "undefined" ||
-        typeof navigator.share !== "function"
+        typeof navigator ===
+          "undefined" ||
+        typeof navigator.share !==
+          "function"
       ) {
         throw new Error(
           "Email sharing is not supported in this browser. Open StockPulse in Safari on your iPhone and try again.",
@@ -563,7 +813,9 @@ export default function MonthlyReport() {
         );
 
       const response =
-        await fetch(signedUrl);
+        await fetch(
+          signedUrl,
+        );
 
       if (!response.ok) {
         throw new Error(
@@ -576,10 +828,14 @@ export default function MonthlyReport() {
 
       const fileName =
         report.file_name ||
-        `StockPulse-${report.report_month.slice(0, 7)}-Portfolio-Report.pdf`;
+        `StockPulse-${report.report_month.slice(
+          0,
+          7,
+        )}-Portfolio-Report.pdf`;
 
       const pdfBlob =
-        blob.type === "application/pdf"
+        blob.type ===
+        "application/pdf"
           ? blob
           : blob.slice(
               0,
@@ -598,7 +854,8 @@ export default function MonthlyReport() {
         );
 
       if (
-        typeof navigator.canShare === "function" &&
+        typeof navigator.canShare ===
+          "function" &&
         !navigator.canShare({
           files: [file],
         })
@@ -648,32 +905,49 @@ export default function MonthlyReport() {
     }
   }
 
-
-  async function handleDelete(report) {
-    if (!report?.id || busyReportId) {
+  async function handleDelete(
+    report,
+  ) {
+    if (
+      !report?.id ||
+      busyReportId
+    ) {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete the ${formatMonth(report.report_month)} report?`,
-    );
+    const confirmed =
+      window.confirm(
+        `Delete the ${formatMonth(
+          report.report_month,
+        )} report?`,
+      );
 
     if (!confirmed) {
       return;
     }
 
-    setBusyReportId(report.id);
+    setBusyReportId(
+      report.id,
+    );
+
     setError("");
     setMessage("");
 
     try {
-      const { data, error: functionError } =
+      const {
+        data,
+        error:
+          functionError,
+      } =
         await supabase.functions.invoke(
           "monthly-report",
           {
             body: {
-              action: "delete",
-              reportId: report.id,
+              action:
+                "delete",
+
+              reportId:
+                report.id,
             },
           },
         );
@@ -694,14 +968,24 @@ export default function MonthlyReport() {
         );
       }
 
-      setReports((previous) =>
-        previous.filter(
-          (item) => item.id !== report.id,
-        ),
+      setReports(
+        (previous) =>
+          previous.filter(
+            (item) =>
+              item.id !==
+              report.id,
+          ),
       );
-      setMessage("Report deleted.");
+
+      setMessage(
+        "Report deleted.",
+      );
     } catch (deleteError) {
-      console.error("Report deletion failed:", deleteError);
+      console.error(
+        "Report deletion failed:",
+        deleteError,
+      );
+
       setError(
         deleteError?.message ||
           "The report could not be deleted.",
@@ -711,12 +995,37 @@ export default function MonthlyReport() {
     }
   }
 
+  const latestCurrency =
+    latestReadyReport?.report_currency ||
+    currency;
+
+  const latestReturn =
+    Number(
+      latestReadyReport?.gain_loss_percent,
+    );
+
+  const latestGain =
+    Number(
+      latestReadyReport?.gain_loss,
+    );
+
+  const latestPositive =
+    Number.isFinite(
+      latestReturn,
+    )
+      ? latestReturn >= 0
+      : Number.isFinite(
+            latestGain,
+          )
+        ? latestGain >= 0
+        : true;
+
   return (
     <div
-      className="min-h-screen bg-gray-50/50"
+      className="min-h-full bg-background text-foreground"
       style={{
         paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 64px)",
+          "calc(env(safe-area-inset-bottom) + 72px)",
       }}
     >
       <SubPageHeader
@@ -724,350 +1033,592 @@ export default function MonthlyReport() {
         backPath="/settings"
       />
 
-      <main className="mx-auto max-w-2xl space-y-6 px-4 py-8 sm:px-6">
-        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 p-5">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-900">
-                <FileText className="h-5 w-5 text-white" />
+      <main className="mx-auto w-full max-w-[430px] space-y-5 px-4 pb-7 pt-4">
+        {latestReadyReport ? (
+          <section>
+            <SectionLabel>
+              Latest Report
+            </SectionLabel>
+
+            <div className="rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                    {formatMonth(
+                      latestReadyReport.report_month,
+                    )}
+                  </p>
+
+                  <h1 className="mt-1 text-[22px] font-bold tracking-[-0.55px]">
+                    Portfolio Performance
+                  </h1>
+                </div>
+
+                <div
+                  className={[
+                    "inline-flex h-[30px] items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold",
+                    latestPositive
+                      ? "bg-emerald-500/10 text-emerald-600"
+                      : "bg-red-500/10 text-red-600",
+                  ].join(
+                    " ",
+                  )}
+                >
+                  {latestPositive ? (
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <TrendingDown className="h-3.5 w-3.5" />
+                  )}
+
+                  {formatPercent(
+                    latestReadyReport.gain_loss_percent,
+                  )}
+                </div>
               </div>
 
-              <div>
-                <h2 className="font-heading text-base font-bold text-gray-900">
-                  Monthly portfolio PDF
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Generated securely by Supabase using your real holdings,
-                  entered purchase prices, current market prices, allocation,
-                  unrealized performance, and the month&apos;s recorded buys and
-                  sells.
-                </p>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <MetricCard
+                  label="Value"
+                  value={formatMoney(
+                    latestReadyReport.portfolio_value,
+                    latestCurrency,
+                  )}
+                />
+
+                <MetricCard
+                  label="P&L"
+                  value={formatMoney(
+                    latestReadyReport.gain_loss,
+                    latestCurrency,
+                  )}
+                  tone={
+                    latestPositive
+                      ? "positive"
+                      : "negative"
+                  }
+                />
+
+                <MetricCard
+                  label="Return"
+                  value={formatPercent(
+                    latestReadyReport.gain_loss_percent,
+                  )}
+                  tone={
+                    latestPositive
+                      ? "positive"
+                      : "negative"
+                  }
+                />
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    handleView(
+                      latestReadyReport,
+                    )
+                  }
+                  disabled={Boolean(
+                    busyReportId,
+                  )}
+                  className="h-[40px] gap-1.5 rounded-[12px] px-2 text-[11px]"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  View
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    handleDownload(
+                      latestReadyReport,
+                    )
+                  }
+                  disabled={Boolean(
+                    busyReportId,
+                  )}
+                  className="h-[40px] gap-1.5 rounded-[12px] px-2 text-[11px]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Save
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    handleEmail(
+                      latestReadyReport,
+                    )
+                  }
+                  disabled={Boolean(
+                    busyReportId,
+                  )}
+                  className="h-[40px] gap-1.5 rounded-[12px] px-2 text-[11px]"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Share
+                </Button>
               </div>
             </div>
-          </div>
+          </section>
+        ) : null}
 
-          <button
-            type="button"
-            onClick={handleGenerateNow}
-            disabled={generating || loading}
-            className="flex min-h-[68px] w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50">
+        <section>
+          <SectionLabel>
+            Report Controls
+          </SectionLabel>
+
+          <div className="overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+            <button
+              type="button"
+              onClick={
+                handleGenerateNow
+              }
+              disabled={
+                generating ||
+                loading
+              }
+              className="flex min-h-[68px] w-full items-center gap-3 px-4 text-left transition-colors active:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-blue-500/10 text-blue-600">
                 {generating ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  <Loader2 className="h-4.5 w-4.5 animate-spin" />
                 ) : (
-                  <FileText className="h-4 w-4 text-blue-600" />
+                  <FileText className="h-4.5 w-4.5" />
                 )}
               </div>
 
-              <div>
-                <span className="text-sm font-semibold text-gray-900">
-                  Generate my report
-                </span>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Creates the previous completed month and stores it privately
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold">
+                  Generate Report
+                </p>
+
+                <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                  Create a private PDF for the previous completed month
                 </p>
               </div>
-            </div>
-          </button>
 
-          <div className="flex min-h-[68px] items-center justify-between border-t border-gray-100 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50">
-                <CalendarDays className="h-4 w-4 text-violet-600" />
+              <span className="text-[11px] font-semibold text-muted-foreground">
+                {generating
+                  ? "Generating…"
+                  : "Generate"}
+              </span>
+            </button>
+
+            <div className="mx-4 border-t border-border/80" />
+
+            <div className="flex min-h-[68px] items-center gap-3 px-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-violet-500/10 text-violet-600">
+                <CalendarDays className="h-4.5 w-4.5" />
               </div>
 
-              <div>
-                <span className="text-sm font-semibold text-gray-900">
-                  Automatic monthly report
-                </span>
-                <p className="mt-0.5 text-xs text-gray-500">
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold">
+                  Automatic Monthly Report
+                </p>
+
+                <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
                   {autoReport
-                    ? "A new private report will be generated every month"
-                    : "Automatic generation is off"}
+                    ? "A private report will be generated every month"
+                    : "Automatic generation is turned off"}
                 </p>
               </div>
-            </div>
 
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-            ) : (
-              <Switch
-                checked={autoReport}
-                onCheckedChange={toggleAutoReport}
-                disabled={loading}
-              />
-            )}
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : (
+                <Switch
+                  checked={
+                    autoReport
+                  }
+                  onCheckedChange={
+                    toggleAutoReport
+                  }
+                  disabled={
+                    loading
+                  }
+                />
+              )}
+            </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-900">
-            Report settings
-          </h2>
+        <section>
+          <SectionLabel>
+            Settings
+          </SectionLabel>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-gray-50 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                Currency
-              </p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
-                {currency}
-              </p>
-            </div>
+          <div className="grid grid-cols-2 gap-2">
+            <MetricCard
+              label="Currency"
+              value={currency}
+            />
 
-            <div className="rounded-xl bg-gray-50 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                Timezone
-              </p>
-              <p className="mt-1 truncate text-sm font-semibold text-gray-900">
-                {timezone}
-              </p>
-            </div>
+            <MetricCard
+              label="Timezone"
+              value={timezone}
+            />
           </div>
 
-          <p className="mt-3 text-xs leading-5 text-gray-500">
-            Only your latest three completed reports are retained to keep
-            Supabase Storage usage low. Reports are private and opened with
-            short-lived secure links.
+          <p className="mt-2 px-2 text-[11px] leading-4 text-muted-foreground">
+            The latest three completed reports are retained. Reports are private and use short-lived secure links.
           </p>
         </section>
 
         {message ? (
           <div
             role="status"
-            className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+            className="flex items-start gap-2 rounded-[16px] border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-[12px] leading-5 text-emerald-600"
           >
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{message}</span>
+            <span>
+              {message}
+            </span>
           </div>
         ) : null}
 
         {error ? (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="flex items-start gap-2 rounded-[16px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-[12px] leading-5 text-red-600"
           >
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{error}</span>
+            <span>
+              {error}
+            </span>
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <section>
+          <div className="mb-2 flex items-center justify-between px-2">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">
-                My reports
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Report History
               </h2>
-              <p className="mt-0.5 text-xs text-gray-400">
+
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
                 {readyReports.length} ready
               </p>
             </div>
 
             <button
               type="button"
-              onClick={loadSettings}
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-900 disabled:opacity-50"
+              onClick={
+                loadSettings
+              }
+              disabled={
+                loading
+              }
+              className="inline-flex h-[36px] items-center gap-1.5 rounded-[10px] px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors active:bg-muted disabled:opacity-50"
             >
               <RefreshCw
-                className={`h-3.5 w-3.5 ${
-                  loading ? "animate-spin" : ""
-                }`}
+                className={[
+                  "h-3.5 w-3.5",
+                  loading
+                    ? "animate-spin"
+                    : "",
+                ].join(
+                  " ",
+                )}
               />
+
               Refresh
             </button>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-            </div>
-          ) : reports.length === 0 ? (
-            <div className="px-5 py-10 text-center">
-              <FileText className="mx-auto h-7 w-7 text-gray-300" />
-              <p className="mt-2 text-sm font-medium text-gray-600">
-                No reports yet
-              </p>
-              <p className="mt-1 text-xs text-gray-400">
-                Generate your first monthly portfolio PDF above.
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {reports.map((report) => {
-                const tone = reportTone(report.status);
-                const Icon = tone.icon;
-                const isReady =
-                  report.status === "ready" && report.storage_path;
-                const isBusy = busyReportId === report.id;
-                const reportCurrency =
-                  report.report_currency || currency;
+          <div className="overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : reports.length ===
+              0 ? (
+              <div className="px-5 py-12 text-center">
+                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <FileText className="h-5 w-5" />
+                </div>
 
-                return (
-                  <div
-                    key={report.id}
-                    className="px-5 py-4"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${tone.backgroundClass}`}
-                      >
-                        {isBusy ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-                        ) : (
-                          <Icon className={`h-4 w-4 ${tone.iconClass}`} />
-                        )}
-                      </div>
+                <p className="mt-3 text-[14px] font-semibold">
+                  No reports yet
+                </p>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-gray-900">
-                              {formatMonth(report.report_month)}
-                            </p>
+                <p className="mx-auto mt-1 max-w-[260px] text-[11px] leading-4 text-muted-foreground">
+                  Generate your first monthly portfolio report above.
+                </p>
+              </div>
+            ) : (
+              reports.map(
+                (
+                  report,
+                  index,
+                ) => {
+                  const tone =
+                    reportTone(
+                      report.status,
+                    );
 
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone.backgroundClass} ${tone.textClass}`}
-                            >
-                              {STATUS_LABELS[report.status] || report.status}
-                            </span>
-                          </div>
+                  const Icon =
+                    tone.icon;
 
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(report)}
-                            disabled={Boolean(busyReportId)}
-                            aria-label={`Delete ${formatMonth(
-                              report.report_month,
-                            )} report`}
-                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                  const isReady =
+                    report.status ===
+                      "ready" &&
+                    report.storage_path;
+
+                  const isBusy =
+                    busyReportId ===
+                    report.id;
+
+                  const reportCurrency =
+                    report.report_currency ||
+                    currency;
+
+                  const reportPositive =
+                    Number(
+                      report.gain_loss_percent,
+                    ) >= 0;
+
+                  return (
+                    <div
+                      key={
+                        report.id
+                      }
+                      className={[
+                        "px-4 py-4",
+                        index <
+                        reports.length -
+                          1
+                          ? "border-b border-border/80"
+                          : "",
+                      ].join(
+                        " ",
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={[
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px]",
+                            tone.backgroundClass,
+                          ].join(
+                            " ",
+                          )}
+                        >
+                          {isBusy ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <Icon
+                              className={[
+                                "h-4 w-4",
+                                tone.iconClass,
+                              ].join(
+                                " ",
+                              )}
+                            />
+                          )}
                         </div>
 
-                        {isReady ? (
-                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            <div>
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                                Value
-                              </p>
-                              <p className="mt-0.5 truncate text-xs font-semibold text-gray-700">
-                                {formatMoney(
-                                  report.portfolio_value,
-                                  reportCurrency,
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-[14px] font-semibold">
+                                {formatMonth(
+                                  report.report_month,
                                 )}
                               </p>
+
+                              <div className="mt-1 flex items-center gap-2">
+                                <span
+                                  className={[
+                                    "rounded-full border px-2 py-0.5 text-[9px] font-semibold",
+                                    tone.backgroundClass,
+                                    tone.textClass,
+                                    tone.borderClass,
+                                  ].join(
+                                    " ",
+                                  )}
+                                >
+                                  {STATUS_LABELS[
+                                    report.status
+                                  ] ||
+                                    report.status}
+                                </span>
+
+                                <span className="truncate text-[10px] text-muted-foreground">
+                                  {formatTimestamp(
+                                    report.generated_at ||
+                                      report.created_at,
+                                  )}
+                                </span>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                                P&amp;L
-                              </p>
-                              <p
-                                className={`mt-0.5 truncate text-xs font-semibold ${
-                                  Number(report.gain_loss) >= 0
-                                    ? "text-emerald-600"
-                                    : "text-red-600"
-                                }`}
-                              >
-                                {formatMoney(
-                                  report.gain_loss,
-                                  reportCurrency,
-                                )}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                                Return
-                              </p>
-                              <p
-                                className={`mt-0.5 text-xs font-semibold ${
-                                  Number(report.gain_loss_percent) >= 0
-                                    ? "text-emerald-600"
-                                    : "text-red-600"
-                                }`}
-                              >
-                                {formatPercent(report.gain_loss_percent)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] uppercase tracking-wide text-gray-400">
-                                File
-                              </p>
-                              <p className="mt-0.5 text-xs font-semibold text-gray-700">
-                                {formatFileSize(report.file_size_bytes)}
-                              </p>
-                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDelete(
+                                  report,
+                                )
+                              }
+                              disabled={Boolean(
+                                busyReportId,
+                              )}
+                              aria-label={`Delete ${formatMonth(
+                                report.report_month,
+                              )} report`}
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-red-500 transition-colors active:bg-red-500/10 disabled:opacity-40"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </div>
-                        ) : null}
 
-                        <p className="mt-2 text-[11px] text-gray-400">
-                          {formatTimestamp(
-                            report.generated_at || report.created_at,
-                          )}
-                        </p>
+                          {isReady ? (
+                            <>
+                              <div className="mt-3 grid grid-cols-3 gap-2">
+                                <div className="rounded-[12px] bg-background/60 px-2.5 py-2">
+                                  <p className="text-[9px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                                    Value
+                                  </p>
 
-                        {report.status === "failed" && report.error_message ? (
-                          <p className="mt-2 text-xs leading-5 text-red-600">
-                            {report.error_message}
-                          </p>
-                        ) : null}
+                                  <p className="mt-1 truncate text-[11px] font-bold">
+                                    {formatMoney(
+                                      report.portfolio_value,
+                                      reportCurrency,
+                                    )}
+                                  </p>
+                                </div>
 
-                        {isReady ? (
-                          <div className="mt-3 grid grid-cols-3 gap-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleView(report)}
-                              disabled={Boolean(busyReportId)}
-                              className="h-8 gap-1.5 text-xs"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              View
-                            </Button>
+                                <div className="rounded-[12px] bg-background/60 px-2.5 py-2">
+                                  <p className="text-[9px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                                    P&L
+                                  </p>
 
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDownload(report)}
-                              disabled={Boolean(busyReportId)}
-                              className="h-8 gap-1.5 text-xs"
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                              Download
-                            </Button>
+                                  <p
+                                    className={[
+                                      "mt-1 truncate text-[11px] font-bold",
+                                      reportPositive
+                                        ? "text-emerald-600"
+                                        : "text-red-600",
+                                    ].join(
+                                      " ",
+                                    )}
+                                  >
+                                    {formatMoney(
+                                      report.gain_loss,
+                                      reportCurrency,
+                                    )}
+                                  </p>
+                                </div>
 
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleEmail(report)}
-                              disabled={Boolean(busyReportId)}
-                              className="h-8 gap-1.5 text-xs"
-                            >
-                              <Mail className="h-3.5 w-3.5" />
-                              Email
-                            </Button>
+                                <div className="rounded-[12px] bg-background/60 px-2.5 py-2">
+                                  <p className="text-[9px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                                    Return
+                                  </p>
 
-                          </div>
-                        ) : null}
+                                  <p
+                                    className={[
+                                      "mt-1 text-[11px] font-bold",
+                                      reportPositive
+                                        ? "text-emerald-600"
+                                        : "text-red-600",
+                                    ].join(
+                                      " ",
+                                    )}
+                                  >
+                                    {formatPercent(
+                                      report.gain_loss_percent,
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 flex items-center justify-between">
+                                <span className="text-[10px] text-muted-foreground">
+                                  {formatFileSize(
+                                    report.file_size_bytes,
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="mt-3 grid grid-cols-3 gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() =>
+                                    handleView(
+                                      report,
+                                    )
+                                  }
+                                  disabled={Boolean(
+                                    busyReportId,
+                                  )}
+                                  className="h-[36px] gap-1 rounded-[10px] px-2 text-[10px]"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  View
+                                </Button>
+
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() =>
+                                    handleDownload(
+                                      report,
+                                    )
+                                  }
+                                  disabled={Boolean(
+                                    busyReportId,
+                                  )}
+                                  className="h-[36px] gap-1 rounded-[10px] px-2 text-[10px]"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() =>
+                                    handleEmail(
+                                      report,
+                                    )
+                                  }
+                                  disabled={Boolean(
+                                    busyReportId,
+                                  )}
+                                  className="h-[36px] gap-1 rounded-[10px] px-2 text-[10px]"
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                  Share
+                                </Button>
+                              </div>
+                            </>
+                          ) : null}
+
+                          {report.status ===
+                            "failed" &&
+                          report.error_message ? (
+                            <p className="mt-2 text-[11px] leading-4 text-red-600">
+                              {
+                                report.error_message
+                              }
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                },
+              )
+            )}
+          </div>
         </section>
 
-        <p className="px-1 text-center text-[11px] leading-5 text-gray-400">
-          Reports use your entered portfolio data and available market prices.
-          Market data may be delayed. StockPulse does not provide financial
-          advice.
+        <p className="px-3 text-center text-[10px] leading-4 text-muted-foreground">
+          Reports use your entered portfolio data and available market prices. Market data may be delayed. StockPulse does not provide financial advice.
         </p>
       </main>
     </div>
