@@ -1775,15 +1775,30 @@ export default function StockDetail() {
         className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur-xl"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="mx-auto grid h-[58px] w-full max-w-[430px] grid-cols-[44px_1fr_44px] items-end px-4 pb-2.5">
-          <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Go back"
-            className="flex h-10 w-10 items-center justify-center rounded-[12px] text-foreground transition-[transform,background-color] active:scale-90 active:bg-muted"
-          >
-            <ArrowLeft size={21} strokeWidth={2} />
-          </button>
+          <div className="mx-auto grid h-[58px] w-full max-w-[430px] grid-cols-[48px_1fr_48px] items-end px-4 pb-2.5">          
+            <button
+  type="button"
+  onClick={handleBack}
+  aria-label="Go back"
+  className="
+    -ml-1
+    flex
+    h-12
+    w-12
+    items-center
+    justify-center
+    rounded-full
+    text-foreground
+    transition-all
+    active:scale-90
+    active:bg-muted
+  "
+>
+  <ArrowLeft
+    size={22}
+    strokeWidth={2.2}
+  />
+</button>
 
           <div className="min-w-0 text-center">
             <p className="truncate text-[15px] font-bold tracking-[-0.2px]">
