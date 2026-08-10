@@ -9,7 +9,6 @@ import React, {
 } from "react";
 
 import {
-  Clock3,
   Database,
   Loader2,
   Newspaper,
@@ -48,10 +47,6 @@ const POPULAR_SEARCHES = [
   "TSLA",
 ];
 
-const RECENT_SEARCHES_KEY =
-  "stockpulse:analysis:recent";
-
-const MAX_RECENT_SEARCHES = 6;
 
 async function fetchMarketData(
   action,
@@ -110,55 +105,6 @@ function formatMetric(
   )}${suffix}`;
 }
 
-function loadRecentSearches() {
-  try {
-    const raw =
-      localStorage.getItem(
-        RECENT_SEARCHES_KEY,
-      );
-
-    const parsed =
-      raw
-        ? JSON.parse(raw)
-        : [];
-
-    return Array.isArray(parsed)
-      ? parsed
-          .map((item) =>
-            String(
-              item || "",
-            )
-              .trim()
-              .toUpperCase(),
-          )
-          .filter(Boolean)
-          .slice(
-            0,
-            MAX_RECENT_SEARCHES,
-          )
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRecentSearches(
-  tickers,
-) {
-  try {
-    localStorage.setItem(
-      RECENT_SEARCHES_KEY,
-      JSON.stringify(
-        tickers.slice(
-          0,
-          MAX_RECENT_SEARCHES,
-        ),
-      ),
-    );
-  } catch {
-    // Ignore localStorage failures.
-  }
-}
 
 function MetricCard({
   label,
@@ -227,13 +173,10 @@ function EmptyStateHero({
   error,
   suggestions,
   showSuggestions,
-  recentSearches,
   onQueryChange,
   onSubmit,
   onSuggestionSelect,
   onPopularSelect,
-  onRecentSelect,
-  onClearRecent,
 }) {
   return (
     <section className="pt-1">
@@ -288,15 +231,12 @@ function EmptyStateHero({
           <Button
             type="submit"
             disabled={isLoading}
-            className="h-[50px] shrink-0 rounded-[15px] px-4 text-[12px] font-semibold"
+            className="h-[50px] min-w-[86px] shrink-0 rounded-[15px] px-3 text-[12px] font-semibold"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <>
-                Analyze
-                <Sparkles className="ml-1.5 h-3.5 w-3.5" />
-              </>
+              "Analyze"
             )}
           </Button>
         </div>
@@ -308,46 +248,6 @@ function EmptyStateHero({
         ) : null}
       </form>
 
-      {recentSearches.length > 0 ? (
-        <section className="mt-5">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5">
-              <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
-
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                Recent
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClearRecent}
-              className="text-[10px] font-semibold text-muted-foreground"
-            >
-              Clear
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {recentSearches.map(
-              (ticker) => (
-                <button
-                  key={ticker}
-                  type="button"
-                  onClick={() =>
-                    onRecentSelect(
-                      ticker,
-                    )
-                  }
-                  className="inline-flex h-[36px] items-center gap-1.5 rounded-[11px] border border-border bg-card px-3 text-[11px] font-semibold shadow-[0_2px_6px_rgba(0,0,0,0.025)] active:bg-muted"
-                >
-                  {ticker}
-                </button>
-              ),
-            )}
-          </div>
-        </section>
-      ) : null}
 
       <section className="mt-5">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
@@ -433,8 +333,7 @@ export default function Analysis() {
   ] = useState(false);
 
   const [
-    recentSearches,
-    setRecentSearches,
+      setRecentSearches,
   ] = useState(
     loadRecentSearches,
   );
@@ -495,45 +394,6 @@ export default function Analysis() {
       ].slice(0, 6);
     }, [q]);
 
-  const addRecentSearch =
-    useCallback(
-      (ticker) => {
-        const normalized =
-          String(
-            ticker || "",
-          )
-            .trim()
-            .toUpperCase();
-
-        if (!normalized) {
-          return;
-        }
-
-        setRecentSearches(
-          (previous) => {
-            const next = [
-              normalized,
-              ...previous.filter(
-                (item) =>
-                  item !==
-                  normalized,
-              ),
-            ].slice(
-              0,
-              MAX_RECENT_SEARCHES,
-            );
-
-            saveRecentSearches(
-              next,
-            );
-
-            return next;
-          },
-        );
-      },
-      [],
-    );
-
   const runAnalysis =
     useCallback(
       async (ticker) => {
@@ -550,10 +410,6 @@ export default function Analysis() {
           );
           return;
         }
-
-        addRecentSearch(
-          normalizedTicker,
-        );
 
         const currentRequest =
           requestId.current + 1;
@@ -767,7 +623,7 @@ export default function Analysis() {
             },
           );
       },
-      [addRecentSearch],
+      [],
     );
 
   useEffect(() => {
@@ -865,18 +721,6 @@ export default function Analysis() {
     );
   }
 
-  function clearRecentSearches() {
-    setRecentSearches([]);
-
-    try {
-      localStorage.removeItem(
-        RECENT_SEARCHES_KEY,
-      );
-    } catch {
-      // Ignore.
-    }
-  }
-
   const isLoading =
     loadingInsights ||
     loadingNews;
@@ -957,9 +801,6 @@ export default function Analysis() {
             showSuggestions={
               showSuggestions
             }
-            recentSearches={
-              recentSearches
-            }
             onQueryChange={(
               event,
             ) => {
@@ -981,12 +822,6 @@ export default function Analysis() {
             }
             onPopularSelect={
               handleTickerSelect
-            }
-            onRecentSelect={
-              handleTickerSelect
-            }
-            onClearRecent={
-              clearRecentSearches
             }
           />
         ) : null}
