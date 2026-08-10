@@ -9,6 +9,7 @@ import React, {
 } from "react";
 
 import {
+  ArrowLeft,
   Database,
   Loader2,
   Newspaper,
@@ -46,7 +47,6 @@ const POPULAR_SEARCHES = [
   "AMZN",
   "TSLA",
 ];
-
 
 async function fetchMarketData(
   action,
@@ -104,7 +104,6 @@ function formatMetric(
     digits,
   )}${suffix}`;
 }
-
 
 function MetricCard({
   label,
@@ -248,7 +247,6 @@ function EmptyStateHero({
         ) : null}
       </form>
 
-
       <section className="mt-5">
         <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
           Popular
@@ -331,12 +329,6 @@ export default function Analysis() {
     showSuggestions,
     setShowSuggestions,
   ] = useState(false);
-
-  const [
-      setRecentSearches,
-  ] = useState(
-    loadRecentSearches,
-  );
 
   const autoRunTicker =
     useRef("");
@@ -721,6 +713,34 @@ export default function Analysis() {
     );
   }
 
+  function handleBackToSearch() {
+    requestId.current += 1;
+
+    setAnalysis(null);
+    setNews(null);
+    setQuote(null);
+    setActiveTicker("");
+    setActiveCompany("");
+    setError("");
+    setLoadingInsights(false);
+    setLoadingNews(false);
+    setShowSuggestions(false);
+    setQuery("");
+
+    autoRunTicker.current = "";
+
+    if (
+      window.location.search ||
+      routeTicker
+    ) {
+      window.history.replaceState(
+        null,
+        "",
+        "/analysis",
+      );
+    }
+  }
+
   const isLoading =
     loadingInsights ||
     loadingNews;
@@ -776,8 +796,25 @@ export default function Analysis() {
             "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto flex h-[58px] w-full max-w-[430px] items-end justify-center px-4 pb-2.5">
-          <div className="flex items-center gap-2">
+        <div className="mx-auto grid h-[58px] w-full max-w-[430px] grid-cols-[48px_1fr_48px] items-end px-4 pb-2.5">
+          <div className="flex h-12 w-12 items-center justify-center">
+            {analysis ? (
+              <button
+                type="button"
+                onClick={handleBackToSearch}
+                aria-label="Back to analysis search"
+                className="-ml-1 flex h-12 w-12 items-center justify-center rounded-full text-foreground transition-[transform,background-color] active:scale-90 active:bg-muted"
+              >
+                <ArrowLeft
+                  size={22}
+                  strokeWidth={2.2}
+                  aria-hidden="true"
+                />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="flex items-center justify-center gap-2 pb-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-foreground text-background">
               <Sparkles className="h-4 w-4" />
             </div>
@@ -786,6 +823,8 @@ export default function Analysis() {
               Analysis
             </h1>
           </div>
+
+          <div className="h-12 w-12" aria-hidden="true" />
         </div>
       </header>
 
