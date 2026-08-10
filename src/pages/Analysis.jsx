@@ -1,10 +1,15 @@
+// src/pages/Analysis.jsx
+
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+
 import {
+  Clock3,
   Database,
   Loader2,
   Newspaper,
@@ -13,16 +18,25 @@ import {
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  TrendingDown,
+  TrendingUp,
+  X,
 } from "lucide-react";
+
 import { useParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
+
 import {
   financialDatasetsRequest,
 } from "@/lib/financialDatasets";
-import { POPULAR_TICKERS } from "@/lib/tickers";
+
+import {
+  POPULAR_TICKERS,
+} from "@/lib/tickers";
+
 import bullImage from "@/assets/StockPulse.png";
 
 const POPULAR_SEARCHES = [
@@ -33,6 +47,11 @@ const POPULAR_SEARCHES = [
   "AMZN",
   "TSLA",
 ];
+
+const RECENT_SEARCHES_KEY =
+  "stockpulse:analysis:recent";
+
+const MAX_RECENT_SEARCHES = 6;
 
 async function fetchMarketData(
   action,
@@ -63,7 +82,8 @@ function finiteNumber(value) {
     return null;
   }
 
-  const parsed = Number(value);
+  const parsed =
+    Number(value);
 
   return Number.isFinite(parsed)
     ? parsed
@@ -78,7 +98,8 @@ function formatMetric(
     digits = 1,
   } = {},
 ) {
-  const parsed = finiteNumber(value);
+  const parsed =
+    finiteNumber(value);
 
   if (parsed === null) {
     return "—";
@@ -89,19 +110,113 @@ function formatMetric(
   )}${suffix}`;
 }
 
+function loadRecentSearches() {
+  try {
+    const raw =
+      localStorage.getItem(
+        RECENT_SEARCHES_KEY,
+      );
+
+    const parsed =
+      raw
+        ? JSON.parse(raw)
+        : [];
+
+    return Array.isArray(parsed)
+      ? parsed
+          .map((item) =>
+            String(
+              item || "",
+            )
+              .trim()
+              .toUpperCase(),
+          )
+          .filter(Boolean)
+          .slice(
+            0,
+            MAX_RECENT_SEARCHES,
+          )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentSearches(
+  tickers,
+) {
+  try {
+    localStorage.setItem(
+      RECENT_SEARCHES_KEY,
+      JSON.stringify(
+        tickers.slice(
+          0,
+          MAX_RECENT_SEARCHES,
+        ),
+      ),
+    );
+  } catch {
+    // Ignore localStorage failures.
+  }
+}
+
 function MetricCard({
   label,
   value,
 }) {
   return (
-    <div className="min-w-0 rounded-xl bg-gray-50 px-3 py-3">
-      <p className="truncate text-[10px] font-medium text-gray-500">
+    <div className="min-w-0 rounded-[16px] border border-border/70 bg-background/55 px-3 py-3">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
         {label}
       </p>
 
-      <p className="mt-1 truncate text-sm font-bold text-black">
+      <p className="mt-1 truncate text-[14px] font-bold tracking-[-0.2px] text-foreground">
         {value}
       </p>
+    </div>
+  );
+}
+
+function SearchSuggestions({
+  suggestions,
+  onSelect,
+}) {
+  if (!suggestions.length) {
+    return null;
+  }
+
+  return (
+    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[16px] border border-border bg-card shadow-xl">
+      {suggestions.map(
+        (stock, index) => (
+          <button
+            key={`${stock.ticker}-${index}`}
+            type="button"
+            onClick={() =>
+              onSelect(stock)
+            }
+            className={[
+              "flex min-h-[58px] w-full items-center justify-between gap-3 px-4 text-left transition-colors active:bg-muted/60",
+              index <
+              suggestions.length - 1
+                ? "border-b border-border/80"
+                : "",
+            ].join(" ")}
+          >
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold">
+                {stock.ticker}
+              </p>
+
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                {stock.name}
+              </p>
+            </div>
+
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        ),
+      )}
     </div>
   );
 }
@@ -112,118 +227,152 @@ function EmptyStateHero({
   error,
   suggestions,
   showSuggestions,
+  recentSearches,
   onQueryChange,
   onSubmit,
   onSuggestionSelect,
   onPopularSelect,
+  onRecentSelect,
+  onClearRecent,
 }) {
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col items-center px-1 pb-12 pt-6 text-center sm:pt-10">
-      <img
-        src={bullImage}
-        alt="Charging bull illustration"
-        className="mb-5 h-36 w-auto object-contain sm:h-44"
-      />
+    <section className="pt-1">
+      <div className="flex flex-col items-center text-center">
+        <img
+          src={bullImage}
+          alt="StockPulse bull"
+          className="h-[118px] w-auto object-contain"
+        />
 
-      <h1 className="font-heading text-4xl font-bold tracking-[-0.035em] text-black sm:text-5xl">
-        AI Stock Analysis
-      </h1>
+        <h1 className="mt-3 text-[26px] font-bold tracking-[-0.65px]">
+          AI Stock Analysis
+        </h1>
 
-      <p className="mt-4 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
-        A detailed AI assessment of the stock with key financial metrics.
-      </p>
+        <p className="mt-2 max-w-[320px] text-[12px] leading-5 text-muted-foreground">
+          Search a stock to get an AI assessment, verified financial metrics, bullish and bearish factors, and recent news.
+        </p>
+      </div>
 
       <form
         onSubmit={onSubmit}
-        className="mt-8 w-full max-w-3xl"
+        className="mt-5"
       >
-        <div className="flex w-full items-stretch gap-2">
+        <div className="flex items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
-            <div className="flex h-[60px] items-center rounded-lg border border-gray-300 bg-white">
-              <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
+            <div className="flex h-[50px] items-center rounded-[15px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
+              <Search className="ml-3.5 h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 
               <Input
-                placeholder="Enter Ticker"
+                placeholder="Ticker or company"
                 value={query}
                 onChange={onQueryChange}
-                className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
+                className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-[14px] uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
                 autoComplete="off"
                 autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 
-            {showSuggestions &&
-              suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white text-left shadow-xl">
-                  {suggestions.map(
-                    (stock) => (
-                      <button
-                        key={stock.ticker}
-                        type="button"
-                        onClick={() =>
-                          onSuggestionSelect(
-                            stock,
-                          )
-                        }
-                        className="w-full border-b border-gray-100 px-4 py-3 transition-colors last:border-0 hover:bg-gray-50"
-                      >
-                        <p className="text-sm font-semibold text-black">
-                          {stock.ticker}
-                        </p>
-
-                        <p className="text-xs text-gray-500">
-                          {stock.name}
-                        </p>
-                      </button>
-                    ),
-                  )}
-                </div>
-              )}
+            {showSuggestions ? (
+              <SearchSuggestions
+                suggestions={
+                  suggestions
+                }
+                onSelect={
+                  onSuggestionSelect
+                }
+              />
+            ) : null}
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={isLoading}
-            className="flex h-[60px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:px-6"
-            style={{
-              backgroundColor: "#000000",
-              color: "#ffffff",
-            }}
+            className="h-[50px] shrink-0 rounded-[15px] px-4 text-[12px] font-semibold"
           >
-            Analyze
-            <Sparkles className="ml-1.5 h-4 w-4" />
-          </button>
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                Analyze
+                <Sparkles className="ml-1.5 h-3.5 w-3.5" />
+              </>
+            )}
+          </Button>
         </div>
 
-        {error && (
-          <p className="mt-3 text-sm text-red-600">
+        {error ? (
+          <p className="mt-2 px-1 text-[12px] text-red-600">
             {error}
           </p>
-        )}
+        ) : null}
       </form>
 
-      <div className="mt-6 flex flex-col items-center">
-        <p className="text-center text-xs font-medium text-gray-500">
-          Popular tickers
+      {recentSearches.length > 0 ? (
+        <section className="mt-5">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5">
+              <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
+
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                Recent
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClearRecent}
+              className="text-[10px] font-semibold text-muted-foreground"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {recentSearches.map(
+              (ticker) => (
+                <button
+                  key={ticker}
+                  type="button"
+                  onClick={() =>
+                    onRecentSelect(
+                      ticker,
+                    )
+                  }
+                  className="inline-flex h-[36px] items-center gap-1.5 rounded-[11px] border border-border bg-card px-3 text-[11px] font-semibold shadow-[0_2px_6px_rgba(0,0,0,0.025)] active:bg-muted"
+                >
+                  {ticker}
+                </button>
+              ),
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mt-5">
+        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          Popular
         </p>
 
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {POPULAR_SEARCHES.map(
             (ticker) => (
               <button
                 key={ticker}
                 type="button"
                 onClick={() =>
-                  onPopularSelect(ticker)
+                  onPopularSelect(
+                    ticker,
+                  )
                 }
-                className="min-h-10 rounded-xl border border-gray-200 bg-white px-4 text-xs font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                className="h-[42px] rounded-[13px] border border-border bg-card text-[11px] font-semibold shadow-[0_2px_7px_rgba(0,0,0,0.025)] active:bg-muted"
               >
                 {ticker}
               </button>
             ),
           )}
         </div>
-      </div>
+      </section>
     </section>
   );
 }
@@ -283,6 +432,13 @@ export default function Analysis() {
     setShowSuggestions,
   ] = useState(false);
 
+  const [
+    recentSearches,
+    setRecentSearches,
+  ] = useState(
+    loadRecentSearches,
+  );
+
   const autoRunTicker =
     useRef("");
 
@@ -293,16 +449,22 @@ export default function Analysis() {
     .trim()
     .toUpperCase();
 
-  const suggestions = q
-    ? [
-        ...POPULAR_TICKERS.filter(
+  const suggestions =
+    useMemo(() => {
+      if (!q) {
+        return [];
+      }
+
+      const exactStarts =
+        POPULAR_TICKERS.filter(
           (stock) =>
             stock.ticker
               .toUpperCase()
               .startsWith(q),
-        ),
+        );
 
-        ...POPULAR_TICKERS.filter(
+      const nameStarts =
+        POPULAR_TICKERS.filter(
           (stock) =>
             !stock.ticker
               .toUpperCase()
@@ -310,15 +472,75 @@ export default function Analysis() {
             stock.name
               .toUpperCase()
               .startsWith(q),
-        ),
-      ].slice(0, 6)
-    : [];
+        );
+
+      const nameContains =
+        POPULAR_TICKERS.filter(
+          (stock) =>
+            !stock.ticker
+              .toUpperCase()
+              .startsWith(q) &&
+            !stock.name
+              .toUpperCase()
+              .startsWith(q) &&
+            stock.name
+              .toUpperCase()
+              .includes(q),
+        );
+
+      return [
+        ...exactStarts,
+        ...nameStarts,
+        ...nameContains,
+      ].slice(0, 6);
+    }, [q]);
+
+  const addRecentSearch =
+    useCallback(
+      (ticker) => {
+        const normalized =
+          String(
+            ticker || "",
+          )
+            .trim()
+            .toUpperCase();
+
+        if (!normalized) {
+          return;
+        }
+
+        setRecentSearches(
+          (previous) => {
+            const next = [
+              normalized,
+              ...previous.filter(
+                (item) =>
+                  item !==
+                  normalized,
+              ),
+            ].slice(
+              0,
+              MAX_RECENT_SEARCHES,
+            );
+
+            saveRecentSearches(
+              next,
+            );
+
+            return next;
+          },
+        );
+      },
+      [],
+    );
 
   const runAnalysis =
     useCallback(
       async (ticker) => {
         const normalizedTicker =
-          String(ticker || "")
+          String(
+            ticker || "",
+          )
             .trim()
             .toUpperCase();
 
@@ -329,15 +551,28 @@ export default function Analysis() {
           return;
         }
 
+        addRecentSearch(
+          normalizedTicker,
+        );
+
         const currentRequest =
           requestId.current + 1;
 
         requestId.current =
           currentRequest;
 
-        setShowSuggestions(false);
-        setLoadingInsights(true);
-        setLoadingNews(true);
+        setShowSuggestions(
+          false,
+        );
+
+        setLoadingInsights(
+          true,
+        );
+
+        setLoadingNews(
+          true,
+        );
+
         setError("");
         setAnalysis(null);
         setNews(null);
@@ -371,6 +606,7 @@ export default function Analysis() {
                 body: {
                   ticker:
                     normalizedTicker,
+
                   company_name:
                     companyName,
                 },
@@ -421,6 +657,7 @@ export default function Analysis() {
               setLoadingInsights(
                 false,
               );
+
               return;
             }
 
@@ -430,7 +667,7 @@ export default function Analysis() {
               )
             ) {
               throw new Error(
-                "The analysis response was incomplete",
+                "The analysis response was incomplete.",
               );
             }
 
@@ -439,7 +676,10 @@ export default function Analysis() {
                 companyName,
             );
 
-            setAnalysis(result);
+            setAnalysis(
+              result,
+            );
+
             setLoadingInsights(
               false,
             );
@@ -501,26 +741,33 @@ export default function Analysis() {
                 [],
             );
 
-            setLoadingNews(false);
-          })
-          .catch((newsError) => {
-            if (
-              requestId.current !==
-              currentRequest
-            ) {
-              return;
-            }
-
-            console.warn(
-              "News request failed:",
-              newsError,
+            setLoadingNews(
+              false,
             );
+          })
+          .catch(
+            (newsError) => {
+              if (
+                requestId.current !==
+                currentRequest
+              ) {
+                return;
+              }
 
-            setNews([]);
-            setLoadingNews(false);
-          });
+              console.warn(
+                "News request failed:",
+                newsError,
+              );
+
+              setNews([]);
+
+              setLoadingNews(
+                false,
+              );
+            },
+          );
       },
-      [],
+      [addRecentSearch],
     );
 
   useEffect(() => {
@@ -549,7 +796,9 @@ export default function Analysis() {
     autoRunTicker.current =
       initialTicker;
 
-    setQuery(initialTicker);
+    setQuery(
+      initialTicker,
+    );
 
     void runAnalysis(
       initialTicker,
@@ -559,65 +808,97 @@ export default function Analysis() {
     runAnalysis,
   ]);
 
-  const handleRefresh = () => {
-    setQuery(activeTicker);
+  function handleRefresh() {
+    setQuery(
+      activeTicker,
+    );
 
     void runAnalysis(
       activeTicker,
     );
-  };
+  }
 
-  const handleSubmit = (
+  function handleSubmit(
     event,
-  ) => {
+  ) {
     event.preventDefault();
 
-    setShowSuggestions(false);
+    setShowSuggestions(
+      false,
+    );
 
     if (!q) {
       setError(
         "Enter a ticker to analyze.",
       );
+
       return;
     }
 
     void runAnalysis(q);
-  };
+  }
 
-  const handleSuggestionSelect =
-    (stock) => {
-      setQuery(stock.ticker);
-      setShowSuggestions(false);
+  function handleSuggestionSelect(
+    stock,
+  ) {
+    setQuery(
+      stock.ticker,
+    );
 
-      void runAnalysis(
-        stock.ticker,
+    setShowSuggestions(
+      false,
+    );
+
+    void runAnalysis(
+      stock.ticker,
+    );
+  }
+
+  function handleTickerSelect(
+    ticker,
+  ) {
+    setQuery(ticker);
+    setError("");
+
+    void runAnalysis(
+      ticker,
+    );
+  }
+
+  function clearRecentSearches() {
+    setRecentSearches([]);
+
+    try {
+      localStorage.removeItem(
+        RECENT_SEARCHES_KEY,
       );
-    };
-
-  const handlePopularSelect =
-    (ticker) => {
-      setQuery(ticker);
-      setError("");
-
-      void runAnalysis(ticker);
-    };
+    } catch {
+      // Ignore.
+    }
+  }
 
   const isLoading =
     loadingInsights ||
     loadingNews;
 
   const quotePrice =
-    Number.isFinite(quote?.c)
+    Number.isFinite(
+      quote?.c,
+    )
       ? quote.c
       : null;
 
   const quoteChange =
-    Number.isFinite(quote?.d)
+    Number.isFinite(
+      quote?.d,
+    )
       ? quote.d
       : null;
 
   const quoteChangePercent =
-    Number.isFinite(quote?.dp)
+    Number.isFinite(
+      quote?.dp,
+    )
       ? quote.dp
       : null;
 
@@ -626,50 +907,46 @@ export default function Analysis() {
     !loadingInsights;
 
   const metrics =
-    analysis?.metrics || {};
+    analysis?.metrics ||
+    {};
+
+  const pricePositive =
+    quoteChangePercent ===
+      null
+      ? true
+      : quoteChangePercent >=
+        0;
 
   return (
     <div
-      className="min-h-screen bg-white text-black"
+      className="min-h-full bg-background text-foreground"
       style={{
         paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 64px)",
+          "calc(env(safe-area-inset-bottom) + 72px)",
       }}
     >
       <header
-        className="border-b border-gray-200"
+        className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur-xl"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
         }}
       >
-        <div className="mx-auto flex max-w-5xl justify-center px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-1.5">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl"
-              style={{
-                backgroundColor:
-                  "#000000",
-              }}
-            >
-              <Sparkles
-                className="h-5 w-5"
-                style={{
-                  color:
-                    "#ffffff",
-                }}
-              />
+        <div className="mx-auto flex h-[58px] w-full max-w-[430px] items-end justify-center px-4 pb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-foreground text-background">
+              <Sparkles className="h-4 w-4" />
             </div>
 
-            <h1 className="font-heading text-2xl font-bold tracking-tight text-black">
+            <h1 className="text-[20px] font-bold tracking-[-0.45px]">
               Analysis
             </h1>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
-        {showEmptyState && (
+      <main className="mx-auto w-full max-w-[430px] px-4 pb-7 pt-4">
+        {showEmptyState ? (
           <EmptyStateHero
             query={query}
             isLoading={isLoading}
@@ -680,6 +957,9 @@ export default function Analysis() {
             showSuggestions={
               showSuggestions
             }
+            recentSearches={
+              recentSearches
+            }
             onQueryChange={(
               event,
             ) => {
@@ -688,6 +968,7 @@ export default function Analysis() {
               );
 
               setError("");
+
               setShowSuggestions(
                 true,
               );
@@ -699,228 +980,196 @@ export default function Analysis() {
               handleSuggestionSelect
             }
             onPopularSelect={
-              handlePopularSelect
+              handleTickerSelect
+            }
+            onRecentSelect={
+              handleTickerSelect
+            }
+            onClearRecent={
+              clearRecentSearches
             }
           />
-        )}
+        ) : null}
 
-        {loadingInsights && (
-          <div className="mx-auto mt-10 flex max-w-2xl flex-col items-center justify-center rounded-3xl border border-gray-100 bg-white p-12 shadow-sm">
-            <div className="relative mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50">
-              <span className="absolute inset-0 animate-pulse rounded-2xl bg-emerald-100 blur-md" />
-
-              <span className="absolute -inset-1 animate-ping rounded-2xl border border-emerald-200" />
-
-              <Sparkles className="relative h-6 w-6 animate-pulse text-emerald-600" />
+        {loadingInsights ? (
+          <div className="mt-6 rounded-[22px] border border-border bg-card px-5 py-10 text-center shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-[16px] bg-emerald-500/10 text-emerald-600">
+              <Sparkles className="h-5 w-5 animate-pulse" />
             </div>
 
-            <p className="mb-1 font-heading font-semibold text-black">
+            <p className="mt-4 text-[15px] font-semibold">
               Analyzing {q}
             </p>
 
-            <p className="text-sm text-gray-500">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               Generating AI assessment…
             </p>
           </div>
-        )}
+        ) : null}
 
         {!loadingInsights &&
-          analysis && (
-            <div className="mx-auto max-w-4xl space-y-6 py-3">
-              <form
-                onSubmit={
-                  handleSubmit
-                }
-                className="w-full"
-              >
-                <div className="flex w-full items-stretch gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <div className="flex h-[54px] items-center rounded-lg border border-gray-300 bg-white">
-                      <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
+        analysis ? (
+          <div className="space-y-5">
+            <form
+              onSubmit={
+                handleSubmit
+              }
+            >
+              <div className="flex items-stretch gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <div className="flex h-[48px] items-center rounded-[14px] border border-border bg-card">
+                    <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
 
-                      <Input
-                        placeholder="Enter Ticker"
-                        value={query}
-                        onChange={(
-                          event,
-                        ) => {
-                          setQuery(
-                            event.target
-                              .value,
-                          );
+                    <Input
+                      placeholder="Ticker or company"
+                      value={query}
+                      onChange={(
+                        event,
+                      ) => {
+                        setQuery(
+                          event.target.value,
+                        );
 
-                          setError("");
+                        setError("");
 
-                          setShowSuggestions(
-                            true,
-                          );
-                        }}
-                        className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
-                        autoComplete="off"
-                        autoCorrect="off"
-                      />
-                    </div>
-
-                    {showSuggestions &&
-                      suggestions.length >
-                        0 && (
-                        <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
-                          {suggestions.map(
-                            (stock) => (
-                              <button
-                                key={
-                                  stock.ticker
-                                }
-                                type="button"
-                                onClick={() =>
-                                  handleSuggestionSelect(
-                                    stock,
-                                  )
-                                }
-                                className="w-full border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50"
-                              >
-                                <p className="text-sm font-semibold text-black">
-                                  {
-                                    stock.ticker
-                                  }
-                                </p>
-
-                                <p className="text-xs text-gray-500">
-                                  {
-                                    stock.name
-                                  }
-                                </p>
-                              </button>
-                            ),
-                          )}
-                        </div>
-                      )}
+                        setShowSuggestions(
+                          true,
+                        );
+                      }}
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-[13px] uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="flex h-[54px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{
-                      backgroundColor:
-                        "#000000",
-                      color:
-                        "#ffffff",
-                    }}
-                  >
-                    Analyze
-                  </button>
+                  {showSuggestions ? (
+                    <SearchSuggestions
+                      suggestions={
+                        suggestions
+                      }
+                      onSelect={
+                        handleSuggestionSelect
+                      }
+                    />
+                  ) : null}
                 </div>
 
-                {error && (
-                  <p className="mt-2 text-sm text-red-600">
-                    {error}
-                  </p>
-                )}
-              </form>
-
-              <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mb-1 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-emerald-600" />
-
-                      <span className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                        AI Assessment
-                      </span>
-                    </div>
-
-                    <p className="truncate font-heading text-lg font-bold text-black">
-                      {activeTicker} —{" "}
-                      {activeCompany}
-                    </p>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={
-                      handleRefresh
-                    }
-                    aria-label="Refresh analysis"
-                    title="Refresh analysis"
-                    className="shrink-0 text-gray-600"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {quotePrice !==
-                  null && (
-                  <div className="mb-3 flex flex-wrap items-center gap-3">
-                    <span className="font-heading text-2xl font-bold text-black">
-                      $
-                      {quotePrice.toFixed(
-                        2,
-                      )}
-                    </span>
-
-                    {quoteChangePercent !==
-                      null && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-sm font-semibold ${
-                          quoteChangePercent >=
-                          0
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {quoteChange !==
-                        null
-                          ? `${
-                              quoteChange >=
-                              0
-                                ? "+"
-                                : ""
-                            }${quoteChange.toFixed(
-                              2,
-                            )} `
-                          : ""}
-                        (
-                        {quoteChangePercent >=
-                        0
-                          ? "+"
-                          : ""}
-                        {quoteChangePercent.toFixed(
-                          2,
-                        )}
-                        %)
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <p className="text-sm leading-relaxed text-gray-700">
-                  {analysis.summary}
-                </p>
-
-                <p className="mt-3 text-[10px] text-gray-300">
-                · Not financial advice
-                </p>
+                <Button
+                  type="submit"
+                  disabled={
+                    isLoading
+                  }
+                  className="h-[48px] rounded-[14px] px-4 text-[11px]"
+                >
+                  Analyze
+                </Button>
               </div>
 
-              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center gap-2">
-                  <Database className="h-4 w-4 text-emerald-600" />
+              {error ? (
+                <p className="mt-2 px-1 text-[12px] text-red-600">
+                  {error}
+                </p>
+              ) : null}
+            </form>
 
-                  <div>
-                    <h2 className="font-heading text-sm font-bold text-black">
-                      Verified Financial Metrics
-                    </h2>
+            <section className="rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
 
-                    <p className="text-[10px] text-gray-400">
-                      Sourced from the StockPulse database
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-emerald-600">
+                      AI Assessment
                     </p>
                   </div>
+
+                  <h2 className="mt-1 truncate text-[18px] font-bold tracking-[-0.35px]">
+                    {activeTicker}
+                  </h2>
+
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {activeCompany}
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <button
+                  type="button"
+                  onClick={
+                    handleRefresh
+                  }
+                  aria-label="Refresh analysis"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-muted-foreground transition-colors active:bg-muted"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+              </div>
+
+              {quotePrice !==
+              null ? (
+                <div className="mt-4 flex items-end justify-between gap-3">
+                  <p className="text-[30px] font-bold leading-none tracking-[-0.8px]">
+                    $
+                    {quotePrice.toFixed(
+                      2,
+                    )}
+                  </p>
+
+                  {quoteChangePercent !==
+                  null ? (
+                    <div
+                      className={[
+                        "inline-flex h-[30px] items-center gap-1 rounded-[9px] px-2.5 text-[12px] font-semibold",
+                        pricePositive
+                          ? "bg-emerald-500/10 text-emerald-600"
+                          : "bg-red-500/10 text-red-600",
+                      ].join(" ")}
+                    >
+                      {pricePositive ? (
+                        <TrendingUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <TrendingDown className="h-3.5 w-3.5" />
+                      )}
+
+                      {quoteChange !==
+                      null
+                        ? `${quoteChange >= 0 ? "+" : ""}${quoteChange.toFixed(2)} · `
+                        : ""}
+
+                      {quoteChangePercent >=
+                      0
+                        ? "+"
+                        : ""}
+
+                      {quoteChangePercent.toFixed(
+                        2,
+                      )}
+                      %
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <p className="mt-4 text-[13px] leading-[1.55] text-foreground/85">
+                {analysis.summary}
+              </p>
+
+              <p className="mt-3 text-[9px] text-muted-foreground">
+                Not financial advice
+              </p>
+            </section>
+
+            <section>
+              <div className="mb-2 flex items-center gap-1.5 px-2">
+                <Database className="h-3.5 w-3.5 text-muted-foreground" />
+
+                <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                  Verified Metrics
+                </h2>
+              </div>
+
+              <div className="rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+                <div className="grid grid-cols-2 gap-2">
                   <MetricCard
                     label="Market Cap"
                     value={formatMetric(
@@ -1005,18 +1254,26 @@ export default function Analysis() {
                   />
                 </div>
               </div>
+            </section>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-sm">
-                  <div className="mb-5 flex items-center gap-2">
-                    <ThumbsUp className="h-4 w-4 text-emerald-600" />
+            <section>
+              <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                Investment View
+              </h2>
 
-                    <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-emerald-700">
+              <div className="space-y-2">
+                <div className="rounded-[22px] border border-emerald-500/20 bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-emerald-500/10 text-emerald-600">
+                      <ThumbsUp className="h-4 w-4" />
+                    </div>
+
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-emerald-600">
                       Bullish
-                    </h2>
+                    </p>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {analysis.pros.map(
                       (
                         item,
@@ -1025,11 +1282,11 @@ export default function Analysis() {
                         <div
                           key={`${item.title}-${index}`}
                         >
-                          <p className="text-sm font-semibold text-emerald-700">
+                          <p className="text-[13px] font-semibold text-emerald-600">
                             {item.title}
                           </p>
 
-                          <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
+                          <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
                             {item.detail}
                           </p>
                         </div>
@@ -1038,16 +1295,18 @@ export default function Analysis() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
-                  <div className="mb-5 flex items-center gap-2">
-                    <ThumbsDown className="h-4 w-4 text-red-600" />
+                <div className="rounded-[22px] border border-red-500/20 bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-red-500/10 text-red-600">
+                      <ThumbsDown className="h-4 w-4" />
+                    </div>
 
-                    <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-red-700">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-red-600">
                       Bearish
-                    </h2>
+                    </p>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {analysis.cons.map(
                       (
                         item,
@@ -1056,11 +1315,11 @@ export default function Analysis() {
                         <div
                           key={`${item.title}-${index}`}
                         >
-                          <p className="text-sm font-semibold text-red-700">
+                          <p className="text-[13px] font-semibold text-red-600">
                             {item.title}
                           </p>
 
-                          <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
+                          <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
                             {item.detail}
                           </p>
                         </div>
@@ -1069,114 +1328,94 @@ export default function Analysis() {
                   </div>
                 </div>
               </div>
+            </section>
 
-              <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="mb-5 flex items-center gap-2">
-                  <Newspaper className="h-4 w-4 text-gray-500" />
+            <section>
+              <div className="mb-2 flex items-center justify-between px-2">
+                <div className="flex items-center gap-1.5">
+                  <Newspaper className="h-3.5 w-3.5 text-muted-foreground" />
 
-                  <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-gray-500">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                     Recent News
                   </h2>
                 </div>
+              </div>
 
+              <div className="overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
                 {loadingNews ? (
-                  <div className="flex items-center gap-3 py-4 text-gray-500">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-
-                    <p className="text-sm">
-                      Loading news sources…
-                    </p>
+                  <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading news…
                   </div>
                 ) : news?.length ? (
-                  <div className="space-y-4">
-                    {news.map(
-                      (
-                        item,
-                        index,
-                      ) => (
-                        <div
-                          key={`${item.url || item.title}-${index}`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  news.map(
+                    (
+                      item,
+                      index,
+                    ) => (
+                      <a
+                        key={`${item.url || item.title}-${index}`}
+                        href={
+                          item.url ||
+                          undefined
+                        }
+                        target={
+                          item.url
+                            ? "_blank"
+                            : undefined
+                        }
+                        rel={
+                          item.url
+                            ? "noreferrer"
+                            : undefined
+                        }
+                        className={[
+                          "block px-4 py-4 transition-colors active:bg-muted/50",
+                          index <
+                          news.length - 1
+                            ? "border-b border-border/80"
+                            : "",
+                        ].join(" ")}
+                      >
+                        <h3 className="text-[13px] font-semibold leading-[1.4]">
+                          {item.title}
+                        </h3>
 
-                            <div>
-                              {item.url ? (
-                                <a
-                                  href={
-                                    item.url
-                                  }
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-sm font-medium text-black hover:underline"
-                                >
-                                  {item.title}
-                                </a>
-                              ) : (
-                                <p className="text-sm font-medium text-black">
-                                  {item.title}
-                                </p>
-                              )}
+                        {item.summary ? (
+                          <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+                            {item.summary}
+                          </p>
+                        ) : null}
 
-                              <p className="mt-0.5 text-sm leading-relaxed text-gray-500">
-                                {item.summary}
-                              </p>
+                        <div className="mt-2 flex items-center gap-2 text-[9px] text-muted-foreground">
+                          {item.source ? (
+                            <span>
+                              {item.source}
+                            </span>
+                          ) : null}
 
-                              <div className="mt-1 flex flex-wrap items-center gap-2">
-                                {item.date && (
-                                  <p className="text-xs text-gray-400">
-                                    {item.date}
-                                  </p>
-                                )}
-
-                                {item.source && (
-                                  <>
-                                    {item.date && (
-                                      <span className="text-xs text-gray-400">
-                                        ·
-                                      </span>
-                                    )}
-
-                                    {item.url ? (
-                                      <a
-                                        href={
-                                          item.url
-                                        }
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs font-medium text-emerald-700 hover:underline"
-                                      >
-                                        {item.source}{" "}
-                                        ↗
-                                      </a>
-                                    ) : (
-                                      <span className="text-xs font-medium text-gray-400">
-                                        {item.source}
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {index <
-                            news.length -
-                              1 && (
-                            <div className="mt-4 border-b border-gray-100" />
-                          )}
+                          {item.date ? (
+                            <span>
+                              {item.date}
+                            </span>
+                          ) : null}
                         </div>
-                      ),
-                    )}
-                  </div>
+                      </a>
+                    ),
+                  )
                 ) : (
-                  <p className="py-4 text-sm text-gray-500">
-                    No recent news was found for this ticker.
-                  </p>
+                  <div className="px-5 py-10 text-center">
+                    <Newspaper className="mx-auto h-6 w-6 text-muted-foreground/40" />
+
+                    <p className="mt-2 text-[12px] font-medium text-muted-foreground">
+                      No recent news available.
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
-          )}
+            </section>
+          </div>
+        ) : null}
       </main>
     </div>
   );
