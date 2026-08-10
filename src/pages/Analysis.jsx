@@ -201,7 +201,7 @@ function EmptyStateHero({
       >
         <div className="flex w-full items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
-            <div className="flex h-[60px] items-center rounded-lg border border-gray-300 bg-white">
+            <div className="flex h-[40px] items-center rounded-lg border border-gray-300 bg-white">
               <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
 
               <Input
@@ -246,7 +246,7 @@ function EmptyStateHero({
           <button
             type="submit"
             disabled={isLoading}
-            className="flex h-[60px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-[40px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             style={{
               backgroundColor: "#000000",
               color: "#ffffff",
@@ -909,7 +909,7 @@ export default function Analysis() {
             >
               <div className="flex w-full items-stretch gap-2">
                 <div className="relative min-w-0 flex-1">
-                  <div className="flex h-[54px] items-center rounded-lg border border-gray-300 bg-white">
+                  <div className="flex h-[36px] items-center rounded-lg border border-gray-300 bg-white">
                     <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
 
                     <Input
@@ -972,7 +972,7 @@ export default function Analysis() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="flex h-[54px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-[36px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   style={{
                     backgroundColor:
                       "#000000",
