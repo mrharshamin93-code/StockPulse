@@ -52,8 +52,8 @@ import {
 const PERIODS = ["1D","1W","1M","3M","6M","YTD","1Y","2Y","5Y","10Y","All"];
 
 const PERIOD_CONFIG = {
-  "1D": { resolution: "5", daysBack: 1 },
-  "1W": { resolution: "60", daysBack: 7 },
+  "1D": { resolution: "D", daysBack: 7 },
+  "1W": { resolution: "D", daysBack: 14 },
   "1M": { resolution: "D", daysBack: 31 },
   "3M": { resolution: "D", daysBack: 93 },
   "6M": { resolution: "D", daysBack: 186 },
@@ -161,15 +161,7 @@ function getPeriodBounds(period) {
 function formatChartLabel(timestamp, period) {
   const date = new Date(timestamp * 1000);
 
-  if (period === "1D") {
-    return date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  }
-
-  if (["1W","1M","3M","6M","YTD"].includes(period)) {
+  if (["1D", "1W", "1M", "3M", "6M", "YTD"].includes(period)) {
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -182,21 +174,8 @@ function formatChartLabel(timestamp, period) {
   });
 }
 
-function getTimestampKey(timestamp, period) {
+function getTimestampKey(timestamp) {
   const date = new Date(timestamp * 1000);
-
-  if (period === "1D") {
-    const minutes = date.getUTCMinutes();
-    const bucketMinutes = Math.floor(minutes / 5) * 5;
-
-    return Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth(),
-      date.getUTCDate(),
-      date.getUTCHours(),
-      bucketMinutes
-    );
-  }
 
   return Date.UTC(
     date.getUTCFullYear(),
@@ -1167,7 +1146,7 @@ export default function StockDetail() {
   const [newsLoading, setNewsLoading] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
-  const [activePeriod, setActivePeriod] = useState("1D");
+  const [activePeriod, setActivePeriod] = useState("1W");
   const [, setPeriodReturn] = useState(null);
   const [dailyReturn, setDailyReturn] = useState(null);
 
@@ -1232,7 +1211,7 @@ export default function StockDetail() {
     async function loadStock() {
       setLoading(true);
       setPageError("");
-      setActivePeriod("1D");
+      setActivePeriod("1W");
       setPeriodReturn(null);
 
       const cachedTicker = tickerFromRoute || routeStateTicker;
