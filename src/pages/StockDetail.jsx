@@ -14,6 +14,7 @@ import {
 } from "react-router-dom";
 
 import {
+  CartesianGrid,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -169,14 +170,67 @@ function formatChartLabel(timestamp, period) {
     });
   }
 
-  if (["1W", "1M", "3M", "6M", "YTD"].includes(period)) {
+  if (["1W", "1M"].includes(period)) {
     return date.toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
       month: "short",
       day: "numeric",
     });
   }
 
+  if (["3M", "6M", "YTD", "1Y"].includes(period)) {
+    return date.toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+    });
+  }
+
   return date.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+function getNewYorkTimeParts(timestamp) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(Number(timestamp) * 1000));
+
+  return {
+    hour: Number(parts.find((part) => part.type === "hour")?.value),
+    minute: Number(parts.find((part) => part.type === "minute")?.value),
+  };
+}
+
+function formatXAxisTick(timestamp, period) {
+  const date = new Date(Number(timestamp) * 1000);
+
+  if (period === "1D") {
+    const { hour } = getNewYorkTimeParts(timestamp);
+    return Number.isFinite(hour) ? String(hour).padStart(2, "0") : "";
+  }
+
+  if (["1W", "1M"].includes(period)) {
+    return date.toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  if (["3M", "6M", "YTD", "1Y"].includes(period)) {
+    return date.toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+    });
+  }
+
+  return date.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
     month: "short",
     year: "2-digit",
   });
@@ -389,15 +443,19 @@ function ChartTooltip({
   comparisonsActive,
   ticker,
   periodStartPrice,
+  period,
 }) {
   if (!active || !payload?.length) return null;
 
   const displayedStartPrice = roundPrice(periodStartPrice);
+  const formattedLabel = Number.isFinite(Number(label))
+    ? formatChartLabel(Number(label), period)
+    : label;
 
   return (
     <div className="rounded-[14px] border border-border bg-card px-3 py-2.5 text-foreground shadow-xl">
       <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
-        {label}
+        {formattedLabel}
       </p>
 
       {payload.map((entry) => {
@@ -629,6 +687,47 @@ function StockChart({
 
   const primaryColor = chartPositive ? "#10b981" : "#ef4444";
 
+  const xAxisTicks = useMemo(() => {
+    const timestamps = chartData
+      .map((point) => Number(point?.timestamp))
+      .filter(Number.isFinite)
+      .sort((left, right) => left - right);
+
+    if (!timestamps.length) return [];
+
+    if (activePeriod === "1D") {
+      const hourlyTicks = timestamps.filter((timestamp) => {
+        const { minute } = getNewYorkTimeParts(timestamp);
+        return minute === 0;
+      });
+
+      return hourlyTicks.length ? hourlyTicks : timestamps;
+    }
+
+    if (["1W", "1M"].includes(activePeriod)) {
+      return timestamps;
+    }
+
+    const monthlyTicks = [];
+    let previousMonthKey = "";
+
+    for (const timestamp of timestamps) {
+      const date = new Date(timestamp * 1000);
+      const monthKey = date.toLocaleDateString("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+      });
+
+      if (monthKey !== previousMonthKey) {
+        monthlyTicks.push(timestamp);
+        previousMonthKey = monthKey;
+      }
+    }
+
+    return monthlyTicks;
+  }, [chartData, activePeriod]);
+
   const comparisonLegendItems = [
     {
       ticker: primaryTicker,
@@ -837,7 +936,7 @@ function StockChart({
         </div>
       )}
 
-      <div className="relative mt-4 h-[300px] w-full">
+      <div className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50">
         {chartLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -878,15 +977,31 @@ function StockChart({
                 );
               }}
             >
+              <CartesianGrid
+                stroke="#e5e7eb"
+                strokeWidth={1}
+                vertical
+                horizontal
+              />
+
               <XAxis
-                dataKey="label"
-                minTickGap={28}
+                dataKey="timestamp"
+                type="number"
+                scale="time"
+                domain={["dataMin", "dataMax"]}
+                ticks={xAxisTicks}
+                interval={0}
+                tickFormatter={(value) =>
+                  formatXAxisTick(value, activePeriod)
+                }
+                minTickGap={0}
                 tick={{
-                  fontSize: 10,
-                  fill: "hsl(var(--muted-foreground))",
+                  fontSize: activePeriod === "1D" ? 9 : 9,
+                  fill: "#6b7280",
                 }}
                 tickLine={false}
                 axisLine={false}
+                height={30}
               />
 
               <YAxis
@@ -899,7 +1014,7 @@ function StockChart({
                 }
                 tick={{
                   fontSize: 10,
-                  fill: "hsl(var(--muted-foreground))",
+                  fill: "#6b7280",
                 }}
                 tickLine={false}
                 axisLine={false}
@@ -914,6 +1029,7 @@ function StockChart({
                     comparisonsActive={comparisonsActive}
                     ticker={primaryTicker}
                     periodStartPrice={periodStartPrice}
+                    period={activePeriod}
                   />
                 }
               />
@@ -1041,7 +1157,7 @@ function BuyDetailDialog({
           <Button
             type="submit"
             disabled={loading}
-            className="h-[48px] w-full rounded-[14px]"
+            className="h-[48px] w-full rounded-[14px] !bg-black !text-white hover:!bg-black/90"
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Buy
@@ -1122,7 +1238,7 @@ function SellDetailDialog({
           <Button
             type="submit"
             disabled={loading}
-            className="h-[48px] w-full rounded-[14px]"
+            className="h-[48px] w-full rounded-[14px] !bg-black !text-white hover:!bg-black/90"
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Sell
@@ -1842,7 +1958,7 @@ export default function StockDetail() {
               <Button
                 type="button"
                 onClick={() => setBuyOpen(true)}
-                className="h-[36px] rounded-[11px] px-3 text-[11px] font-semibold"
+                className="h-[36px] rounded-[11px] !bg-black px-3 text-[11px] font-semibold !text-white hover:!bg-black/90"
               >
                 Buy
               </Button>
@@ -1852,7 +1968,7 @@ export default function StockDetail() {
                   type="button"
                   variant="outline"
                   onClick={() => setSellOpen(true)}
-                  className="h-[36px] rounded-[11px] px-3 text-[11px] font-semibold"
+                  className="h-[36px] rounded-[11px] !border-black !bg-white px-3 text-[11px] font-semibold !text-black hover:!bg-neutral-100"
                 >
                   Sell
                 </Button>
