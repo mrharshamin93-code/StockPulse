@@ -211,7 +211,7 @@ function formatXAxisTick(timestamp, period) {
 
   if (period === "1D") {
     const { hour } = getNewYorkTimeParts(timestamp);
-    return Number.isFinite(hour) ? String(hour).padStart(2, "0") : "";
+    return Number.isFinite(hour) ? `${String(hour).padStart(2, "0")}:00` : "";
   }
 
   if (["1W", "1M"].includes(period)) {
@@ -725,6 +725,28 @@ function StockChart({
       }
     }
 
+    if (activePeriod === "2Y") {
+      return monthlyTicks.filter((_, index) => index % 3 === 0);
+    }
+
+    if (activePeriod === "5Y") {
+      return monthlyTicks.filter((_, index) => index % 6 === 0);
+    }
+
+    if (activePeriod === "10Y") {
+      return monthlyTicks.filter((_, index) => index % 12 === 0);
+    }
+
+    if (activePeriod === "All") {
+      const targetTickCount = 7;
+      const step = Math.max(
+        1,
+        Math.ceil(monthlyTicks.length / targetTickCount)
+      );
+
+      return monthlyTicks.filter((_, index) => index % step === 0);
+    }
+
     return monthlyTicks;
   }, [chartData, activePeriod]);
 
@@ -986,22 +1008,22 @@ function StockChart({
 
               <XAxis
                 dataKey="timestamp"
-                type="number"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
+                type="category"
+                allowDuplicatedCategory={false}
                 ticks={xAxisTicks}
                 interval={0}
                 tickFormatter={(value) =>
                   formatXAxisTick(value, activePeriod)
                 }
                 minTickGap={0}
+                padding={{ left: 22, right: 18 }}
                 tick={{
-                  fontSize: activePeriod === "1D" ? 9 : 9,
+                  fontSize: activePeriod === "All" ? 8 : 9,
                   fill: "#6b7280",
                 }}
                 tickLine={false}
                 axisLine={false}
-                height={30}
+                height={32}
               />
 
               <YAxis
