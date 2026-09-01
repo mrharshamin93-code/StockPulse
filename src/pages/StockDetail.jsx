@@ -210,8 +210,19 @@ function formatXAxisTick(timestamp, period) {
   const date = new Date(Number(timestamp) * 1000);
 
   if (period === "1D") {
-    const { hour } = getNewYorkTimeParts(timestamp);
-    return Number.isFinite(hour) ? `${String(hour).padStart(2, "0")}:00` : "";
+    const { hour, minute } = getNewYorkTimeParts(timestamp);
+
+    if (!Number.isFinite(hour)) return "";
+
+    if (hour === 9) {
+      return "9:30";
+    }
+
+    if (hour === 16) {
+      return "16";
+    }
+
+    return String(hour);
   }
 
   if (["1W", "1M"].includes(period)) {
@@ -696,10 +707,20 @@ function StockChart({
     if (!timestamps.length) return [];
 
     if (activePeriod === "1D") {
-      const hourlyTicks = timestamps.filter((timestamp) => {
-        const { minute } = getNewYorkTimeParts(timestamp);
-        return minute === 0;
-      });
+      const hourlyTicks = [];
+      const seenHours = new Set();
+
+      for (const timestamp of timestamps) {
+        const { hour } = getNewYorkTimeParts(timestamp);
+
+        if (!Number.isFinite(hour)) continue;
+        if (hour < 9 || hour > 16) continue;
+
+        if (!seenHours.has(hour)) {
+          hourlyTicks.push(timestamp);
+          seenHours.add(hour);
+        }
+      }
 
       return hourlyTicks.length ? hourlyTicks : timestamps;
     }
@@ -1016,11 +1037,16 @@ function StockChart({
                   formatXAxisTick(value, activePeriod)
                 }
                 minTickGap={0}
-                padding={{ left: 22, right: 18 }}
+                padding={{ left: 0, right: 0 }}
                 tick={{
-                  fontSize: activePeriod === "All" ? 8 : 9,
+                  fontSize: activePeriod === "1D"
+                    ? 8.5
+                    : activePeriod === "All"
+                      ? 8
+                      : 9,
                   fill: "#6b7280",
                 }}
+                tickMargin={8}
                 tickLine={false}
                 axisLine={false}
                 height={32}
