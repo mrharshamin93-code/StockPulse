@@ -690,6 +690,15 @@ function StockChart({
 
   const primaryColor = chartPositive ? "#10b981" : "#ef4444";
 
+  const displayChartData = useMemo(
+    () =>
+      chartData.map((point, index) => ({
+        ...point,
+        xIndex: index,
+      })),
+    [chartData]
+  );
+
   const xAxisTicks = useMemo(() => {
     const timestamps = chartData
       .map((point) => Number(point?.timestamp))
@@ -702,20 +711,24 @@ function StockChart({
       const hourlyTicks = [];
       const seenHours = new Set();
 
-      for (const timestamp of timestamps) {
+      for (let index = 0; index < displayChartData.length; index += 1) {
+        const timestamp = Number(displayChartData[index]?.timestamp);
         const { hour } = getNewYorkTimeParts(timestamp);
 
         if (!Number.isFinite(hour)) continue;
         if (hour < 9 || hour > 16) continue;
 
-        if (!seenHours.has(hour)) {
-          hourlyTicks.push(timestamp);
-          seenHours.add(hour);
+        const displayHour = hour % 12 || 12;
+
+        if (!seenHours.has(displayHour)) {
+          hourlyTicks.push(index);
+          seenHours.add(displayHour);
         }
       }
 
-      const ticks = hourlyTicks.length ? hourlyTicks : timestamps;
-      return ticks.length > 1 ? ticks.slice(1) : ticks;
+      return hourlyTicks.length > 1
+        ? hourlyTicks.slice(1)
+        : hourlyTicks;
     }
 
     if (["1W", "1M"].includes(activePeriod)) {
@@ -766,7 +779,7 @@ function StockChart({
     }
 
     return monthlyTicks.length > 1 ? monthlyTicks.slice(1) : monthlyTicks;
-  }, [chartData, activePeriod]);
+  }, [chartData, displayChartData, activePeriod]);
 
   const comparisonLegendItems = [
     {
@@ -998,7 +1011,7 @@ function StockChart({
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              data={chartData}
+              data={displayChartData}
               margin={{
                 top: 8,
                 right: 0,
@@ -1025,14 +1038,22 @@ function StockChart({
               />
 
               <XAxis
-                dataKey="timestamp"
+                dataKey={activePeriod === "1D" ? "xIndex" : "timestamp"}
                 type="category"
                 allowDuplicatedCategory={false}
                 ticks={xAxisTicks}
                 interval={0}
-                tickFormatter={(value) =>
-                  formatXAxisTick(value, activePeriod)
-                }
+                tickFormatter={(value) => {
+                  if (activePeriod === "1D") {
+                    const point = displayChartData[Number(value)];
+
+                    return point
+                      ? formatXAxisTick(point.timestamp, activePeriod)
+                      : "";
+                  }
+
+                  return formatXAxisTick(value, activePeriod);
+                }}
                 minTickGap={0}
                 padding={{ left: 0, right: 0 }}
                 tick={{
