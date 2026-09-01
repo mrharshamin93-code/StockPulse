@@ -761,8 +761,13 @@ function StockChart({
         .slice(1);
     }
 
-    if (["1W", "1M"].includes(activePeriod)) {
+    if (activePeriod === "1W") {
       return timestamps.length > 1 ? timestamps.slice(1) : timestamps;
+    }
+
+    if (activePeriod === "1M") {
+      const spacedTicks = timestamps.filter((_, index) => index % 3 === 0);
+      return spacedTicks.length > 1 ? spacedTicks.slice(1) : spacedTicks;
     }
 
     const monthlyTicks = [];
@@ -1019,14 +1024,7 @@ function StockChart({
         </div>
       )}
 
-      <div
-        className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, rgba(229,231,235,0.72) 1px, transparent 1px), linear-gradient(to bottom, rgba(229,231,235,0.72) 1px, transparent 1px)",
-          backgroundSize: "14.285% 100%, 100% 50px",
-        }}
-      >
+      <div className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50">
         {chartLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1068,7 +1066,7 @@ function StockChart({
               }}
             >
               <CartesianGrid
-                stroke="rgba(229,231,235,0.35)"
+                stroke="#e5e7eb"
                 strokeWidth={1}
                 vertical
                 horizontal
