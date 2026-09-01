@@ -160,7 +160,7 @@ function getPeriodBounds(period) {
 }
 
 function formatChartLabel(timestamp, period) {
-  const date = new Date(timestamp * 1000);
+  const date = timestampToDate(timestamp);
 
   if (period === "1D") {
     return date.toLocaleTimeString("en-US", {
@@ -192,13 +192,33 @@ function formatChartLabel(timestamp, period) {
   });
 }
 
+function timestampToDate(timestamp) {
+  const value = Number(timestamp);
+
+  if (!Number.isFinite(value)) {
+    return new Date(NaN);
+  }
+
+  // Financial data sources can return Unix timestamps in either
+  // seconds or milliseconds. Detect the unit instead of always
+  // multiplying by 1000, which can make every intraday tick resolve
+  // to the wrong hour.
+  return new Date(value > 10_000_000_000 ? value : value * 1000);
+}
+
 function getNewYorkTimeParts(timestamp) {
+  const date = timestampToDate(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return { hour: NaN, minute: NaN };
+  }
+
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).formatToParts(new Date(Number(timestamp) * 1000));
+  }).formatToParts(date);
 
   return {
     hour: Number(parts.find((part) => part.type === "hour")?.value),
@@ -207,7 +227,7 @@ function getNewYorkTimeParts(timestamp) {
 }
 
 function formatXAxisTick(timestamp, period) {
-  const date = new Date(Number(timestamp) * 1000);
+  const date = timestampToDate(timestamp);
 
   if (period === "1D") {
     const { hour } = getNewYorkTimeParts(timestamp);
@@ -692,10 +712,18 @@ function StockChart({
 
   const displayChartData = useMemo(
     () =>
-      chartData.map((point, index) => ({
-        ...point,
-        xIndex: index,
-      })),
+      chartData.map((point, index) => {
+        const { hour } = getNewYorkTimeParts(point?.timestamp);
+
+        return {
+          ...point,
+          xIndex: index,
+          xHourLabel:
+            Number.isFinite(hour)
+              ? String(hour % 12 || 12)
+              : "",
+        };
+      }),
     [chartData]
   );
 
@@ -739,7 +767,7 @@ function StockChart({
     let previousMonthKey = "";
 
     for (const timestamp of timestamps) {
-      const date = new Date(timestamp * 1000);
+      const date = timestampToDate(timestamp);
       const monthKey = date.toLocaleDateString("en-US", {
         timeZone: "America/New_York",
         year: "numeric",
@@ -1046,10 +1074,7 @@ function StockChart({
                 tickFormatter={(value) => {
                   if (activePeriod === "1D") {
                     const point = displayChartData[Number(value)];
-
-                    return point
-                      ? formatXAxisTick(point.timestamp, activePeriod)
-                      : "";
+                    return point?.xHourLabel || "";
                   }
 
                   return formatXAxisTick(value, activePeriod);
