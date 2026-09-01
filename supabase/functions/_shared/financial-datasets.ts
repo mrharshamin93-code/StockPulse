@@ -359,7 +359,7 @@ export async function fetchFinancialDatasetsQuote(
       ? root.snapshot as UnknownRecord
       : root;
 
-  const price = finiteNumber(
+  const snapshotPrice = finiteNumber(
     snapshot.price ??
       snapshot.close ??
       snapshot.current_price,
@@ -377,11 +377,18 @@ export async function fetchFinancialDatasetsQuote(
         snapshot.previousClose,
     ) ??
     (
-      price !== null &&
+      snapshotPrice !== null &&
       changeAmount !== null
-        ? price - changeAmount
+        ? snapshotPrice - changeAmount
         : null
     );
+
+  // Some valid snapshots, especially outside regular market hours, expose
+  // only the most recent close. Treat it as the current display price rather
+  // than returning an accepted quote with a null price.
+  const price =
+    snapshotPrice ??
+    previousClose;
 
   let changePercent = finiteNumber(
     snapshot.day_change_percent ??
