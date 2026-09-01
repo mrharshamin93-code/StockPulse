@@ -68,7 +68,7 @@ const PERIOD_CONFIG = {
 const FUNDAMENTAL_METRICS = [
   { label: "Market Cap", keys: ["market_cap", "marketCap"], format: "marketCap" },
   { label: "P/E", keys: ["price_to_earnings_ratio","pe_ratio","price_to_earnings","pe"], format: "number" },
-  { label: "Forward P/E", keys: ["forward_price_to_earnings_ratio","forward_pe_ratio","forward_pe","forwardPE"], format: "number" },
+  { label: "EV/EBITDA", keys: ["enterprise_value_to_ebitda_ratio","ev_to_ebitda","enterprise_value_ebitda"], format: "number" },
   { label: "Price/Sales", keys: ["price_to_sales_ratio","price_sales_ratio","price_to_sales"], format: "number" },
   { label: "PEG", keys: ["peg_ratio", "peg"], format: "number" },
   { label: "EPS", keys: ["earnings_per_share","eps","eps_ttm"], format: "currency" },
