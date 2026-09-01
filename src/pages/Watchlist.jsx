@@ -993,7 +993,7 @@ async function fetchSparkline(
               candle
             ) =>
               Number(
-                candle?.v
+                candle?.c
               )
           )
           .filter(

@@ -402,8 +402,7 @@ async function fetchTickerHistory({
 
       const close =
         getValidNumber(
-          candle?.v ??
-            candle?.c
+          candle?.c
         );
 
       if (
