@@ -710,22 +710,39 @@ function StockChart({
 
   const primaryColor = chartPositive ? "#10b981" : "#ef4444";
 
-  const displayChartData = useMemo(
-    () =>
-      chartData.map((point, index) => {
-        const { hour } = getNewYorkTimeParts(point?.timestamp);
+  const displayChartData = useMemo(() => {
+    if (activePeriod !== "1D") {
+      return chartData.map((point, index) => ({
+        ...point,
+        xIndex: index,
+        xHourLabel: "",
+      }));
+    }
 
-        return {
-          ...point,
-          xIndex: index,
-          xHourLabel:
-            Number.isFinite(hour)
-              ? String(hour % 12 || 12)
-              : "",
-        };
-      }),
-    [chartData]
-  );
+    const seenHours = new Set();
+
+    return chartData.map((point, index) => {
+      const { hour } = getNewYorkTimeParts(point?.timestamp);
+      const displayHour =
+        Number.isFinite(hour) ? hour % 12 || 12 : null;
+
+      let xHourLabel = "";
+
+      if (
+        displayHour !== null &&
+        !seenHours.has(displayHour)
+      ) {
+        xHourLabel = String(displayHour);
+        seenHours.add(displayHour);
+      }
+
+      return {
+        ...point,
+        xIndex: index,
+        xHourLabel,
+      };
+    });
+  }, [chartData, activePeriod]);
 
   const xAxisTicks = useMemo(() => {
     const timestamps = chartData
@@ -736,27 +753,12 @@ function StockChart({
     if (!timestamps.length) return [];
 
     if (activePeriod === "1D") {
-      const hourlyTicks = [];
-      const seenHours = new Set();
-
-      for (let index = 0; index < displayChartData.length; index += 1) {
-        const timestamp = Number(displayChartData[index]?.timestamp);
-        const { hour } = getNewYorkTimeParts(timestamp);
-
-        if (!Number.isFinite(hour)) continue;
-        if (hour < 9 || hour > 16) continue;
-
-        const displayHour = hour % 12 || 12;
-
-        if (!seenHours.has(displayHour)) {
-          hourlyTicks.push(index);
-          seenHours.add(displayHour);
-        }
-      }
-
-      return hourlyTicks.length > 1
-        ? hourlyTicks.slice(1)
-        : hourlyTicks;
+      return displayChartData
+        .map((point, index) =>
+          point?.xHourLabel ? index : null
+        )
+        .filter((value) => value !== null)
+        .slice(1);
     }
 
     if (["1W", "1M"].includes(activePeriod)) {
@@ -1017,7 +1019,14 @@ function StockChart({
         </div>
       )}
 
-      <div className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50">
+      <div
+        className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(229,231,235,0.72) 1px, transparent 1px), linear-gradient(to bottom, rgba(229,231,235,0.72) 1px, transparent 1px)",
+          backgroundSize: "14.285% 100%, 100% 50px",
+        }}
+      >
         {chartLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1059,7 +1068,7 @@ function StockChart({
               }}
             >
               <CartesianGrid
-                stroke="#e5e7eb"
+                stroke="rgba(229,231,235,0.35)"
                 strokeWidth={1}
                 vertical
                 horizontal
@@ -1073,8 +1082,7 @@ function StockChart({
                 interval={0}
                 tickFormatter={(value) => {
                   if (activePeriod === "1D") {
-                    const point = displayChartData[Number(value)];
-                    return point?.xHourLabel || "";
+                    return displayChartData[Number(value)]?.xHourLabel || "";
                   }
 
                   return formatXAxisTick(value, activePeriod);
