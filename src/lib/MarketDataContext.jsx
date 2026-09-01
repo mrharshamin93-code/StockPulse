@@ -22,9 +22,9 @@ const MarketDataContext =
   createContext({
     quotes: {},
     refreshQuotes:
-      async () => {},
+      async (_tickers = []) => {},
     fetchQuotes:
-      async () => {},
+      async (_tickers = []) => {},
   });
 
 function normalizeTicker(

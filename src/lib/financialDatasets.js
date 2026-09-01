@@ -71,7 +71,7 @@ export async function getCandlesRange({
   resolution = "D",
   from,
   to,
-  period,
+  period = undefined,
 }) {
   return financialDatasetsRequest({
     action: "candles_range",

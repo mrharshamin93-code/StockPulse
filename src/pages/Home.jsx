@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/lib/AuthContext";
+import { useMarketData } from "@/lib/MarketDataContext";
 import { supabase } from "@/lib/supabase";
 
 import StockCard from "@/components/portfolio/StockCard";
@@ -180,7 +182,7 @@ function PortfolioLoading() {
 
 function SectionHeading({
   children,
-  count,
+  count = null,
 }) {
   return (
     <div className="mb-2 flex items-center justify-between px-2">
@@ -199,6 +201,12 @@ function SectionHeading({
 
 export default function Home() {
   const { user } = useAuth();
+
+  const {
+    quotes,
+    fetchQuotes,
+    refreshQuotes,
+  } = useMarketData();
 
   const [stocks, setStocks] =
     useState([]);
@@ -229,6 +237,39 @@ export default function Home() {
 
   const onboardingMarked =
     useRef(false);
+
+  const pricedStocks =
+    useMemo(
+      () =>
+        stocks.map(
+          (stock) => {
+            const ticker =
+              String(
+                stock?.ticker || ""
+              )
+                .trim()
+                .toUpperCase();
+
+            const livePrice =
+              quotes[ticker]
+                ?.c;
+
+            return Number.isFinite(
+              livePrice
+            ) && livePrice > 0
+              ? {
+                  ...stock,
+                  current_price:
+                    livePrice,
+                }
+              : stock;
+          }
+        ),
+      [
+        quotes,
+        stocks,
+      ]
+    );
 
   const loadStocks =
     useCallback(async () => {
@@ -411,6 +452,22 @@ export default function Home() {
     loadStocks,
   ]);
 
+  useEffect(() => {
+    if (!stocks.length) {
+      return;
+    }
+
+    void fetchQuotes(
+      stocks.map(
+        (stock) =>
+          stock.ticker
+      )
+    );
+  }, [
+    fetchQuotes,
+    stocks,
+  ]);
+
   function handleTouchStart(event) {
     if (
       scrollRef.current?.scrollTop ===
@@ -449,7 +506,15 @@ export default function Home() {
     ) {
       setRefreshing(true);
 
-      await loadStocks();
+      await Promise.all([
+        loadStocks(),
+        refreshQuotes(
+          stocks.map(
+            (stock) =>
+              stock.ticker
+          )
+        ),
+      ]);
 
       setRefreshing(false);
     }
@@ -583,7 +648,7 @@ export default function Home() {
               </SectionHeading>
 
               <PortfolioSummary
-                stocks={stocks}
+                stocks={pricedStocks}
               />
             </section>
 
@@ -603,7 +668,7 @@ export default function Home() {
                 "
               >
                 <PortfolioGrowthChart
-                  stocks={stocks}
+                  stocks={pricedStocks}
                 />
               </div>
             </section>
@@ -619,7 +684,7 @@ export default function Home() {
                 <AnimatePresence
                   initial={false}
                 >
-                  {stocks.map(
+                  {pricedStocks.map(
                     (stock, index) => (
                       <motion.div
                         key={stock.id}

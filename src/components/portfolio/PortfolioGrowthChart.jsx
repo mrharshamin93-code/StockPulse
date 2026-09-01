@@ -975,6 +975,70 @@ function buildPortfolioData({
     });
   }
 
+  const liveValue =
+    prepared.reduce(
+      (
+        total,
+        { holding }
+      ) => {
+        if (
+          holding.createdAt >
+            chartEnd ||
+          holding.currentPrice ===
+            null ||
+          holding.currentPrice <=
+            0
+        ) {
+          return null;
+        }
+
+        if (total === null) {
+          return null;
+        }
+
+        return total +
+          holding.currentPrice *
+            holding.quantity;
+      },
+      0
+    );
+
+  if (
+    liveValue !== null &&
+    liveValue > 0
+  ) {
+    const livePoint = {
+      timestamp:
+        chartEnd,
+
+      label:
+        formatChartLabel(
+          chartEnd,
+          period
+        ),
+
+      value:
+        Math.round(
+          liveValue *
+            100
+        ) / 100,
+    };
+
+    if (
+      data.at(-1)
+        ?.timestamp ===
+      chartEnd
+    ) {
+      data[
+        data.length - 1
+      ] = livePoint;
+    } else {
+      data.push(
+        livePoint
+      );
+    }
+  }
+
   if (
     data.length <=
     MAX_RENDERED_POINTS
@@ -1072,9 +1136,9 @@ function formatYAxisValue(value) {
 }
 
 function PortfolioTooltip({
-  active,
-  payload,
-  label,
+  active = false,
+  payload = [],
+  label = "",
   startValue,
 }) {
   if (
