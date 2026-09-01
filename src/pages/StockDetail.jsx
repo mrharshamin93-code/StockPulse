@@ -722,11 +722,12 @@ function StockChart({
         }
       }
 
-      return hourlyTicks.length ? hourlyTicks : timestamps;
+      const ticks = hourlyTicks.length ? hourlyTicks : timestamps;
+      return ticks.length > 1 ? ticks.slice(1) : ticks;
     }
 
     if (["1W", "1M"].includes(activePeriod)) {
-      return timestamps;
+      return timestamps.length > 1 ? timestamps.slice(1) : timestamps;
     }
 
     const monthlyTicks = [];
@@ -747,15 +748,18 @@ function StockChart({
     }
 
     if (activePeriod === "2Y") {
-      return monthlyTicks.filter((_, index) => index % 3 === 0);
+      const ticks = monthlyTicks.filter((_, index) => index % 3 === 0);
+      return ticks.length > 1 ? ticks.slice(1) : ticks;
     }
 
     if (activePeriod === "5Y") {
-      return monthlyTicks.filter((_, index) => index % 6 === 0);
+      const ticks = monthlyTicks.filter((_, index) => index % 6 === 0);
+      return ticks.length > 1 ? ticks.slice(1) : ticks;
     }
 
     if (activePeriod === "10Y") {
-      return monthlyTicks.filter((_, index) => index % 12 === 0);
+      const ticks = monthlyTicks.filter((_, index) => index % 12 === 0);
+      return ticks.length > 1 ? ticks.slice(1) : ticks;
     }
 
     if (activePeriod === "All") {
@@ -765,10 +769,11 @@ function StockChart({
         Math.ceil(monthlyTicks.length / targetTickCount)
       );
 
-      return monthlyTicks.filter((_, index) => index % step === 0);
+      const ticks = monthlyTicks.filter((_, index) => index % step === 0);
+      return ticks.length > 1 ? ticks.slice(1) : ticks;
     }
 
-    return monthlyTicks;
+    return monthlyTicks.length > 1 ? monthlyTicks.slice(1) : monthlyTicks;
   }, [chartData, activePeriod]);
 
   const comparisonLegendItems = [
