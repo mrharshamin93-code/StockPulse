@@ -52,7 +52,7 @@ import {
 const PERIODS = ["1D","1W","1M","3M","6M","YTD","1Y","2Y","5Y","10Y","All"];
 
 const PERIOD_CONFIG = {
-  "1D": { resolution: "30", daysBack: 7 },
+  "1D": { resolution: "D", daysBack: 7 },
   "1W": { resolution: "D", daysBack: 14 },
   "1M": { resolution: "D", daysBack: 31 },
   "3M": { resolution: "D", daysBack: 93 },
@@ -161,15 +161,7 @@ function getPeriodBounds(period) {
 function formatChartLabel(timestamp, period) {
   const date = new Date(timestamp * 1000);
 
-  if (period === "1D") {
-    return date.toLocaleTimeString("en-US", {
-      timeZone: "America/New_York",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
-  if (["1W", "1M", "3M", "6M", "YTD"].includes(period)) {
+  if (["1D", "1W", "1M", "3M", "6M", "YTD"].includes(period)) {
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -182,11 +174,7 @@ function formatChartLabel(timestamp, period) {
   });
 }
 
-function getTimestampKey(timestamp, period) {
-  if (period === "1D") {
-    return Number(timestamp);
-  }
-
+function getTimestampKey(timestamp) {
   const date = new Date(timestamp * 1000);
 
   return Date.UTC(
@@ -1766,30 +1754,30 @@ export default function StockDetail() {
         className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur-xl"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-          <div className="mx-auto grid h-[58px] w-full max-w-[430px] grid-cols-[48px_1fr_48px] items-end px-4 pb-2.5">          
+          <div className="mx-auto grid h-[58px] w-full max-w-[430px] grid-cols-[64px_1fr_64px] items-stretch px-0">
             <button
-  type="button"
-  onClick={handleBack}
-  aria-label="Go back"
-  className="
-    -ml-1
-    flex
-    h-12
-    w-12
-    items-center
-    justify-center
-    rounded-full
-    text-foreground
-    transition-all
-    active:scale-90
-    active:bg-muted
-  "
->
-  <ArrowLeft
-    size={22}
-    strokeWidth={2.2}
-  />
-</button>
+              type="button"
+              onClick={handleBack}
+              aria-label="Go back"
+              className="
+                flex
+                h-[58px]
+                w-16
+                items-center
+                justify-center
+                self-stretch
+                rounded-r-[18px]
+                text-foreground
+                transition-all
+                active:scale-95
+                active:bg-muted
+              "
+            >
+              <ArrowLeft
+                size={22}
+                strokeWidth={2.2}
+              />
+            </button>
 
           <div className="min-w-0 text-center">
             <p className="truncate text-[15px] font-bold tracking-[-0.2px]">
