@@ -210,19 +210,11 @@ function formatXAxisTick(timestamp, period) {
   const date = new Date(Number(timestamp) * 1000);
 
   if (period === "1D") {
-    const { hour, minute } = getNewYorkTimeParts(timestamp);
+    const { hour } = getNewYorkTimeParts(timestamp);
 
     if (!Number.isFinite(hour)) return "";
 
-    if (hour === 9) {
-      return "9:30";
-    }
-
-    if (hour === 16) {
-      return "16";
-    }
-
-    return String(hour);
+    return String(hour % 12 || 12);
   }
 
   if (["1W", "1M"].includes(period)) {
