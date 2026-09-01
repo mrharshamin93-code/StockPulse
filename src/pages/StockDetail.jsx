@@ -52,7 +52,7 @@ import {
 const PERIODS = ["1D","1W","1M","3M","6M","YTD","1Y","2Y","5Y","10Y","All"];
 
 const PERIOD_CONFIG = {
-  "1D": { resolution: "D", daysBack: 7 },
+  "1D": { resolution: "30", daysBack: 7 },
   "1W": { resolution: "D", daysBack: 14 },
   "1M": { resolution: "D", daysBack: 31 },
   "3M": { resolution: "D", daysBack: 93 },
@@ -161,7 +161,15 @@ function getPeriodBounds(period) {
 function formatChartLabel(timestamp, period) {
   const date = new Date(timestamp * 1000);
 
-  if (["1D", "1W", "1M", "3M", "6M", "YTD"].includes(period)) {
+  if (period === "1D") {
+    return date.toLocaleTimeString("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  if (["1W", "1M", "3M", "6M", "YTD"].includes(period)) {
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -174,7 +182,11 @@ function formatChartLabel(timestamp, period) {
   });
 }
 
-function getTimestampKey(timestamp) {
+function getTimestampKey(timestamp, period) {
+  if (period === "1D") {
+    return Number(timestamp);
+  }
+
   const date = new Date(timestamp * 1000);
 
   return Date.UTC(
