@@ -226,6 +226,40 @@ function getNewYorkTimeParts(timestamp) {
   };
 }
 
+function getNewYorkDateKey(timestamp) {
+  const date = timestampToDate(timestamp);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+function isRegularMarketTimestamp(timestamp) {
+  const { hour, minute } = getNewYorkTimeParts(timestamp);
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return false;
+  }
+
+  const minutesSinceMidnight = hour * 60 + minute;
+
+  return (
+    minutesSinceMidnight >= 9 * 60 + 30 &&
+    minutesSinceMidnight <= 16 * 60
+  );
+}
+
 function formatXAxisTick(timestamp, period) {
   const date = timestampToDate(timestamp);
 
@@ -302,11 +336,42 @@ async function fetchChartData(ticker, period, signal) {
     )
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  if (points.length < 2) {
+  let usablePoints = points;
+
+  if (period === "1D") {
+    const regularSessionGroups = new Map();
+
+    for (const point of points) {
+      if (!isRegularMarketTimestamp(point.timestamp)) continue;
+
+      const dateKey = getNewYorkDateKey(point.timestamp);
+      if (!dateKey) continue;
+
+      if (!regularSessionGroups.has(dateKey)) {
+        regularSessionGroups.set(dateKey, []);
+      }
+
+      regularSessionGroups.get(dateKey).push(point);
+    }
+
+    const validSessions = [...regularSessionGroups.entries()]
+      .filter(([, sessionPoints]) => sessionPoints.length >= 2)
+      .sort(([leftDate], [rightDate]) =>
+        leftDate.localeCompare(rightDate)
+      );
+
+    if (validSessions.length) {
+      usablePoints = validSessions[validSessions.length - 1][1];
+    } else {
+      usablePoints = [];
+    }
+  }
+
+  if (usablePoints.length < 2) {
     throw new Error(`No chart data returned for ${ticker} (${period})`);
   }
 
-  return points.map((point) => ({
+  return usablePoints.map((point) => ({
     timestamp: point.timestamp,
     key: getTimestampKey(point.timestamp, period),
     label: formatChartLabel(point.timestamp, period),
@@ -471,9 +536,13 @@ function ChartTooltip({
   if (!active || !payload?.length) return null;
 
   const displayedStartPrice = roundPrice(periodStartPrice);
-  const formattedLabel = Number.isFinite(Number(label))
-    ? formatChartLabel(Number(label), period)
-    : label;
+  const pointTimestamp = Number(payload?.[0]?.payload?.timestamp);
+
+  const formattedLabel = Number.isFinite(pointTimestamp)
+    ? formatChartLabel(pointTimestamp, period)
+    : Number.isFinite(Number(label))
+      ? formatChartLabel(Number(label), period)
+      : label;
 
   return (
     <div className="rounded-[14px] border border-border bg-card px-3 py-2.5 text-foreground shadow-xl">
@@ -1074,7 +1143,13 @@ function StockChart({
 
               <XAxis
                 dataKey={activePeriod === "1D" ? "xIndex" : "timestamp"}
-                type="category"
+                type={activePeriod === "1D" ? "number" : "category"}
+                domain={
+                  activePeriod === "1D"
+                    ? [0, Math.max(0, displayChartData.length - 1)]
+                    : undefined
+                }
+                allowDataOverflow={activePeriod === "1D"}
                 allowDuplicatedCategory={false}
                 ticks={xAxisTicks}
                 interval={0}
@@ -1821,11 +1896,71 @@ export default function StockDetail() {
       });
 
     if (stock._watchlistOnly) {
+      const normalizedTicker = stock.ticker.toUpperCase();
+
+      const {
+        data: existingHolding,
+        error: existingHoldingError,
+      } = await supabase
+        .from("stocks")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("ticker", normalizedTicker)
+        .maybeSingle();
+
+      if (existingHoldingError) throw existingHoldingError;
+
+      if (existingHolding) {
+        const existingQuantity =
+          Number(existingHolding.quantity) || 0;
+
+        const existingAverageCost =
+          Number(existingHolding.purchase_price) || 0;
+
+        const combinedQuantity =
+          existingQuantity + quantity;
+
+        const combinedAverageCost =
+          existingQuantity > 0
+            ? (
+                existingAverageCost * existingQuantity +
+                price * quantity
+              ) / combinedQuantity
+            : price;
+
+        const {
+          data: updatedHolding,
+          error: updateExistingError,
+        } = await supabase
+          .from("stocks")
+          .update({
+            quantity: combinedQuantity,
+            purchase_price:
+              +combinedAverageCost.toFixed(4),
+            current_price: currentPrice,
+          })
+          .eq("id", existingHolding.id)
+          .select()
+          .single();
+
+        if (updateExistingError) {
+          throw updateExistingError;
+        }
+
+        setStock({
+          ...updatedHolding,
+          _watchlistOnly: false,
+        });
+
+        setBuyOpen(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("stocks")
         .insert({
           user_id: user.id,
-          ticker: stock.ticker.toUpperCase(),
+          ticker: normalizedTicker,
           company_name: stock.company_name,
           quantity,
           purchase_price: price,
@@ -1846,6 +1981,12 @@ export default function StockDetail() {
       return;
     }
 
+    const holdingId = stock.id || stockId;
+
+    if (!holdingId) {
+      throw new Error("Unable to identify portfolio holding.");
+    }
+
     const { data, error } = await supabase
       .from("stocks")
       .update({
@@ -1853,7 +1994,7 @@ export default function StockDetail() {
         purchase_price: +newAverageCost.toFixed(4),
         current_price: currentPrice,
       })
-      .eq("id", stockId)
+      .eq("id", holdingId)
       .select()
       .single();
 
@@ -1896,11 +2037,17 @@ export default function StockDetail() {
         total: soldQuantity * sellPrice,
       });
 
+    const holdingId = stock.id || stockId;
+
+    if (!holdingId) {
+      throw new Error("Unable to identify portfolio holding.");
+    }
+
     if (remainingQuantity <= 0) {
       const { error } = await supabase
         .from("stocks")
         .delete()
-        .eq("id", stockId);
+        .eq("id", holdingId);
 
       if (error) throw error;
 
@@ -1914,7 +2061,7 @@ export default function StockDetail() {
       .update({
         quantity: remainingQuantity,
       })
-      .eq("id", stockId)
+      .eq("id", holdingId)
       .select()
       .single();
 
