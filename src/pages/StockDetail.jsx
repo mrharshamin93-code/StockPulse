@@ -529,6 +529,95 @@ function ChartTooltip({
   );
 }
 
+function DualTouchTooltip({
+  point,
+  ticker,
+  comparisonsActive,
+  compareTickers,
+  primaryColor,
+  period,
+  side,
+}) {
+  if (!point) return null;
+
+  const timestamp = Number(point.timestamp);
+  const label = Number.isFinite(timestamp)
+    ? formatChartLabel(timestamp, period)
+    : point.label || "";
+
+  const entries = comparisonsActive
+    ? [
+        {
+          ticker,
+          value: Number(point[seriesDataKey(ticker)]),
+          color: primaryColor,
+          percent: true,
+        },
+        ...compareTickers.map((comparisonTicker, index) => ({
+          ticker: comparisonTicker,
+          value: Number(point[seriesDataKey(comparisonTicker)]),
+          color: COMPARISON_COLORS[index],
+          percent: true,
+        })),
+      ]
+    : [
+        {
+          ticker,
+          value: roundPrice(point.primaryValue),
+          color: primaryColor,
+          percent: false,
+        },
+      ];
+
+  return (
+    <div
+      className="pointer-events-none absolute top-2 z-20 min-w-[132px] rounded-[12px] border border-border bg-card/95 px-2.5 py-2 text-foreground shadow-xl backdrop-blur-sm"
+      style={{
+        left: point.touchX,
+        transform: side === "left" ? "translateX(-8%)" : "translateX(-92%)",
+      }}
+    >
+      <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
+        {label}
+      </p>
+
+      {entries.map((entry) => {
+        if (!Number.isFinite(entry.value)) return null;
+
+        const positive = entry.value >= 0;
+
+        return (
+          <div
+            key={entry.ticker}
+            className="flex items-center justify-between gap-3 py-0.5 text-[11px]"
+          >
+            <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+              <span
+                className="h-0.5 w-3 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
+              {entry.ticker}
+            </span>
+            <span
+              className={
+                entry.percent
+                  ? positive
+                    ? "font-semibold text-emerald-600"
+                    : "font-semibold text-red-600"
+                  : "font-semibold text-foreground"
+              }
+            >
+              {entry.percent
+                ? `${positive ? "+" : ""}${entry.value.toFixed(2)}%`
+                : `$${entry.value.toFixed(2)}`}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StockChart({
   ticker,
   currentPrice,
@@ -552,7 +641,9 @@ function StockChart({
       : null
   );
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [dualTouchPoints, setDualTouchPoints] = useState([]);
   const tooltipTimerRef = useRef(null);
+  const chartContainerRef = useRef(null);
 
   const primaryTicker = normalizeTickerInput(ticker);
   const comparisonsActive = compareTickers.length > 0;
@@ -574,6 +665,7 @@ function StockChart({
   function hideTooltip() {
     clearTooltipTimer();
     setTooltipVisible(false);
+    setDualTouchPoints([]);
   }
 
   function showTooltipTemporarily() {
@@ -584,6 +676,68 @@ function StockChart({
       setTooltipVisible(false);
       tooltipTimerRef.current = null;
     }, TOOLTIP_HIDE_DELAY);
+  }
+
+  function getTouchPoint(clientX) {
+    const container = chartContainerRef.current;
+
+    if (!container || !displayChartData.length) return null;
+
+    const rect = container.getBoundingClientRect();
+    const plotLeft = 4;
+    const plotRight = Math.max(plotLeft + 1, rect.width - 46);
+    const relativeX = Math.min(
+      plotRight,
+      Math.max(plotLeft, clientX - rect.left)
+    );
+    const ratio = (relativeX - plotLeft) / (plotRight - plotLeft);
+    const index = Math.min(
+      displayChartData.length - 1,
+      Math.max(0, Math.round(ratio * (displayChartData.length - 1)))
+    );
+
+    return {
+      ...displayChartData[index],
+      touchX: relativeX,
+      touchIndex: index,
+    };
+  }
+
+  function handleChartTouch(event) {
+    const touches = Array.from(event.touches || []);
+
+    if (touches.length >= 2) {
+      clearTooltipTimer();
+      setTooltipVisible(false);
+
+      const points = touches
+        .slice(0, 2)
+        .map((touch) => getTouchPoint(touch.clientX))
+        .filter(Boolean)
+        .sort((left, right) => left.touchX - right.touchX);
+
+      setDualTouchPoints(points);
+      return;
+    }
+
+    setDualTouchPoints([]);
+    showTooltipTemporarily();
+  }
+
+  function finishChartTouch(event) {
+    const touches = Array.from(event.touches || []);
+
+    if (touches.length >= 2) {
+      handleChartTouch(event);
+      return;
+    }
+
+    setDualTouchPoints([]);
+    clearTooltipTimer();
+    tooltipTimerRef.current = window.setTimeout(
+      () => setTooltipVisible(false),
+      TOOLTIP_HIDE_DELAY
+    );
   }
 
   useEffect(() => {
@@ -1028,7 +1182,10 @@ function StockChart({
         </div>
       )}
 
-      <div className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50">
+      <div
+        ref={chartContainerRef}
+        className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50"
+      >
         {chartLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1059,15 +1216,10 @@ function StockChart({
               }}
               onMouseMove={showTooltipTemporarily}
               onMouseLeave={hideTooltip}
-              onTouchStart={showTooltipTemporarily}
-              onTouchMove={showTooltipTemporarily}
-              onTouchEnd={() => {
-                clearTooltipTimer();
-                tooltipTimerRef.current = window.setTimeout(
-                  () => setTooltipVisible(false),
-                  TOOLTIP_HIDE_DELAY
-                );
-              }}
+              onTouchStart={handleChartTouch}
+              onTouchMove={handleChartTouch}
+              onTouchEnd={finishChartTouch}
+              onTouchCancel={finishChartTouch}
             >
               <CartesianGrid
                 stroke="#e5e7eb"
@@ -1174,6 +1326,19 @@ function StockChart({
             </LineChart>
           </ResponsiveContainer>
         )}
+
+        {dualTouchPoints.map((point, index) => (
+          <DualTouchTooltip
+            key={`${point.touchIndex}-${index}`}
+            point={point}
+            ticker={primaryTicker}
+            comparisonsActive={comparisonsActive}
+            compareTickers={compareTickers}
+            primaryColor={primaryColor}
+            period={activePeriod}
+            side={index === 0 ? "left" : "right"}
+          />
+        ))}
       </div>
     </section>
   );
@@ -2086,7 +2251,7 @@ export default function StockDetail() {
               />
             </button>
 
-          <div className="min-w-0 text-center">
+          <div className="flex h-full min-w-0 items-center justify-center text-center">
             <p className="truncate text-[15px] font-bold tracking-[-0.2px]">
               {stock.ticker}
             </p>
