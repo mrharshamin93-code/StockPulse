@@ -17,6 +17,7 @@ const MAX_BATCH_SIZE = 100;
 const DEFAULT_STALE_HOURS = 24;
 const MAX_STALE_HOURS = 24 * 30;
 const REQUEST_CONCURRENCY = 5;
+const QUEUE_PAGE_SIZE = 1000;
 
 type UnknownRecord =
   Record<string, unknown>;
@@ -604,6 +605,311 @@ async function fetchFinancialDatasetsMetrics(
   return metrics;
 }
 
+function extractTickerSet(
+  payload: unknown,
+): Set<string> {
+  const result =
+    new Set<string>();
+
+  const addValue = (
+    value: unknown,
+  ) => {
+    if (
+      typeof value === "string"
+    ) {
+      const symbol =
+        normalizeSymbol(value);
+
+      if (symbol) {
+        result.add(symbol);
+      }
+
+      return;
+    }
+
+    const record =
+      asRecord(value);
+
+    if (!record) {
+      return;
+    }
+
+    const symbol =
+      normalizeSymbol(
+        record.ticker ??
+          record.symbol,
+      );
+
+    if (symbol) {
+      result.add(symbol);
+    }
+  };
+
+  const visitCandidate = (
+    value: unknown,
+  ) => {
+    if (
+      Array.isArray(value)
+    ) {
+      for (
+        const item of value
+      ) {
+        addValue(item);
+      }
+
+      return;
+    }
+
+    const record =
+      asRecord(value);
+
+    if (!record) {
+      return;
+    }
+
+    const keys = [
+      "tickers",
+      "symbols",
+      "data",
+      "results",
+    ];
+
+    for (
+      const key of keys
+    ) {
+      const nested =
+        record[key];
+
+      if (
+        Array.isArray(nested)
+      ) {
+        for (
+          const item of nested
+        ) {
+          addValue(item);
+        }
+      } else {
+        const nestedRecord =
+          asRecord(nested);
+
+        if (nestedRecord) {
+          visitCandidate(
+            nestedRecord,
+          );
+        }
+      }
+    }
+  };
+
+  visitCandidate(payload);
+
+  if (
+    result.size === 0
+  ) {
+    throw new Error(
+      "Financial Datasets returned an empty or unrecognized supported-ticker list.",
+    );
+  }
+
+  return result;
+}
+
+async function fetchSupportedFinancialMetricsTickers(
+  apiKey: string,
+): Promise<Set<string>> {
+  const url =
+    `${API_BASE_URL}/financial-metrics/snapshot/tickers`;
+
+  const response =
+    await fetch(
+      url,
+      {
+        headers: {
+          Accept:
+            "application/json",
+          "X-API-KEY":
+            apiKey,
+        },
+      },
+    );
+
+  const text =
+    await response.text();
+
+  let payload:
+    unknown = null;
+
+  if (text) {
+    try {
+      payload =
+        JSON.parse(text);
+    } catch {
+      payload = text;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      payload &&
+      typeof payload ===
+        "object" &&
+      !Array.isArray(payload)
+        ? normalizeText(
+            (
+              payload as UnknownRecord
+            ).message ||
+              (
+                payload as UnknownRecord
+              ).error,
+          )
+        : normalizeText(
+            payload,
+          );
+
+    throw new Error(
+      message ||
+        `Could not load Financial Datasets supported tickers (status ${response.status}).`,
+    );
+  }
+
+  return extractTickerSet(
+    payload,
+  );
+}
+
+async function loadSupportedFundamentalsQueue(
+  supabase: any,
+  supportedTickers: Set<string>,
+  staleBefore: string,
+  batchSize: number,
+): Promise<{
+  stocks: StockQueueRow[];
+  rowsScanned: number;
+  unsupportedSkipped: number;
+}> {
+  const stocks:
+    StockQueueRow[] = [];
+
+  let rowsScanned = 0;
+  let unsupportedSkipped = 0;
+  let offset = 0;
+
+  while (
+    stocks.length <
+    batchSize
+  ) {
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from(
+          "stock_screener_stocks",
+        )
+        .select("symbol")
+        .eq(
+          "is_active",
+          true,
+        )
+        .eq(
+          "is_common_stock",
+          true,
+        )
+        .or(
+          `fundamentals_updated_at.is.null,fundamentals_updated_at.lt.${staleBefore}`,
+        )
+        .order(
+          "fundamentals_updated_at",
+          {
+            ascending:
+              true,
+            nullsFirst:
+              true,
+          },
+        )
+        .order(
+          "symbol",
+          {
+            ascending:
+              true,
+          },
+        )
+        .range(
+          offset,
+          offset +
+            QUEUE_PAGE_SIZE -
+            1,
+        );
+
+    if (error) {
+      throw new Error(
+        `Could not load the fundamentals queue: ${error.message}`,
+      );
+    }
+
+    const rows =
+      (data ?? []) as
+        StockQueueRow[];
+
+    if (
+      rows.length === 0
+    ) {
+      break;
+    }
+
+    for (
+      const row of rows
+    ) {
+      const symbol =
+        normalizeSymbol(
+          row.symbol,
+        );
+
+      rowsScanned += 1;
+
+      if (
+        !symbol ||
+        !supportedTickers.has(
+          symbol,
+        )
+      ) {
+        unsupportedSkipped +=
+          1;
+        continue;
+      }
+
+      stocks.push({
+        symbol,
+      });
+
+      if (
+        stocks.length >=
+        batchSize
+      ) {
+        break;
+      }
+    }
+
+    if (
+      stocks.length >=
+        batchSize ||
+      rows.length <
+        QUEUE_PAGE_SIZE
+    ) {
+      break;
+    }
+
+    offset +=
+      QUEUE_PAGE_SIZE;
+  }
+
+  return {
+    stocks,
+    rowsScanned,
+    unsupportedSkipped,
+  };
+}
+
 async function processInBatches<T, R>(
   values: T[],
   concurrency: number,
@@ -841,55 +1147,25 @@ Deno.serve(
             }),
           );
       } else {
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "stock_screener_stocks",
-            )
-            .select("symbol")
-            .eq(
-              "is_active",
-              true,
-            )
-            .eq(
-              "is_common_stock",
-              true,
-            )
-            .or(
-              `fundamentals_updated_at.is.null,fundamentals_updated_at.lt.${staleBefore}`,
-            )
-            .order(
-              "fundamentals_updated_at",
-              {
-                ascending:
-                  true,
-                nullsFirst:
-                  true,
-              },
-            )
-            .order(
-              "symbol",
-              {
-                ascending:
-                  true,
-              },
-            )
-            .limit(
-              batchSize,
-            );
-
-        if (error) {
-          throw new Error(
-            `Could not load the fundamentals queue: ${error.message}`,
+        const supportedTickers =
+          await fetchSupportedFinancialMetricsTickers(
+            financialDatasetsApiKey,
           );
-        }
+
+        const queue =
+          await loadSupportedFundamentalsQueue(
+            supabase,
+            supportedTickers,
+            staleBefore,
+            batchSize,
+          );
 
         stocks =
-          (data ?? []) as
-            StockQueueRow[];
+          queue.stocks;
+
+        console.log(
+          `Fundamentals queue: ${queue.rowsScanned} stale rows scanned, ${queue.unsupportedSkipped} unsupported symbols skipped, ${stocks.length} supported symbols selected.`,
+        );
       }
 
       if (
@@ -900,7 +1176,9 @@ Deno.serve(
           status:
             "idle",
           message:
-            "No stocks have missing or stale fundamentals.",
+            requestedSymbols.length > 0
+              ? "No symbols were requested."
+              : "No Financial Datasets-supported stocks have missing or stale fundamentals.",
           staleHours,
           staleBefore,
           symbolsRequested:
