@@ -1,10 +1,6 @@
 import {
   createClient,
-  type SupabaseClient,
 } from "npm:@supabase/supabase-js@2";
-import {
-  getCachedMarketData,
-} from "../_shared/market-data-cache.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,10 +17,6 @@ const MAX_BATCH_SIZE = 100;
 const DEFAULT_STALE_HOURS = 24;
 const MAX_STALE_HOURS = 24 * 30;
 const REQUEST_CONCURRENCY = 5;
-const METRICS_FRESH_MS =
-  24 * 60 * 60 * 1000;
-const METRICS_STALE_MS =
-  30 * 24 * 60 * 60 * 1000;
 
 type UnknownRecord =
   Record<string, unknown>;
@@ -168,91 +160,240 @@ function buildFundamentalsUpdate(
 ) {
   return {
     market_cap_b:
-      billionsNumber(metrics, "market_cap"),
+      billionsNumber(
+        metrics,
+        "market_cap",
+      ),
+
     enterprise_value_b:
-      billionsNumber(metrics, "enterprise_value"),
+      billionsNumber(
+        metrics,
+        "enterprise_value",
+      ),
 
     pe:
-      roundNumber(rawNumber(metrics, "price_to_earnings_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "price_to_earnings_ratio",
+        ),
+      ),
+
     forward_pe:
       null,
+
     peg:
-      roundNumber(rawNumber(metrics, "peg_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "peg_ratio",
+        ),
+      ),
+
     pb:
-      roundNumber(rawNumber(metrics, "price_to_book_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "price_to_book_ratio",
+        ),
+      ),
+
     ps:
-      roundNumber(rawNumber(metrics, "price_to_sales_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "price_to_sales_ratio",
+        ),
+      ),
+
     ev_ebitda:
-      roundNumber(rawNumber(metrics, "enterprise_value_to_ebitda_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "enterprise_value_to_ebitda_ratio",
+        ),
+      ),
+
     pcf:
       null,
+
     pfcf:
-      inverseYieldRatio(metrics, "free_cash_flow_yield"),
+      inverseYieldRatio(
+        metrics,
+        "free_cash_flow_yield",
+      ),
 
     gross_margin:
-      percentNumber(metrics, "gross_margin"),
+      percentNumber(
+        metrics,
+        "gross_margin",
+      ),
+
     operating_margin:
-      percentNumber(metrics, "operating_margin"),
+      percentNumber(
+        metrics,
+        "operating_margin",
+      ),
+
     net_margin:
-      percentNumber(metrics, "net_margin"),
+      percentNumber(
+        metrics,
+        "net_margin",
+      ),
+
     roe:
-      percentNumber(metrics, "return_on_equity"),
+      percentNumber(
+        metrics,
+        "return_on_equity",
+      ),
+
     roa:
-      percentNumber(metrics, "return_on_assets"),
+      percentNumber(
+        metrics,
+        "return_on_assets",
+      ),
+
     roic:
-      percentNumber(metrics, "return_on_invested_capital"),
+      percentNumber(
+        metrics,
+        "return_on_invested_capital",
+      ),
 
     revenue_growth_yoy:
-      percentNumber(metrics, "revenue_growth"),
+      percentNumber(
+        metrics,
+        "revenue_growth",
+      ),
+
     eps_growth_yoy:
-      percentNumber(metrics, "earnings_per_share_growth"),
+      percentNumber(
+        metrics,
+        "earnings_per_share_growth",
+      ),
+
     ebitda_growth_yoy:
-      percentNumber(metrics, "ebitda_growth"),
+      percentNumber(
+        metrics,
+        "ebitda_growth",
+      ),
+
     fcf_growth_yoy:
-      percentNumber(metrics, "free_cash_flow_growth"),
+      percentNumber(
+        metrics,
+        "free_cash_flow_growth",
+      ),
 
     debt_to_equity:
-      roundNumber(rawNumber(metrics, "debt_to_equity")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "debt_to_equity",
+        ),
+      ),
+
     current_ratio:
-      roundNumber(rawNumber(metrics, "current_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "current_ratio",
+        ),
+      ),
+
     quick_ratio:
-      roundNumber(rawNumber(metrics, "quick_ratio")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "quick_ratio",
+        ),
+      ),
+
     interest_coverage:
-      roundNumber(rawNumber(metrics, "interest_coverage")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "interest_coverage",
+        ),
+      ),
+
     debt_to_ebitda:
       null,
 
     asset_turnover:
-      roundNumber(rawNumber(metrics, "asset_turnover")),
-    inventory_turnover:
-      roundNumber(rawNumber(metrics, "inventory_turnover")),
-    receivables_turnover:
-      roundNumber(rawNumber(metrics, "receivables_turnover")),
-    days_sales_outstanding:
-      roundNumber(rawNumber(metrics, "days_sales_outstanding")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "asset_turnover",
+        ),
+      ),
 
-    // Current Financial Datasets snapshot does not expose these.
-    // Clear stale legacy values instead of displaying incorrect numbers.
+    inventory_turnover:
+      roundNumber(
+        rawNumber(
+          metrics,
+          "inventory_turnover",
+        ),
+      ),
+
+    receivables_turnover:
+      roundNumber(
+        rawNumber(
+          metrics,
+          "receivables_turnover",
+        ),
+      ),
+
+    days_sales_outstanding:
+      roundNumber(
+        rawNumber(
+          metrics,
+          "days_sales_outstanding",
+        ),
+      ),
+
+    // Financial Datasets' current financial-metrics snapshot
+    // does not include these fields. Clear stale legacy values.
     dividend_yield:
       null,
+
     payout_ratio:
-      percentNumber(metrics, "payout_ratio"),
+      percentNumber(
+        metrics,
+        "payout_ratio",
+      ),
+
     dividend_growth_5y:
       null,
 
     eps_ttm:
-      roundNumber(rawNumber(metrics, "earnings_per_share")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "earnings_per_share",
+        ),
+      ),
+
     book_value_per_share:
-      roundNumber(rawNumber(metrics, "book_value_per_share")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "book_value_per_share",
+        ),
+      ),
+
     fcf_per_share:
-      roundNumber(rawNumber(metrics, "free_cash_flow_per_share")),
+      roundNumber(
+        rawNumber(
+          metrics,
+          "free_cash_flow_per_share",
+        ),
+      ),
 
     fundamentals_updated_at:
       updatedAt,
   };
 }
 
-async function providerGetMetrics(
+async function fetchFinancialDatasetsMetrics(
   symbol: string,
   apiKey: string,
 ): Promise<UnknownRecord> {
@@ -297,12 +438,20 @@ async function providerGetMetrics(
   if (!response.ok) {
     const message =
       payload &&
-      typeof payload === "object"
+      typeof payload ===
+        "object" &&
+      !Array.isArray(payload)
         ? normalizeText(
-            (payload as UnknownRecord).message ||
-              (payload as UnknownRecord).error,
+            (
+              payload as UnknownRecord
+            ).message ||
+              (
+                payload as UnknownRecord
+              ).error,
           )
-        : normalizeText(payload);
+        : normalizeText(
+            payload,
+          );
 
     throw new Error(
       message ||
@@ -312,7 +461,8 @@ async function providerGetMetrics(
 
   if (
     !payload ||
-    typeof payload !== "object" ||
+    typeof payload !==
+      "object" ||
     Array.isArray(payload)
   ) {
     throw new Error(
@@ -321,49 +471,6 @@ async function providerGetMetrics(
   }
 
   return payload as UnknownRecord;
-}
-
-async function fetchFinancialDatasetsMetrics(
-  client: SupabaseClient,
-  symbol: string,
-  apiKey: string,
-) {
-  const cached =
-    await getCachedMarketData<UnknownRecord>(
-      {
-        client,
-        key:
-          `metrics:${symbol}`,
-        dataType:
-          "metrics",
-        ticker:
-          symbol,
-        parameters: {
-          ticker:
-            symbol,
-        },
-        freshMs:
-          METRICS_FRESH_MS,
-        staleMs:
-          METRICS_STALE_MS,
-        endpoint:
-          "/financial-metrics/snapshot",
-        fetcher: () =>
-          providerGetMetrics(
-            symbol,
-            apiKey,
-          ),
-      },
-    );
-
-  const updatedAt =
-    cached.cache.fetchedAt ||
-    new Date().toISOString();
-
-  return buildFundamentalsUpdate(
-    cached.data,
-    updatedAt,
-  );
 }
 
 async function processInBatches<T, R>(
@@ -402,7 +509,8 @@ async function processInBatches<T, R>(
 Deno.serve(
   async (request) => {
     if (
-      request.method === "OPTIONS"
+      request.method ===
+      "OPTIONS"
     ) {
       return new Response(
         "ok",
@@ -414,7 +522,8 @@ Deno.serve(
     }
 
     if (
-      request.method !== "POST"
+      request.method !==
+      "POST"
     ) {
       return jsonResponse(
         {
@@ -439,7 +548,8 @@ Deno.serve(
     if (
       !expectedSecret ||
       !receivedSecret ||
-      receivedSecret !== expectedSecret
+      receivedSecret !==
+        expectedSecret
     ) {
       return jsonResponse(
         {
@@ -521,7 +631,9 @@ Deno.serve(
     const requestedSymbols = [
       ...new Set(
         rawSymbols
-          .map(normalizeSymbol)
+          .map(
+            normalizeSymbol,
+          )
           .filter(Boolean),
       ),
     ].slice(
@@ -577,7 +689,8 @@ Deno.serve(
       ).toISOString();
 
     const startedAt =
-      new Date().toISOString();
+      new Date()
+        .toISOString();
 
     let syncRunId:
       number | null = null;
@@ -587,7 +700,8 @@ Deno.serve(
         StockQueueRow[] = [];
 
       if (
-        requestedSymbols.length > 0
+        requestedSymbols.length >
+        0
       ) {
         stocks =
           requestedSymbols.map(
@@ -666,7 +780,8 @@ Deno.serve(
             0,
           startedAt,
           finishedAt:
-            new Date().toISOString(),
+            new Date()
+              .toISOString(),
         });
       }
 
@@ -690,7 +805,8 @@ Deno.serve(
               startedAt,
             metadata: {
               manualSymbols:
-                requestedSymbols.length > 0,
+                requestedSymbols.length >
+                0,
               batchSize:
                 stocks.length,
               staleHours,
@@ -706,11 +822,14 @@ Deno.serve(
           syncRunError,
         );
       } else if (
-        syncRun?.id !== undefined &&
+        syncRun?.id !==
+          undefined &&
         syncRun?.id !== null
       ) {
         syncRunId =
-          Number(syncRun.id);
+          Number(
+            syncRun.id,
+          );
       }
 
       const results =
@@ -724,11 +843,20 @@ Deno.serve(
               stock.symbol;
 
             try {
-              const values =
+              const metrics =
                 await fetchFinancialDatasetsMetrics(
-                  supabase,
                   symbol,
                   financialDatasetsApiKey,
+                );
+
+              const updatedAt =
+                new Date()
+                  .toISOString();
+
+              const values =
+                buildFundamentalsUpdate(
+                  metrics,
+                  updatedAt,
                 );
 
               const {
@@ -755,7 +883,9 @@ Deno.serve(
                 symbol,
                 ok: true,
                 updatedFields:
-                  Object.keys(values).length,
+                  Object.keys(
+                    values,
+                  ).length,
                 error:
                   null,
               };
@@ -801,7 +931,8 @@ Deno.serve(
             : "failed";
 
       const finishedAt =
-        new Date().toISOString();
+        new Date()
+          .toISOString();
 
       if (
         syncRunId !== null
@@ -838,21 +969,6 @@ Deno.serve(
                         2000,
                       )
                   : null,
-              metadata: {
-                manualSymbols:
-                  requestedSymbols.length > 0,
-                batchSize:
-                  stocks.length,
-                staleHours,
-                staleBefore,
-                unsupportedFieldsCleared: [
-                  "forward_pe",
-                  "pcf",
-                  "debt_to_ebitda",
-                  "dividend_yield",
-                  "dividend_growth_5y",
-                ],
-              },
             })
             .eq(
               "id",
@@ -869,7 +985,8 @@ Deno.serve(
 
       return jsonResponse({
         ok:
-          status !== "failed",
+          status !==
+          "failed",
         status,
         staleHours,
         staleBefore,
@@ -894,7 +1011,8 @@ Deno.serve(
           : "Unknown fundamentals-sync error.";
 
       const finishedAt =
-        new Date().toISOString();
+        new Date()
+          .toISOString();
 
       if (
         syncRunId !== null
