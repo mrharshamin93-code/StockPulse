@@ -4,11 +4,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const FINANCIAL_DATASETS_API_BASE =
-  "https://api.financialdatasets.ai";
-
-const XAI_RESPONSES_URL =
-  "https://api.x.ai/v1/responses";
+const FD_BASE = "https://api.financialdatasets.ai";
+const XAI_URL = "https://api.x.ai/v1/responses";
 
 const analysisSchema = {
   type: "object",
@@ -46,184 +43,129 @@ const analysisSchema = {
     },
     summary: { type: "string" },
   },
-  required: [
-    "company_name",
-    "valid",
-    "pros",
-    "cons",
-    "summary",
-  ],
+  required: ["company_name", "valid", "pros", "cons", "summary"],
 };
 
-function jsonResponse(
-  body: unknown,
-  status = 200,
-) {
-  return new Response(
-    JSON.stringify(body),
-    {
-      status,
-      headers: {
-        ...corsHeaders,
-        "Content-Type":
-          "application/json; charset=utf-8",
-      },
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json; charset=utf-8",
     },
-  );
+  });
 }
 
-function normalizeTicker(
-  value: unknown,
-) {
-  return String(value ?? "")
-    .trim()
-    .toUpperCase();
+function tickerOf(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
 }
 
-function normalizeText(
-  value: unknown,
-) {
-  return String(value ?? "")
-    .trim();
+function textOf(value: unknown) {
+  return String(value ?? "").trim();
 }
 
-function extractOutputText(
-  payload: Record<string, unknown>,
-) {
-  const output =
-    Array.isArray(payload.output)
-      ? payload.output
-      : [];
+function finite(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
 
-  for (const item of output) {
+function percent(value: unknown) {
+  const n = finite(value);
+  return n === null ? null : n * 100;
+}
+
+function unwrap(payload: unknown) {
+  if (!payload || typeof payload !== "object") return null;
+
+  const root = payload as Record<string, unknown>;
+
+  for (const key of [
+    "snapshot",
+    "financial_metrics",
+    "financial_metric",
+    "data",
+  ]) {
+    const candidate = root[key];
     if (
-      !item ||
-      typeof item !== "object"
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate)
     ) {
-      continue;
-    }
-
-    const content =
-      Array.isArray(
-        (
-          item as {
-            content?: unknown[];
-          }
-        ).content,
-      )
-        ? (
-            item as {
-              content: unknown[];
-            }
-          ).content
-        : [];
-
-    for (const part of content) {
-      if (
-        part &&
-        typeof part === "object" &&
-        (
-          part as {
-            type?: string;
-          }
-        ).type === "output_text" &&
-        typeof (
-          part as {
-            text?: unknown;
-          }
-        ).text === "string"
-      ) {
-        return (
-          part as {
-            text: string;
-          }
-        ).text;
-      }
+      return candidate as Record<string, unknown>;
     }
   }
 
-  return "";
+  return root;
 }
 
-async function fetchFinancialDatasets(
+async function fetchFD(
   path: string,
   ticker: string,
   apiKey: string,
 ) {
-  const url =
-    new URL(
-      `${FINANCIAL_DATASETS_API_BASE}${path}`,
-    );
+  const url = new URL(`${FD_BASE}${path}`);
+  url.searchParams.set("ticker", ticker);
 
-  url.searchParams.set(
-    "ticker",
-    ticker,
-  );
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "X-API-KEY": apiKey,
+    },
+  });
 
-  const response =
-    await fetch(
-      url.toString(),
-      {
-        headers: {
-          Accept:
-            "application/json",
-          "X-API-KEY":
-            apiKey,
-        },
-      },
-    );
+  const raw = await response.text();
 
-  const text =
-    await response.text();
-
-  let payload:
-    unknown = null;
-
+  let payload: unknown = null;
   try {
-    payload =
-      text
-        ? JSON.parse(text)
-        : null;
+    payload = raw ? JSON.parse(raw) : null;
   } catch {
-    payload = text;
+    payload = null;
   }
 
   return {
-    ok:
-      response.ok,
-    status:
-      response.status,
+    ok: response.ok,
+    status: response.status,
     payload,
   };
 }
 
-function compactMetrics(
-  payload: unknown,
-) {
-  if (
-    !payload ||
-    typeof payload !== "object"
-  ) {
-    return null;
-  }
+function verifiedMetrics(payload: unknown) {
+  const m = unwrap(payload);
+  if (!m) return null;
 
-  const root =
-    payload as Record<
-      string,
-      unknown
-    >;
+  /*
+   * IMPORTANT:
+   * These names exactly match Analysis.jsx.
+   * Financial Datasets returns ratios/growth rates as decimals,
+   * so percentage metrics are multiplied by 100 for display.
+   */
+  return {
+    marketCapB:
+      finite(m.market_cap) === null
+        ? null
+        : finite(m.market_cap)! / 1_000_000_000,
 
-  const snapshot =
-    root.snapshot &&
-    typeof root.snapshot ===
-      "object"
-      ? root.snapshot as Record<
-          string,
-          unknown
-        >
-      : root;
+    pe: finite(m.price_to_earnings_ratio),
 
-  const keys = [
+    revenueGrowthYoy: percent(m.revenue_growth),
+
+    epsGrowthYoy: percent(m.earnings_per_share_growth),
+
+    grossMargin: percent(m.gross_margin),
+
+    roe: percent(m.return_on_equity),
+
+    debtToEquity: finite(m.debt_to_equity),
+
+    fcfPerShare: finite(m.free_cash_flow_per_share),
+  };
+}
+
+function groundingMetrics(payload: unknown) {
+  const m = unwrap(payload);
+  if (!m) return null;
+
+  const allowed = [
     "ticker",
     "currency",
     "market_cap",
@@ -242,6 +184,9 @@ function compactMetrics(
     "return_on_assets",
     "return_on_invested_capital",
     "asset_turnover",
+    "inventory_turnover",
+    "receivables_turnover",
+    "days_sales_outstanding",
     "current_ratio",
     "quick_ratio",
     "cash_ratio",
@@ -262,52 +207,20 @@ function compactMetrics(
     "free_cash_flow_per_share",
   ];
 
-  const compact:
-    Record<string, unknown> =
-      {};
-
-  for (const key of keys) {
-    if (
-      snapshot[key] !==
-        undefined &&
-      snapshot[key] !==
-        null
-    ) {
-      compact[key] =
-        snapshot[key];
+  const out: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (m[key] !== undefined && m[key] !== null) {
+      out[key] = m[key];
     }
   }
-
-  return compact;
+  return out;
 }
 
-function compactQuote(
-  payload: unknown,
-) {
-  if (
-    !payload ||
-    typeof payload !== "object"
-  ) {
-    return null;
-  }
+function groundingQuote(payload: unknown) {
+  const q = unwrap(payload);
+  if (!q) return null;
 
-  const root =
-    payload as Record<
-      string,
-      unknown
-    >;
-
-  const snapshot =
-    root.snapshot &&
-    typeof root.snapshot ===
-      "object"
-      ? root.snapshot as Record<
-          string,
-          unknown
-        >
-      : root;
-
-  const keys = [
+  const allowed = [
     "ticker",
     "price",
     "close",
@@ -327,364 +240,246 @@ function compactQuote(
     "date",
   ];
 
-  const compact:
-    Record<string, unknown> =
-      {};
+  const out: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (q[key] !== undefined && q[key] !== null) {
+      out[key] = q[key];
+    }
+  }
+  return out;
+}
 
-  for (const key of keys) {
-    if (
-      snapshot[key] !==
-        undefined &&
-      snapshot[key] !==
-        null
-    ) {
-      compact[key] =
-        snapshot[key];
+function outputText(payload: Record<string, unknown>) {
+  if (typeof payload.output_text === "string") {
+    return payload.output_text;
+  }
+
+  const output = Array.isArray(payload.output) ? payload.output : [];
+
+  for (const item of output) {
+    if (!item || typeof item !== "object") continue;
+
+    const content = Array.isArray(
+      (item as { content?: unknown[] }).content,
+    )
+      ? (item as { content: unknown[] }).content
+      : [];
+
+    for (const part of content) {
+      if (
+        part &&
+        typeof part === "object" &&
+        (part as { type?: string }).type === "output_text" &&
+        typeof (part as { text?: unknown }).text === "string"
+      ) {
+        return (part as { text: string }).text;
+      }
     }
   }
 
-  return compact;
+  return "";
 }
 
-Deno.serve(
-  async (request) => {
-    if (
-      request.method ===
-      "OPTIONS"
-    ) {
-      return new Response(
-        "ok",
-        {
-          headers:
-            corsHeaders,
-        },
-      );
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return json({ error: "Method not allowed" }, 405);
+  }
+
+  const authorization = request.headers.get("Authorization");
+  if (!authorization?.startsWith("Bearer ")) {
+    return json({ error: "Authentication required" }, 401);
+  }
+
+  const xaiKey = Deno.env.get("XAI_API_KEY");
+  const fdKey = Deno.env.get("FINANCIAL_DATASETS_API_KEY");
+
+  if (!xaiKey) {
+    return json(
+      { error: "The stock analysis model is not configured" },
+      503,
+    );
+  }
+
+  if (!fdKey) {
+    return json(
+      { error: "Financial Datasets is not configured" },
+      503,
+    );
+  }
+
+  try {
+    const body = await request.json().catch(() => ({}));
+
+    const ticker = tickerOf(body?.ticker);
+    const requestedCompany =
+      textOf(body?.company_name) || ticker;
+
+    if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(ticker)) {
+      return json({ error: "Invalid ticker" }, 400);
     }
 
-    if (
-      request.method !==
-      "POST"
-    ) {
-      return jsonResponse(
-        {
-          error:
-            "Method not allowed",
-        },
-        405,
-      );
-    }
-
-    const authorization =
-      request.headers.get(
-        "Authorization",
-      );
-
-    if (
-      !authorization
-        ?.startsWith(
-          "Bearer ",
-        )
-    ) {
-      return jsonResponse(
-        {
-          error:
-            "Authentication required",
-        },
-        401,
-      );
-    }
-
-    const xaiApiKey =
-      Deno.env.get(
-        "XAI_API_KEY",
-      );
-
-    const financialDatasetsApiKey =
-      Deno.env.get(
-        "FINANCIAL_DATASETS_API_KEY",
-      );
-
-    if (!xaiApiKey) {
-      return jsonResponse(
-        {
-          error:
-            "The stock analysis model is not configured",
-        },
-        503,
-      );
-    }
-
-    if (
-      !financialDatasetsApiKey
-    ) {
-      return jsonResponse(
-        {
-          error:
-            "Financial Datasets is not configured",
-        },
-        503,
-      );
-    }
-
-    try {
-      const body =
-        await request
-          .json()
-          .catch(
-            () => ({}),
-          );
-
-      const ticker =
-        normalizeTicker(
-          body?.ticker,
-        );
-
-      const requestedCompanyName =
-        normalizeText(
-          body?.company_name,
-        ) ||
-        ticker;
-
-      if (
-        !/^[A-Z][A-Z0-9.-]{0,9}$/.test(
-          ticker,
-        )
-      ) {
-        return jsonResponse(
-          {
-            error:
-              "Invalid ticker",
-          },
-          400,
-        );
-      }
-
-      /*
-       * Financial Datasets is the authoritative source for
-       * numeric stock data in the analysis. We intentionally
-       * do not fetch cached StockPulse news here; Grok may use
-       * its own web search for recent qualitative developments.
-       */
-      const [
-        metricsResult,
-        quoteResult,
-      ] =
-        await Promise.all([
-          fetchFinancialDatasets(
-            "/financial-metrics/snapshot",
-            ticker,
-            financialDatasetsApiKey,
-          ),
-          fetchFinancialDatasets(
-            "/prices/snapshot",
-            ticker,
-            financialDatasetsApiKey,
-          ),
-        ]);
-
-      const metrics =
-        metricsResult.ok
-          ? compactMetrics(
-              metricsResult.payload,
-            )
-          : null;
-
-      const quote =
-        quoteResult.ok
-          ? compactQuote(
-              quoteResult.payload,
-            )
-          : null;
-
-      const providerRecognized =
-        Boolean(
-          metrics ||
-          quote,
-        );
-
-      if (
-        !providerRecognized &&
-        metricsResult.status ===
-          404 &&
-        quoteResult.status ===
-          404
-      ) {
-        return jsonResponse({
-          company_name:
-            requestedCompanyName,
-          valid: false,
-          pros: [],
-          cons: [],
-          summary: "",
-        });
-      }
-
-      if (
-        !providerRecognized
-      ) {
-        console.error(
-          "Financial Datasets analysis grounding failed",
-          {
-            ticker,
-            metricsStatus:
-              metricsResult.status,
-            quoteStatus:
-              quoteResult.status,
-          },
-        );
-
-        return jsonResponse(
-          {
-            error:
-              "Verified financial data is temporarily unavailable",
-          },
-          502,
-        );
-      }
-
-      const grounding = {
+    const [metricsResult, quoteResult] = await Promise.all([
+      fetchFD(
+        "/financial-metrics/snapshot",
         ticker,
-        company_name:
-          requestedCompanyName,
-        quote,
-        financial_metrics:
-          metrics,
-      };
+        fdKey,
+      ),
+      fetchFD(
+        "/prices/snapshot",
+        ticker,
+        fdKey,
+      ),
+    ]);
 
-      const response =
-        await fetch(
-          XAI_RESPONSES_URL,
-          {
-            method: "POST",
-            headers: {
-              Authorization:
-                `Bearer ${xaiApiKey}`,
-              "Content-Type":
-                "application/json",
-            },
-            body:
-              JSON.stringify({
-                model:
-                  Deno.env.get(
-                    "XAI_MODEL",
-                  ) ||
-                  "grok-4.6",
-                reasoning: {
-                  effort:
-                    "none",
-                },
-                store: false,
-                max_output_tokens:
-                  1800,
-                max_turns: 3,
-                tools: [
-                  {
-                    type:
-                      "web_search",
-                  },
-                ],
-                input: [
-                  {
-                    role:
-                      "system",
-                    content:
-                      "You are a cautious equity research assistant for StockPulse. " +
-                      "Financial Datasets is the authoritative source for all numeric " +
-                      "market and financial figures supplied in the prompt. Do not " +
-                      "replace those supplied figures with numbers found on the web. " +
-                      "Use web search for recent company developments, earnings context, " +
-                      "business developments, risks, and news that help interpret the " +
-                      "verified data. Prefer primary company releases, SEC materials, " +
-                      "and reputable financial reporting. Clearly describe uncertainty, " +
-                      "never promise returns, and do not give personalized financial advice.",
-                  },
-                  {
-                    role:
-                      "user",
-                    content:
-                      `Analyze ${requestedCompanyName} (${ticker}).\n\n` +
-                      "VERIFIED FINANCIAL DATA FROM FINANCIAL DATASETS:\n" +
-                      `${JSON.stringify(grounding)}\n\n` +
-                      "Use the supplied Financial Datasets figures for every numeric " +
-                      "valuation, profitability, growth, balance-sheet, cash-flow, and " +
-                      "price claim. You may independently search the web for recent news " +
-                      "and qualitative developments; do not rely on StockPulse's cached news. " +
-                      "Return 4-6 concise bullish arguments, 4-6 concise bearish risks, a " +
-                      "2-3 sentence balanced summary, the recognized company name, and " +
-                      "whether this appears to be a valid publicly traded stock. When a " +
-                      "specific numeric fact is not present in the supplied data, do not invent it.",
-                  },
-                ],
-                text: {
-                  format: {
-                    type:
-                      "json_schema",
-                    name:
-                      "stock_analysis",
-                    strict: true,
-                    schema:
-                      analysisSchema,
-                  },
-                },
-              }),
-          },
-        );
+    const fdMetrics = metricsResult.ok
+      ? groundingMetrics(metricsResult.payload)
+      : null;
 
-      const payload =
-        await response.json();
+    const displayMetrics = metricsResult.ok
+      ? verifiedMetrics(metricsResult.payload)
+      : null;
 
-      if (!response.ok) {
-        console.error(
-          "xAI response error",
-          response.status,
-          payload?.error,
-        );
+    const fdQuote = quoteResult.ok
+      ? groundingQuote(quoteResult.payload)
+      : null;
 
-        return jsonResponse(
-          {
-            error:
-              "Unable to generate stock analysis",
-          },
-          502,
-        );
-      }
+    if (
+      !fdMetrics &&
+      !fdQuote &&
+      metricsResult.status === 404 &&
+      quoteResult.status === 404
+    ) {
+      return json({
+        company_name: requestedCompany,
+        valid: false,
+        pros: [],
+        cons: [],
+        summary: "",
+        metrics: {},
+      });
+    }
 
-      const outputText =
-        extractOutputText(
-          payload,
-        );
+    if (!fdMetrics && !fdQuote) {
+      console.error("Financial Datasets grounding failed", {
+        ticker,
+        metricsStatus: metricsResult.status,
+        quoteStatus: quoteResult.status,
+      });
 
-      if (!outputText) {
-        return jsonResponse(
-          {
-            error:
-              "The analysis model returned no result",
-          },
-          502,
-        );
-      }
-
-      const parsed =
-        JSON.parse(
-          outputText,
-        );
-
-      return jsonResponse(
-        parsed,
-      );
-    } catch (error) {
-      console.error(
-        "stock-analysis error",
-        error,
-      );
-
-      return jsonResponse(
-        {
-          error:
-            "Unable to generate stock analysis",
-        },
-        500,
+      return json(
+        { error: "Verified financial data is temporarily unavailable" },
+        502,
       );
     }
-  },
-);
+
+    const response = await fetch(XAI_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${xaiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: Deno.env.get("XAI_MODEL") || "grok-4.6",
+
+        // User-selected balance of deeper analysis and latency.
+        reasoning: {
+          effort: "medium",
+        },
+
+        store: false,
+        max_output_tokens: 1800,
+        max_turns: 3,
+
+        // Grok researches current qualitative developments itself.
+        tools: [{ type: "web_search" }],
+
+        input: [
+          {
+            role: "system",
+            content:
+              "You are a cautious equity research assistant for StockPulse. " +
+              "Financial Datasets is the authoritative source for numeric stock " +
+              "and financial figures supplied in the prompt. Do not replace those " +
+              "figures with numbers found on the web. Use web search for recent " +
+              "company developments, earnings context, catalysts and risks. Prefer " +
+              "primary company releases, SEC materials and reputable reporting. " +
+              "Do not promise returns or provide personalized financial advice.",
+          },
+          {
+            role: "user",
+            content:
+              `Analyze ${requestedCompany} (${ticker}).\n\n` +
+              "VERIFIED FINANCIAL DATA FROM FINANCIAL DATASETS:\n" +
+              JSON.stringify({
+                ticker,
+                company_name: requestedCompany,
+                quote: fdQuote,
+                financial_metrics: fdMetrics,
+              }) +
+              "\n\nUse those supplied values for numeric financial claims. " +
+              "You may independently search the web for current qualitative news " +
+              "and developments. Return 4-6 concise bullish arguments, 4-6 concise " +
+              "bearish risks, a balanced 2-3 sentence summary, the recognized company " +
+              "name, and whether this is a valid publicly traded stock. Do not invent " +
+              "a numeric fact that is absent from the supplied Financial Datasets data.",
+          },
+        ],
+
+        text: {
+          format: {
+            type: "json_schema",
+            name: "stock_analysis",
+            strict: true,
+            schema: analysisSchema,
+          },
+        },
+      }),
+    });
+
+    const xaiPayload = await response.json();
+
+    if (!response.ok) {
+      console.error(
+        "xAI response error",
+        response.status,
+        xaiPayload?.error,
+      );
+
+      return json(
+        { error: "Unable to generate stock analysis" },
+        502,
+      );
+    }
+
+    const raw = outputText(xaiPayload);
+    if (!raw) {
+      return json(
+        { error: "The analysis model returned no result" },
+        502,
+      );
+    }
+
+    const parsed = JSON.parse(raw);
+
+    /*
+     * Metrics are attached by our backend, not generated by Grok.
+     * This guarantees the "Verified Metrics" cards use the exact
+     * Financial Datasets values and the property names Analysis.jsx expects.
+     */
+    return json({
+      ...parsed,
+      metrics: displayMetrics || {},
+    });
+  } catch (error) {
+    console.error("stock-analysis error", error);
+
+    return json(
+      { error: "Unable to generate stock analysis" },
+      500,
+    );
+  }
+});
