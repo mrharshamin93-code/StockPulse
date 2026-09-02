@@ -134,7 +134,7 @@ async function getStoredIntradayCandles(body) {
       );
     });
 
-  if (rows.length < 2) {
+  if (rows.length < 1) {
     return null;
   }
 
@@ -146,7 +146,7 @@ async function getStoredIntradayCandles(body) {
       row.session.sessionDate === latestSessionDate,
   );
 
-  if (latestSessionRows.length < 2) {
+  if (latestSessionRows.length < 1) {
     return null;
   }
 
