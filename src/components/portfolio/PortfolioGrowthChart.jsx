@@ -47,6 +47,7 @@ const PERIOD_CONFIG = {
 const MAX_RENDERED_POINTS = 180;
 const FETCH_BATCH_SIZE = 5;
 const EPSILON = 1e-8;
+const NEW_YORK_TIME_ZONE = "America/New_York";
 
 function getValidNumber(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -314,7 +315,7 @@ function getNewYorkSessionDate(timestamp) {
   if (Number.isNaN(date.getTime())) return null;
 
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
+    timeZone: NEW_YORK_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -327,26 +328,89 @@ function getNewYorkSessionDate(timestamp) {
   return year && month && day ? `${year}-${month}-${day}` : null;
 }
 
-function getChartStart({ period, histories, provisionalChartStart }) {
-  if (period !== "1D") return provisionalChartStart;
+function getTimeZoneOffsetMs(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
 
+  const value = (type) => Number(parts.find((part) => part.type === type)?.value);
+
+  const year = value("year");
+  const month = value("month");
+  const day = value("day");
+  const hour = value("hour");
+  const minute = value("minute");
+  const second = value("second");
+
+  if (![year, month, day, hour, minute, second].every(Number.isFinite)) {
+    return null;
+  }
+
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  return asUtc - date.getTime();
+}
+
+function getNewYorkMarketCloseTimestamp(sessionDate) {
+  if (!sessionDate) return null;
+
+  const [year, month, day] = sessionDate.split("-").map(Number);
+  if (![year, month, day].every(Number.isFinite)) return null;
+
+  const localCloseAsUtc = Date.UTC(year, month - 1, day, 16, 0, 0, 0);
+  let candidate = new Date(localCloseAsUtc);
+
+  let offset = getTimeZoneOffsetMs(candidate, NEW_YORK_TIME_ZONE);
+  if (offset === null) return null;
+
+  let closeMs = localCloseAsUtc - offset;
+
+  const correctedOffset = getTimeZoneOffsetMs(new Date(closeMs), NEW_YORK_TIME_ZONE);
+  if (correctedOffset !== null && correctedOffset !== offset) {
+    closeMs = localCloseAsUtc - correctedOffset;
+  }
+
+  return Math.floor(closeMs / 1000);
+}
+
+function getLatestHistoryTimestamp(histories) {
   let latestTimestamp = null;
+
   for (const points of histories.values()) {
     const latest = points.at(-1)?.timestamp;
-    if (Number.isFinite(latest) && (latestTimestamp === null || latest > latestTimestamp)) {
+
+    if (
+      Number.isFinite(latest) &&
+      (latestTimestamp === null || latest > latestTimestamp)
+    ) {
       latestTimestamp = latest;
     }
   }
 
+  return latestTimestamp;
+}
+
+function getChartStart({ period, histories, provisionalChartStart }) {
+  if (period !== "1D") return provisionalChartStart;
+
+  const latestTimestamp = getLatestHistoryTimestamp(histories);
   if (latestTimestamp === null) return provisionalChartStart;
 
   const latestSession = getNewYorkSessionDate(latestTimestamp);
   if (!latestSession) return provisionalChartStart;
 
   let firstSessionPoint = null;
+
   for (const points of histories.values()) {
     for (const point of points) {
       if (getNewYorkSessionDate(point.timestamp) !== latestSession) continue;
+
       if (firstSessionPoint === null || point.timestamp < firstSessionPoint) {
         firstSessionPoint = point.timestamp;
       }
@@ -354,6 +418,21 @@ function getChartStart({ period, histories, provisionalChartStart }) {
   }
 
   return firstSessionPoint ?? provisionalChartStart;
+}
+
+function getChartEnd({ period, histories, fallbackChartEnd }) {
+  if (period !== "1D") return fallbackChartEnd;
+
+  const latestTimestamp = getLatestHistoryTimestamp(histories);
+  if (latestTimestamp === null) return fallbackChartEnd;
+
+  const latestSession = getNewYorkSessionDate(latestTimestamp);
+  if (!latestSession) return fallbackChartEnd;
+
+  const marketClose = getNewYorkMarketCloseTimestamp(latestSession);
+  if (marketClose === null) return fallbackChartEnd;
+
+  return Math.min(fallbackChartEnd, marketClose);
 }
 
 function findPriceAtOrBefore(series, timestamp) {
@@ -364,6 +443,7 @@ function findPriceAtOrBefore(series, timestamp) {
   while (low <= high) {
     const middle = Math.floor((low + high) / 2);
     const point = series[middle];
+
     if (point.timestamp <= timestamp) {
       result = point.price;
       low = middle + 1;
@@ -380,7 +460,7 @@ function formatChartLabel(timestamp, period) {
 
   if (period === "1D") {
     return date.toLocaleTimeString("en-US", {
-      timeZone: "America/New_York",
+      timeZone: NEW_YORK_TIME_ZONE,
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
@@ -389,14 +469,14 @@ function formatChartLabel(timestamp, period) {
 
   if (period === "1W") {
     return date.toLocaleDateString("en-US", {
-      timeZone: "America/New_York",
+      timeZone: NEW_YORK_TIME_ZONE,
       weekday: "short",
     });
   }
 
   if (["1M", "3M", "6M", "YTD"].includes(period)) {
     return date.toLocaleDateString("en-US", {
-      timeZone: "America/New_York",
+      timeZone: NEW_YORK_TIME_ZONE,
       month: "short",
       day: "numeric",
     });
@@ -404,14 +484,14 @@ function formatChartLabel(timestamp, period) {
 
   if (period === "10Y" || period === "All") {
     return date.toLocaleDateString("en-US", {
-      timeZone: "America/New_York",
+      timeZone: NEW_YORK_TIME_ZONE,
       month: "short",
       year: "numeric",
     });
   }
 
   return date.toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
+    timeZone: NEW_YORK_TIME_ZONE,
     month: "short",
     year: "2-digit",
   });
@@ -421,7 +501,9 @@ function buildPriceSeries({ ticker, histories, transactions, holding, chartStart
   const points = [];
 
   for (const point of histories.get(ticker) || []) {
-    if (point.timestamp >= chartStart && point.timestamp <= chartEnd) points.push(point);
+    if (point.timestamp >= chartStart && point.timestamp <= chartEnd) {
+      points.push(point);
+    }
   }
 
   for (const transaction of transactions) {
@@ -445,7 +527,10 @@ function buildPriceSeries({ ticker, histories, transactions, holding, chartStart
   }
 
   const byTimestamp = new Map();
-  for (const point of points) byTimestamp.set(point.timestamp, point);
+
+  for (const point of points) {
+    byTimestamp.set(point.timestamp, point);
+  }
 
   return Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
@@ -475,12 +560,19 @@ function getStateAtTimestamp({ timestamp, transactions, priceSeriesByTicker }) {
 
   for (const [ticker, quantity] of quantities.entries()) {
     if (quantity <= EPSILON) continue;
+
     hasOpenPosition = true;
-    const price = findPriceAtOrBefore(priceSeriesByTicker.get(ticker) || [], timestamp);
+
+    const price = findPriceAtOrBefore(
+      priceSeriesByTicker.get(ticker) || [],
+      timestamp,
+    );
+
     if (price === null) {
       incomplete = true;
       continue;
     }
+
     marketValue += quantity * price;
   }
 
@@ -506,13 +598,17 @@ function buildPortfolioData({
   chartEnd,
   period,
 }) {
-  const holdingMap = new Map(holdings.map((holding) => [holding.ticker, holding]));
+  const holdingMap = new Map(
+    holdings.map((holding) => [holding.ticker, holding]),
+  );
+
   const tickerSet = new Set([
     ...holdings.map((holding) => holding.ticker),
     ...transactions.map((transaction) => transaction.ticker),
   ]);
 
   const priceSeriesByTicker = new Map();
+
   for (const ticker of tickerSet) {
     priceSeriesByTicker.set(
       ticker,
@@ -538,7 +634,10 @@ function buildPortfolioData({
   }
 
   for (const transaction of transactions) {
-    if (transaction.timestamp >= chartStart && transaction.timestamp <= chartEnd) {
+    if (
+      transaction.timestamp >= chartStart &&
+      transaction.timestamp <= chartEnd
+    ) {
       timestampSet.add(transaction.timestamp);
     }
   }
@@ -569,12 +668,17 @@ function buildPortfolioData({
 
   if (!data.length) return { data: [] };
 
-  if (data.length <= MAX_RENDERED_POINTS) return { data };
+  if (data.length <= MAX_RENDERED_POINTS) {
+    return { data };
+  }
 
   const step = Math.ceil(data.length / MAX_RENDERED_POINTS);
   const reduced = data.filter((_, index) => index % step === 0);
   const finalPoint = data.at(-1);
-  if (reduced.at(-1)?.timestamp !== finalPoint.timestamp) reduced.push(finalPoint);
+
+  if (reduced.at(-1)?.timestamp !== finalPoint.timestamp) {
+    reduced.push(finalPoint);
+  }
 
   return { data: reduced };
 }
@@ -588,9 +692,15 @@ function formatCurrency(value) {
 
 function formatYAxisValue(value) {
   const numericValue = Number(value);
+
   if (!Number.isFinite(numericValue)) return "—";
-  if (Math.abs(numericValue) >= 1_000_000) return `$${(numericValue / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(numericValue) >= 1000) return `$${(numericValue / 1000).toFixed(0)}k`;
+  if (Math.abs(numericValue) >= 1_000_000) {
+    return `$${(numericValue / 1_000_000).toFixed(1)}M`;
+  }
+  if (Math.abs(numericValue) >= 1000) {
+    return `$${(numericValue / 1000).toFixed(0)}k`;
+  }
+
   return `$${numericValue.toFixed(0)}`;
 }
 
@@ -611,11 +721,20 @@ function PortfolioTooltip({ active = false, payload = [], label = "" }) {
       <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="text-base font-bold text-foreground">{formatCurrency(value)}</p>
+
+      <p className="text-base font-bold text-foreground">
+        {formatCurrency(value)}
+      </p>
+
       {Number.isFinite(gain) && Number.isFinite(gainPct) && (
-        <p className={`mt-1 text-xs font-semibold ${positive ? "text-emerald-600" : "text-red-600"}`}>
+        <p
+          className={`mt-1 text-xs font-semibold ${
+            positive ? "text-emerald-600" : "text-red-600"
+          }`}
+        >
           {positive ? "+" : "-"}
-          {formatCurrency(Math.abs(gain))} ({positive ? "+" : ""}{gainPct.toFixed(2)}%)
+          {formatCurrency(Math.abs(gain))} ({positive ? "+" : ""}
+          {gainPct.toFixed(2)}%)
         </p>
       )}
     </div>
@@ -631,7 +750,9 @@ function PeriodButton({ value, currentPeriod, onSelect }) {
       onClick={() => onSelect(value)}
       className={[
         "flex h-[27px] min-w-0 flex-1 items-center justify-center rounded-[7px] px-0.5 text-[9.5px] font-semibold tracking-[-0.15px] transition-[transform,background-color,color] duration-150 active:scale-[0.96]",
-        active ? "bg-foreground text-background" : "text-foreground hover:bg-muted",
+        active
+          ? "bg-foreground text-background"
+          : "text-foreground hover:bg-muted",
       ].join(" ")}
     >
       {value}
@@ -657,7 +778,9 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
 
     if (holdings.length === 0) {
       setChartData([]);
-      setError("Enter a valid quantity, purchase price, and purchase date for each holding.");
+      setError(
+        "Enter a valid quantity, purchase price, and purchase date for each holding.",
+      );
       return undefined;
     }
 
@@ -668,8 +791,15 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
       setError("");
 
       try {
-        const rawTransactions = await fetchTransactions(user.id, controller.signal);
-        const transactions = reconcileTransactionsWithHoldings(rawTransactions, holdings);
+        const rawTransactions = await fetchTransactions(
+          user.id,
+          controller.signal,
+        );
+
+        const transactions = reconcileTransactionsWithHoldings(
+          rawTransactions,
+          holdings,
+        );
 
         if (!transactions.length) {
           throw new Error("No portfolio transaction history is available yet.");
@@ -681,6 +811,7 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
         );
 
         const bounds = getRequestBounds(period, earliestActivity);
+
         const tickers = Array.from(
           new Set([
             ...holdings.map((holding) => holding.ticker),
@@ -703,17 +834,25 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
           provisionalChartStart: bounds.provisionalChartStart,
         });
 
+        const chartEnd = getChartEnd({
+          period,
+          histories,
+          fallbackChartEnd: bounds.to,
+        });
+
         const result = buildPortfolioData({
           holdings,
           transactions,
           histories,
           chartStart,
-          chartEnd: bounds.to,
+          chartEnd,
           period,
         });
 
         if (result.data.length < 1) {
-          throw new Error("Not enough verified price history is available for this range.");
+          throw new Error(
+            "Not enough verified price history is available for this range.",
+          );
         }
 
         setChartData(result.data);
@@ -724,11 +863,14 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
         setChartData([]);
         setError(loadError?.message || "Unable to load portfolio history.");
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     }
 
     loadChart();
+
     return () => controller.abort();
   }, [holdings, period, user?.id]);
 
@@ -755,16 +897,22 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
         </p>
 
         {periodGain !== null && periodGainPct !== null && (
-          <p className={`mt-1 flex items-center gap-1 text-[13px] font-semibold ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
+          <p
+            className={`mt-1 flex items-center gap-1 text-[13px] font-semibold ${
+              isPositive ? "text-emerald-600" : "text-red-600"
+            }`}
+          >
             {isPositive ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
             {isPositive ? "+" : "-"}
-            {formatCurrency(Math.abs(periodGain))} ({isPositive ? "+" : ""}{periodGainPct.toFixed(2)}%)
+            {formatCurrency(Math.abs(periodGain))} ({isPositive ? "+" : ""}
+            {periodGainPct.toFixed(2)}%)
           </p>
         )}
       </div>
 
       <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
-        Portfolio value uses your actual buy and sell history. Performance excludes new capital added from being counted as investment gains.
+        Portfolio value uses your actual buy and sell history. Performance
+        excludes new capital added from being counted as investment gains.
       </p>
 
       <div className="mt-4 flex w-full items-center gap-[2px]">
@@ -794,9 +942,23 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
               margin={{ top: 8, right: 4, left: 0, bottom: 2 }}
             >
               <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={chartColor} stopOpacity={0.16} />
-                  <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                <linearGradient
+                  id={gradientId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor={chartColor}
+                    stopOpacity={0.16}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor={chartColor}
+                    stopOpacity={0}
+                  />
                 </linearGradient>
               </defs>
 
@@ -808,7 +970,10 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
 
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                tick={{
+                  fontSize: 10,
+                  fill: "hsl(var(--muted-foreground))",
+                }}
                 tickLine={false}
                 axisLine={false}
                 interval="preserveStartEnd"
@@ -818,7 +983,10 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
               <YAxis
                 domain={["auto", "auto"]}
                 tickFormatter={formatYAxisValue}
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                tick={{
+                  fontSize: 10,
+                  fill: "hsl(var(--muted-foreground))",
+                }}
                 tickLine={false}
                 axisLine={false}
                 width={46}
@@ -833,7 +1001,11 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
                 strokeWidth={2}
                 fill={`url(#${gradientId})`}
                 dot={chartData.length === 1 ? { r: 3 } : false}
-                activeDot={{ r: 4, fill: chartColor, strokeWidth: 0 }}
+                activeDot={{
+                  r: 4,
+                  fill: chartColor,
+                  strokeWidth: 0,
+                }}
                 isAnimationActive={false}
               />
             </AreaChart>
