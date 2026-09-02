@@ -139,7 +139,6 @@ function normalizeNewsPayload(data) {
   };
 }
 
-
 async function getStoredIntradayCandles(body) {
   const ticker = String(body?.ticker || "")
     .trim()
@@ -341,6 +340,19 @@ function normalizeMetricsPayload(data) {
   };
 }
 
+function exactCalendarYearFrom(toSeconds) {
+  const end = new Date(Number(toSeconds) * 1000);
+
+  if (Number.isNaN(end.getTime())) {
+    return null;
+  }
+
+  const start = new Date(end);
+  start.setUTCFullYear(start.getUTCFullYear() - 1);
+
+  return Math.floor(start.getTime() / 1000);
+}
+
 function normalizeCandleRequest(body) {
   if (
     !body ||
@@ -369,6 +381,21 @@ function normalizeCandleRequest(body) {
       resolution: "D",
       to,
       from: to - 14 * DAY_SECONDS,
+    };
+  }
+
+  if (period === "1Y") {
+    const to =
+      finiteNumber(body.to) ??
+      Math.floor(Date.now() / 1000);
+
+    const from = exactCalendarYearFrom(to);
+
+    return {
+      ...body,
+      resolution: "D",
+      to,
+      ...(from !== null ? { from } : {}),
     };
   }
 
@@ -458,10 +485,20 @@ export async function financialDatasetsRequest(body) {
     }
   }
 
+  const isChartRequest =
+    body?.action === "candles" ||
+    body?.action === "candles_range";
+
+  const period = String(
+    body?.period || "",
+  ).toUpperCase();
+
   const functionName =
     body?.action === "news"
       ? "stock-news"
-      : "financial-datasets";
+      : isChartRequest && period !== "1D"
+        ? "stock-chart-prices"
+        : "financial-datasets";
 
   const { data, error } =
     await supabase.functions.invoke(
