@@ -529,91 +529,65 @@ function ChartTooltip({
   );
 }
 
-function DualTouchTooltip({
-  point,
+function TwoPointPercentageTooltip({
+  startPoint,
+  endPoint,
   ticker,
   comparisonsActive,
-  compareTickers,
-  primaryColor,
-  period,
-  side,
 }) {
-  if (!point) return null;
+  if (!startPoint || !endPoint) return null;
 
-  const timestamp = Number(point.timestamp);
-  const label = Number.isFinite(timestamp)
-    ? formatChartLabel(timestamp, period)
-    : point.label || "";
+  let startValue = null;
+  let endValue = null;
 
-  const entries = comparisonsActive
-    ? [
-        {
-          ticker,
-          value: Number(point[seriesDataKey(ticker)]),
-          color: primaryColor,
-          percent: true,
-        },
-        ...compareTickers.map((comparisonTicker, index) => ({
-          ticker: comparisonTicker,
-          value: Number(point[seriesDataKey(comparisonTicker)]),
-          color: COMPARISON_COLORS[index],
-          percent: true,
-        })),
-      ]
-    : [
-        {
-          ticker,
-          value: roundPrice(point.primaryValue),
-          color: primaryColor,
-          percent: false,
-        },
-      ];
+  if (comparisonsActive) {
+    const dataKey = seriesDataKey(ticker);
+    const startReturn = Number(startPoint[dataKey]);
+    const endReturn = Number(endPoint[dataKey]);
+
+    if (Number.isFinite(startReturn) && Number.isFinite(endReturn)) {
+      const startLevel = 1 + startReturn / 100;
+      const endLevel = 1 + endReturn / 100;
+
+      if (startLevel > 0) {
+        startValue = startLevel;
+        endValue = endLevel;
+      }
+    }
+  } else {
+    const rawStart = roundPrice(startPoint.primaryValue);
+    const rawEnd = roundPrice(endPoint.primaryValue);
+
+    if (Number.isFinite(rawStart) && Number.isFinite(rawEnd) && rawStart > 0) {
+      startValue = rawStart;
+      endValue = rawEnd;
+    }
+  }
+
+  if (!Number.isFinite(startValue) || !Number.isFinite(endValue)) return null;
+
+  const percentDifference = ((endValue - startValue) / startValue) * 100;
+  const positive = percentDifference >= 0;
+  const midpointX = (Number(startPoint.touchX) + Number(endPoint.touchX)) / 2;
+
+  if (!Number.isFinite(midpointX) || !Number.isFinite(percentDifference)) {
+    return null;
+  }
 
   return (
     <div
-      className="pointer-events-none absolute top-2 z-20 min-w-[132px] rounded-[12px] border border-border bg-card/95 px-2.5 py-2 text-foreground shadow-xl backdrop-blur-sm"
-      style={{
-        left: point.touchX,
-        transform: side === "left" ? "translateX(-8%)" : "translateX(-92%)",
-      }}
+      className="pointer-events-none absolute top-2 z-20 -translate-x-1/2 rounded-[12px] border border-border bg-card/95 px-3 py-2 text-foreground shadow-xl backdrop-blur-sm"
+      style={{ left: midpointX }}
     >
-      <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
-        {label}
-      </p>
-
-      {entries.map((entry) => {
-        if (!Number.isFinite(entry.value)) return null;
-
-        const positive = entry.value >= 0;
-
-        return (
-          <div
-            key={entry.ticker}
-            className="flex items-center justify-between gap-3 py-0.5 text-[11px]"
-          >
-            <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-              <span
-                className="h-0.5 w-3 rounded-full"
-                style={{ backgroundColor: entry.color }}
-              />
-              {entry.ticker}
-            </span>
-            <span
-              className={
-                entry.percent
-                  ? positive
-                    ? "font-semibold text-emerald-600"
-                    : "font-semibold text-red-600"
-                  : "font-semibold text-foreground"
-              }
-            >
-              {entry.percent
-                ? `${positive ? "+" : ""}${entry.value.toFixed(2)}%`
-                : `$${entry.value.toFixed(2)}`}
-            </span>
-          </div>
-        );
-      })}
+      <span
+        className={
+          positive
+            ? "text-[13px] font-bold text-emerald-600"
+            : "text-[13px] font-bold text-red-600"
+        }
+      >
+        {positive ? "+" : ""}{percentDifference.toFixed(2)}%
+      </span>
     </div>
   );
 }
@@ -707,6 +681,8 @@ function StockChart({
     const touches = Array.from(event.touches || []);
 
     if (touches.length >= 2) {
+      event.preventDefault();
+      event.stopPropagation();
       clearTooltipTimer();
       setTooltipVisible(false);
 
@@ -1185,6 +1161,11 @@ function StockChart({
       <div
         ref={chartContainerRef}
         className="relative mt-4 h-[300px] w-full overflow-hidden rounded-[16px] bg-neutral-50"
+        style={{ touchAction: "none", WebkitUserSelect: "none", userSelect: "none" }}
+        onTouchStartCapture={handleChartTouch}
+        onTouchMoveCapture={handleChartTouch}
+        onTouchEndCapture={finishChartTouch}
+        onTouchCancelCapture={finishChartTouch}
       >
         {chartLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
@@ -1216,10 +1197,6 @@ function StockChart({
               }}
               onMouseMove={showTooltipTemporarily}
               onMouseLeave={hideTooltip}
-              onTouchStart={handleChartTouch}
-              onTouchMove={handleChartTouch}
-              onTouchEnd={finishChartTouch}
-              onTouchCancel={finishChartTouch}
             >
               <CartesianGrid
                 stroke="#e5e7eb"
@@ -1327,18 +1304,14 @@ function StockChart({
           </ResponsiveContainer>
         )}
 
-        {dualTouchPoints.map((point, index) => (
-          <DualTouchTooltip
-            key={`${point.touchIndex}-${index}`}
-            point={point}
+        {dualTouchPoints.length === 2 && (
+          <TwoPointPercentageTooltip
+            startPoint={dualTouchPoints[0]}
+            endPoint={dualTouchPoints[1]}
             ticker={primaryTicker}
             comparisonsActive={comparisonsActive}
-            compareTickers={compareTickers}
-            primaryColor={primaryColor}
-            period={activePeriod}
-            side={index === 0 ? "left" : "right"}
           />
-        ))}
+        )}
       </div>
     </section>
   );
