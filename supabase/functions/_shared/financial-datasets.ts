@@ -11,6 +11,13 @@ const MAX_PRICE_PAGES = 100;
 type UnknownRecord =
   Record<string, unknown>;
 
+export type ProviderRequestHooks = {
+  beforeRequest?: () => Promise<void>;
+  afterRequest?: (
+    success: boolean,
+  ) => Promise<void>;
+};
+
 class FinancialDatasetsProviderError extends Error {
   status: number;
   payload: unknown;
@@ -199,6 +206,7 @@ async function providerGet(
   apiKey: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxRetries = DEFAULT_MAX_RETRIES,
+  hooks: ProviderRequestHooks = {},
 ): Promise<unknown> {
   if (!apiKey) {
     throw new Error(
@@ -241,7 +249,13 @@ async function providerGet(
       timeoutMs,
     );
 
+    let requestStarted = false;
+    let resultRecorded = false;
+
     try {
+      await hooks.beforeRequest?.();
+      requestStarted = true;
+
       const response = await fetch(
         url.toString(),
         {
@@ -265,6 +279,11 @@ async function providerGet(
           payload = text;
         }
       }
+
+      await hooks.afterRequest?.(
+        response.ok,
+      );
+      resultRecorded = true;
 
       if (response.ok) {
         return payload;
@@ -295,6 +314,24 @@ async function providerGet(
 
       throw error;
     } catch (error) {
+      if (
+        requestStarted &&
+        !resultRecorded
+      ) {
+        try {
+          await hooks.afterRequest?.(
+            false,
+          );
+        } catch (usageError) {
+          console.warn(
+            "Could not record Financial Datasets request result:",
+            usageError instanceof Error
+              ? usageError.message
+              : usageError,
+          );
+        }
+      }
+
       lastError =
         error instanceof Error
           ? error
@@ -552,6 +589,7 @@ export async function fetchFinancialDatasetsPrices(
     interval?: "day" | "week" | "month" | "year";
     startDate: string;
     endDate: string;
+    requestHooks?: ProviderRequestHooks;
   },
 ): Promise<FinancialDatasetsPrice[]> {
   const ticker =
@@ -598,6 +636,9 @@ export async function fetchFinancialDatasetsPrices(
             : {}),
         },
         apiKey,
+        DEFAULT_TIMEOUT_MS,
+        DEFAULT_MAX_RETRIES,
+        options.requestHooks,
       );
 
     const root =
