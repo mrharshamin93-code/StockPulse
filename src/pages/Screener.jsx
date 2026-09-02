@@ -92,7 +92,6 @@ const POPULAR_SCREENS = [
       minRsi: 55,
       maxRsi: 75,
       maxBullishMaCrossoverDays: 20,
-      minRelativeVolume: 1,
       requirePriceAboveSma20: true,
       requireSma20AboveSma50: true,
     },
@@ -378,17 +377,6 @@ const METRIC_GROUPS = [
         maxPlaceholder: "e.g. 100",
       },
       {
-        key: "relativeVolume",
-        label: "Relative Volume",
-        desc:
-          "The latest daily volume divided by the prior 30-session average volume. A value above 1 means trading activity is above normal.",
-        unit: "x",
-        minKey: "minRelativeVolume",
-        maxKey: "maxRelativeVolume",
-        minPlaceholder: "e.g. 1",
-        maxPlaceholder: "e.g. 5",
-      },
-      {
         key: "bullishMaCrossoverDays",
         label: "Bullish 20/50 MA Crossover Age",
         desc:
@@ -655,6 +643,9 @@ function normalizeFilters(
     removeUndefinedValues(
       rawFilters,
     );
+
+  delete next.minRelativeVolume;
+  delete next.maxRelativeVolume;
 
   if (
     Array.isArray(
@@ -1196,9 +1187,15 @@ export default function Screener() {
   ] = useState(
     () =>
       new Set(
-        readSessionObject(
-          "screener_metrics",
-          [],
+        (
+          readSessionObject(
+            "screener_metrics",
+            [],
+          ) || []
+        ).filter(
+          (key) =>
+            key !==
+            "relativeVolume",
         ),
       ),
   );
@@ -1919,11 +1916,17 @@ export default function Screener() {
 
     const savedMetrics =
       new Set(
-        screen
-          ?.active_metrics ||
+        (
+          screen
+            ?.active_metrics ||
           screen
             ?.activeMetrics ||
-          [],
+          []
+        ).filter(
+          (key) =>
+            key !==
+            "relativeVolume",
+        ),
       );
 
     setFilters(
