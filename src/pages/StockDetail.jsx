@@ -302,7 +302,7 @@ async function fetchChartData(ticker, period, signal) {
     )
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  if (points.length < 2) {
+  if (points.length < 1) {
     throw new Error(`No chart data returned for ${ticker} (${period})`);
   }
 
@@ -1151,7 +1151,7 @@ function StockChart({
                 name={primaryTicker}
                 stroke={primaryColor}
                 strokeWidth={2.25}
-                dot={false}
+                dot={activePeriod === "1D" && displayChartData.length === 1 ? { r: 3 } : false}
                 activeDot={{ r: 4 }}
                 isAnimationActive={false}
                 connectNulls={false}
