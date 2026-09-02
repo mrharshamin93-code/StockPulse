@@ -1,541 +1,179 @@
 import React, {
   createContext,
-  useContext,
-  useState,
-  useRef,
   useCallback,
+  useContext,
   useMemo,
+  useRef,
+  useState,
 } from "react";
 
 import { useAuth } from "@/lib/AuthContext";
-import {
-  getQuotes,
-} from "@/lib/financialDatasets";
+import { supabase } from "@/lib/supabase";
 
-const QUOTE_TTL_MS =
-  5 * 60 * 1000;
+const QUOTE_TTL_MS = 5 * 60 * 1000;
 
-const DEFAULT_BATCH_SIZE =
-  25;
+const MarketDataContext = createContext({
+  quotes: {},
+  refreshQuotes: async (_tickers = []) => ({}),
+  fetchQuotes: async (_tickers = []) => ({}),
+});
 
-const MarketDataContext =
-  createContext({
-    quotes: {},
-    refreshQuotes:
-      async (_tickers = []) => {},
-    fetchQuotes:
-      async (_tickers = []) => {},
-  });
-
-function normalizeTicker(
-  ticker,
-) {
-  return String(
-    ticker || "",
-  )
-    .trim()
-    .toUpperCase();
+function normalizeTicker(ticker) {
+  return String(ticker || "").trim().toUpperCase();
 }
 
-function normalizeTickerList(
-  tickers,
-) {
-  return [
-    ...new Set(
-      (tickers || [])
-        .map(
-          normalizeTicker,
-        )
-        .filter(Boolean),
-    ),
-  ];
+function normalizeTickerList(tickers) {
+  return [...new Set((tickers || []).map(normalizeTicker).filter(Boolean))];
 }
 
-function chunkArray(
-  items,
-  size,
-) {
-  const chunks = [];
-
-  for (
-    let index = 0;
-    index < items.length;
-    index += size
-  ) {
-    chunks.push(
-      items.slice(
-        index,
-        index + size,
-      ),
-    );
-  }
-
-  return chunks;
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
-export function MarketDataProvider({
-  children,
-}) {
-  const {
-    user,
-  } = useAuth();
+function timestampSeconds(value) {
+  if (!value) return null;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) ? Math.floor(milliseconds / 1000) : null;
+}
 
-  const [
-    quotes,
-    setQuotes,
-  ] = useState({});
+function mapDatabaseQuote(row) {
+  const ticker = normalizeTicker(row?.symbol);
+  if (!ticker) return null;
 
-  const tickersRef =
-    useRef([]);
+  return {
+    ticker,
+    c: finiteNumber(row?.price),
+    d: finiteNumber(row?.change_amount),
+    dp: finiteNumber(row?.change_percent),
+    h: finiteNumber(row?.day_high),
+    l: finiteNumber(row?.day_low),
+    o: finiteNumber(row?.open_price),
+    pc: finiteNumber(row?.previous_close),
+    t: timestampSeconds(row?.market_timestamp || row?.quote_updated_at),
+  };
+}
 
-  const quoteCacheRef =
-    useRef({});
+export function MarketDataProvider({ children }) {
+  const { user } = useAuth();
+  const [quotes, setQuotes] = useState({});
+  const tickersRef = useRef([]);
+  const quoteCacheRef = useRef({});
 
-  const inFlightPromisesRef =
-    useRef({});
+  const loadDatabaseQuotes = useCallback(
+    async (tickers, { force = false } = {}) => {
+      if (!user?.id) return {};
 
-  const fetchQuoteBatch =
-    useCallback(
-      async (tickers) => {
-        const normalizedTickers =
-          normalizeTickerList(
-            tickers,
-          );
+      const normalizedTickers = normalizeTickerList(tickers);
+      if (!normalizedTickers.length) return {};
 
-        if (
-          !normalizedTickers.length
-        ) {
-          return {};
+      tickersRef.current = normalizeTickerList([
+        ...tickersRef.current,
+        ...normalizedTickers,
+      ]);
+
+      const now = Date.now();
+      const resolved = {};
+      const needsDatabase = [];
+
+      for (const ticker of normalizedTickers) {
+        const cached = quoteCacheRef.current[ticker];
+        const fresh =
+          !force &&
+          cached?.data &&
+          Number.isFinite(cached?.fetchedAt) &&
+          now - cached.fetchedAt < QUOTE_TTL_MS;
+
+        if (fresh) {
+          resolved[ticker] = cached.data;
+        } else {
+          needsDatabase.push(ticker);
         }
+      }
 
-        const data =
-          await getQuotes(
-            normalizedTickers,
-          );
-
-        const incomingQuotes =
-          Array.isArray(
-            data?.quotes,
+      if (needsDatabase.length) {
+        const { data, error } = await supabase
+          .from("stock_screener_stocks")
+          .select(
+            "symbol,price,change_amount,change_percent,open_price,day_high,day_low,previous_close,market_timestamp,quote_updated_at",
           )
-            ? data.quotes
-            : [];
+          .in("symbol", needsDatabase);
 
-        const mappedQuotes =
-          incomingQuotes.reduce(
-            (
-              accumulator,
-              quote,
-            ) => {
-              const ticker =
-                normalizeTicker(
-                  quote?.ticker,
-                );
-
-              if (!ticker) {
-                return accumulator;
-              }
-
-              accumulator[
-                ticker
-              ] = {
-                ticker,
-
-                c:
-                  typeof quote?.c ===
-                  "number"
-                    ? quote.c
-                    : null,
-
-                d:
-                  typeof quote?.d ===
-                  "number"
-                    ? quote.d
-                    : null,
-
-                dp:
-                  typeof quote?.dp ===
-                  "number"
-                    ? quote.dp
-                    : null,
-
-                h:
-                  typeof quote?.h ===
-                  "number"
-                    ? quote.h
-                    : null,
-
-                l:
-                  typeof quote?.l ===
-                  "number"
-                    ? quote.l
-                    : null,
-
-                o:
-                  typeof quote?.o ===
-                  "number"
-                    ? quote.o
-                    : null,
-
-                pc:
-                  typeof quote?.pc ===
-                  "number"
-                    ? quote.pc
-                    : null,
-
-                t:
-                  quote?.t ??
-                  null,
-              };
-
-              return accumulator;
-            },
-            {},
-          );
-
-        const now =
-          Date.now();
-
-        normalizedTickers.forEach(
-          (ticker) => {
-            const quote =
-              mappedQuotes[
-                ticker
-              ] || {
-                ticker,
-                c: null,
-                d: null,
-                dp: null,
-                h: null,
-                l: null,
-                o: null,
-                pc: null,
-                t: null,
-              };
-
-            quoteCacheRef.current[
-              ticker
-            ] = {
-              data:
-                quote,
-
-              fetchedAt:
-                now,
-            };
-          },
-        );
-
-        setQuotes(
-          (previous) => ({
-            ...previous,
-            ...mappedQuotes,
-          }),
-        );
-
-        return mappedQuotes;
-      },
-      [],
-    );
-
-  const fetchTickers =
-    useCallback(
-      async (
-        tickers,
-        options = {},
-      ) => {
-        if (!user?.id) {
-          return {};
+        if (error) {
+          throw new Error(error.message || "Unable to load cached market quotes.");
         }
 
-        const {
-          force = false,
-          batchSize =
-            DEFAULT_BATCH_SIZE,
-        } = options;
-
-        const normalizedTickers =
-          normalizeTickerList(
-            tickers,
-          );
-
-        if (
-          !normalizedTickers.length
-        ) {
-          return {};
-        }
-
-        tickersRef.current =
-          normalizeTickerList([
-            ...tickersRef.current,
-            ...normalizedTickers,
-          ]);
-
-        const now =
-          Date.now();
-
-        const freshQuotes =
-          {};
-
-        const staleOrMissing =
-          [];
-
-        normalizedTickers.forEach(
-          (ticker) => {
-            const cached =
-              quoteCacheRef
-                .current[
-                ticker
-              ];
-
-            const isFresh =
-              !force &&
-              cached?.data &&
-              typeof cached?.fetchedAt ===
-                "number" &&
-              now -
-                cached.fetchedAt <
-                QUOTE_TTL_MS;
-
-            if (isFresh) {
-              freshQuotes[
-                ticker
-              ] =
-                cached.data;
-            } else {
-              staleOrMissing.push(
-                ticker,
-              );
-            }
-          },
+        const rowsByTicker = new Map(
+          (data || []).map((row) => [normalizeTicker(row?.symbol), row]),
         );
 
-        if (
-          Object.keys(
-            freshQuotes,
-          ).length > 0
-        ) {
-          setQuotes(
-            (previous) => ({
-              ...previous,
-              ...freshQuotes,
-            }),
-          );
+        for (const ticker of needsDatabase) {
+          const mapped = mapDatabaseQuote(rowsByTicker.get(ticker));
+          const quote = mapped || {
+            ticker,
+            c: null,
+            d: null,
+            dp: null,
+            h: null,
+            l: null,
+            o: null,
+            pc: null,
+            t: null,
+          };
+
+          quoteCacheRef.current[ticker] = {
+            data: quote,
+            fetchedAt: Date.now(),
+          };
+
+          resolved[ticker] = quote;
         }
+      }
 
-        if (
-          !staleOrMissing.length
-        ) {
-          return freshQuotes;
-        }
+      setQuotes((previous) => ({
+        ...previous,
+        ...resolved,
+      }));
 
-        const pending =
-          [];
+      return resolved;
+    },
+    [user?.id],
+  );
 
-        const tickersNeedingNetwork =
-          [];
+  const refreshQuotes = useCallback(
+    async (tickers) => {
+      const requestedTickers =
+        Array.isArray(tickers) && tickers.length ? tickers : tickersRef.current;
 
-        staleOrMissing.forEach(
-          (ticker) => {
-            const existingPromise =
-              inFlightPromisesRef
-                .current[
-                ticker
-              ];
+      // Refreshes from StockPulse's Supabase cache only.
+      // Browser/page refreshes never call Financial Datasets for quotes.
+      return loadDatabaseQuotes(requestedTickers, { force: true });
+    },
+    [loadDatabaseQuotes],
+  );
 
-            if (
-              existingPromise
-            ) {
-              pending.push(
-                existingPromise,
-              );
-            } else {
-              tickersNeedingNetwork.push(
-                ticker,
-              );
-            }
-          },
-        );
+  const fetchQuotes = useCallback(
+    async (tickers) => loadDatabaseQuotes(tickers, { force: false }),
+    [loadDatabaseQuotes],
+  );
 
-        const batches =
-          chunkArray(
-            tickersNeedingNetwork,
-            batchSize,
-          );
-
-        batches.forEach(
-          (batch) => {
-            const batchPromise =
-              fetchQuoteBatch(
-                batch,
-              )
-                .catch(
-                  (error) => {
-                    throw error;
-                  },
-                )
-                .finally(
-                  () => {
-                    batch.forEach(
-                      (
-                        ticker,
-                      ) => {
-                        delete inFlightPromisesRef
-                          .current[
-                          ticker
-                        ];
-                      },
-                    );
-                  },
-                );
-
-            batch.forEach(
-              (ticker) => {
-                inFlightPromisesRef
-                  .current[
-                  ticker
-                ] =
-                  batchPromise;
-              },
-            );
-
-            pending.push(
-              batchPromise,
-            );
-          },
-        );
-
-        if (
-          pending.length
-        ) {
-          try {
-            await Promise.all(
-              pending,
-            );
-          } catch (
-            error
-          ) {
-            console.error(
-              "Failed to refresh quotes:",
-              error,
-            );
-          }
-        }
-
-        const resolvedQuotes =
-          normalizedTickers.reduce(
-            (
-              accumulator,
-              ticker,
-            ) => {
-              const cached =
-                quoteCacheRef
-                  .current[
-                  ticker
-                ];
-
-              if (
-                cached?.data
-              ) {
-                accumulator[
-                  ticker
-                ] =
-                  cached.data;
-              }
-
-              return accumulator;
-            },
-            {},
-          );
-
-        if (
-          Object.keys(
-            resolvedQuotes,
-          ).length > 0
-        ) {
-          setQuotes(
-            (previous) => ({
-              ...previous,
-              ...resolvedQuotes,
-            }),
-          );
-        }
-
-        return resolvedQuotes;
-      },
-      [
-        fetchQuoteBatch,
-        user?.id,
-      ],
-    );
-
-  const refreshQuotes =
-    useCallback(
-      async (
-        tickers,
-      ) => {
-        const requestedTickers =
-          Array.isArray(
-            tickers,
-          ) &&
-          tickers.length
-            ? tickers
-            : tickersRef.current;
-
-        return fetchTickers(
-          requestedTickers,
-          {
-            force:
-              true,
-          },
-        );
-      },
-      [
-        fetchTickers,
-      ],
-    );
-
-  const fetchQuotes =
-    useCallback(
-      async (
-        tickers,
-      ) => {
-        return fetchTickers(
-          tickers,
-          {
-            force:
-              false,
-          },
-        );
-      },
-      [
-        fetchTickers,
-      ],
-    );
-
-  const value =
-    useMemo(
-      () => ({
-        quotes,
-        refreshQuotes,
-        fetchQuotes,
-      }),
-      [
-        quotes,
-        refreshQuotes,
-        fetchQuotes,
-      ],
-    );
+  const value = useMemo(
+    () => ({
+      quotes,
+      refreshQuotes,
+      fetchQuotes,
+    }),
+    [quotes, refreshQuotes, fetchQuotes],
+  );
 
   return (
-    <MarketDataContext.Provider
-      value={value}
-    >
+    <MarketDataContext.Provider value={value}>
       {children}
     </MarketDataContext.Provider>
   );
 }
 
 export function useMarketData() {
-  return useContext(
-    MarketDataContext,
-  );
+  return useContext(MarketDataContext);
 }
