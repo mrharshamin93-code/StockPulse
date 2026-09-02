@@ -14,7 +14,6 @@ import {
 import {
   Briefcase,
   Loader2,
-  RefreshCw,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/AuthContext";
@@ -25,8 +24,6 @@ import StockCard from "@/components/portfolio/StockCard";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
 import PortfolioGrowthChart from "@/components/portfolio/PortfolioGrowthChart";
 import PortfolioOnboarding from "@/components/portfolio/PortfolioOnboarding";
-
-const PULL_THRESHOLD = 72;
 
 function onboardingStorageKey(userId) {
   return `stockpulse:portfolio-onboarding-seen:${userId}`;
@@ -205,7 +202,6 @@ export default function Home() {
   const {
     quotes,
     fetchQuotes,
-    refreshQuotes,
   } = useMarketData();
 
   const [stocks, setStocks] =
@@ -215,22 +211,9 @@ export default function Home() {
     useState(true);
 
   const [
-    pullDistance,
-    setPullDistance,
-  ] = useState(0);
-
-  const [
-    refreshing,
-    setRefreshing,
-  ] = useState(false);
-
-  const [
     showPortfolioOnboarding,
     setShowPortfolioOnboarding,
   ] = useState(false);
-
-  const touchStartY = useRef(null);
-  const scrollRef = useRef(null);
 
   const onboardingDecisionMade =
     useRef(false);
@@ -468,68 +451,13 @@ export default function Home() {
     stocks,
   ]);
 
-  function handleTouchStart(event) {
-    if (
-      scrollRef.current?.scrollTop ===
-      0
-    ) {
-      touchStartY.current =
-        event.touches[0].clientY;
-    }
-  }
-
-  function handleTouchMove(event) {
-    if (
-      touchStartY.current === null
-    ) {
-      return;
-    }
-
-    const delta =
-      event.touches[0].clientY -
-      touchStartY.current;
-
-    if (delta > 0) {
-      setPullDistance(
-        Math.min(
-          delta * 0.5,
-          PULL_THRESHOLD + 20
-        )
-      );
-    }
-  }
-
-  async function handleTouchEnd() {
-    if (
-      pullDistance >=
-      PULL_THRESHOLD
-    ) {
-      setRefreshing(true);
-
-      await Promise.all([
-        loadStocks(),
-        refreshQuotes(
-          stocks.map(
-            (stock) =>
-              stock.ticker
-          )
-        ),
-      ]);
-
-      setRefreshing(false);
-    }
-
-    setPullDistance(0);
-    touchStartY.current = null;
-  }
-
-  const pullProgress = Math.min(
-    pullDistance / PULL_THRESHOLD,
-    1
-  );
-
   return (
-    <div className="flex min-h-full flex-col bg-background text-foreground">
+    <div
+      className="flex min-h-full flex-col bg-background text-foreground"
+      style={{
+        overscrollBehaviorY: "none",
+      }}
+    >
       <header
         className="
           sticky
@@ -553,48 +481,7 @@ export default function Home() {
         </div>
       </header>
 
-      <AnimatePresence>
-        {(pullDistance > 0 ||
-          refreshing) && (
-          <motion.div
-            initial={{
-              height: 0,
-              opacity: 0,
-            }}
-            animate={{
-              height: refreshing
-                ? 44
-                : pullDistance,
-              opacity: 1,
-            }}
-            exit={{
-              height: 0,
-              opacity: 0,
-            }}
-            transition={{
-              duration: 0.15,
-            }}
-            className="flex shrink-0 items-center justify-center bg-background"
-          >
-            <RefreshCw
-              size={19}
-              strokeWidth={2}
-              className={[
-                refreshing
-                  ? "animate-spin"
-                  : "",
-                pullProgress >= 1 ||
-                refreshing
-                  ? "text-foreground"
-                  : "text-muted-foreground",
-              ].join(" ")}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <main
-        ref={scrollRef}
         className="
           mx-auto
           flex
@@ -603,20 +490,15 @@ export default function Home() {
           flex-1
           flex-col
           overflow-y-auto
-          overscroll-y-contain
+          overscroll-y-none
           px-4
           pb-7
           pt-4
         "
-        onTouchStart={
-          handleTouchStart
-        }
-        onTouchMove={
-          handleTouchMove
-        }
-        onTouchEnd={
-          handleTouchEnd
-        }
+        style={{
+          overscrollBehaviorY: "none",
+          WebkitOverflowScrolling: "touch",
+        }}
       >
         {loading ? (
           <PortfolioLoading />
