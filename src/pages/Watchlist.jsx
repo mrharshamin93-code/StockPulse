@@ -113,107 +113,19 @@ function abbreviateExchange(exchange) {
 
   const rules = [
     [["NASDAQ"], "NASDAQ"],
-
-    [
-      [
-        "NYSE AMERICAN",
-        "AMEX",
-      ],
-      "AMEX",
-    ],
-
-    [
-      [
-        "NEW YORK STOCK EXCHANGE",
-        "NYSE",
-      ],
-      "NYSE",
-    ],
-
-    [
-      [
-        "OTC",
-        "PINK",
-      ],
-      "OTC",
-    ],
-
-    [
-      [
-        "CBOE",
-        "BATS",
-      ],
-      "CBOE",
-    ],
-
-    [
-      [
-        "TSX VENTURE",
-        "TSXV",
-      ],
-      "TSXV",
-    ],
-
-    [
-      [
-        "TSX",
-        "TORONTO",
-      ],
-      "TSX",
-    ],
-
-    [
-      [
-        "CSE",
-        "CANADIAN SECURITIES",
-      ],
-      "CSE",
-    ],
-
-    [
-      [
-        "LONDON",
-        "LSE",
-      ],
-      "LSE",
-    ],
-
-    [
-      ["EURONEXT"],
-      "ENX",
-    ],
-
-    [
-      [
-        "XETRA",
-        "FRANKFURT",
-      ],
-      "FRA",
-    ],
-
-    [
-      [
-        "ASX",
-        "AUSTRALIAN",
-      ],
-      "ASX",
-    ],
-
-    [
-      [
-        "TOKYO",
-        "TSE",
-      ],
-      "TSE",
-    ],
-
-    [
-      [
-        "HONG KONG",
-        "HKEX",
-      ],
-      "HKEX",
-    ],
+    [["NYSE AMERICAN", "AMEX"], "AMEX"],
+    [["NEW YORK STOCK EXCHANGE", "NYSE"], "NYSE"],
+    [["OTC", "PINK"], "OTC"],
+    [["CBOE", "BATS"], "CBOE"],
+    [["TSX VENTURE", "TSXV"], "TSXV"],
+    [["TSX", "TORONTO"], "TSX"],
+    [["CSE", "CANADIAN SECURITIES"], "CSE"],
+    [["LONDON", "LSE"], "LSE"],
+    [["EURONEXT"], "ENX"],
+    [["XETRA", "FRANKFURT"], "FRA"],
+    [["ASX", "AUSTRALIAN"], "ASX"],
+    [["TOKYO", "TSE"], "TSE"],
+    [["HONG KONG", "HKEX"], "HKEX"],
   ];
 
   return (
@@ -934,12 +846,31 @@ function AddTickerDialog({
 /* SPARKLINE                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/*
+ * Watchlist sparklines now use StockPulse's persisted daily-price cache
+ * directly instead of calling Financial Datasets/candles_range from the page.
+ *
+ * stock_daily_prices only contains completed daily bars, so the final point is
+ * automatically the last completed trading day. Weekends and market holidays
+ * are handled naturally because they have no trading_date row.
+ *
+ * This means refreshing the Watchlist does not consume Financial Datasets
+ * /prices calls for these 30-day sparklines.
+ */
 async function fetchSparkline(
   ticker,
   signal
 ) {
   const key =
-    ticker.toUpperCase();
+    String(
+      ticker || ""
+    )
+      .trim()
+      .toUpperCase();
+
+  if (!key) {
+    return null;
+  }
 
   const cached =
     sparklineCache.get(
@@ -955,51 +886,69 @@ async function fetchSparkline(
     return cached.data;
   }
 
-  const to =
-    Math.floor(
-      Date.now() /
-        1000
+  if (
+    signal?.aborted
+  ) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError"
     );
+  }
 
-  const from =
-    to -
-    30 * 86400;
+  const {
+    data: rows,
+    error,
+  } =
+    await supabase
+      .from(
+        "stock_daily_prices"
+      )
+      .select(
+        "trading_date,close"
+      )
+      .eq(
+        "ticker",
+        key
+      )
+      .order(
+        "trading_date",
+        {
+          ascending:
+            false,
+        }
+      )
+      .limit(30);
 
-  const payload =
-    await marketDataRequest(
-      {
-        action:
-          "candles_range",
-
-        ticker,
-
-        resolution:
-          "D",
-
-        from,
-
-        to,
-      },
-      signal
+  if (
+    signal?.aborted
+  ) {
+    throw new DOMException(
+      "The operation was aborted.",
+      "AbortError"
     );
+  }
+
+  if (error) {
+    throw error;
+  }
 
   const data =
-    Array.isArray(
-      payload?.candles
-    )
-      ? payload.candles
-          .map(
-            (
-              candle
-            ) =>
-              Number(
-                candle?.c
-              )
+    (rows || [])
+      .slice()
+      .reverse()
+      .map(
+        (row) =>
+          Number(
+            row?.close
           )
-          .filter(
-            Number.isFinite
-          )
-      : [];
+      )
+      .filter(
+        (value) =>
+          Number.isFinite(
+            value
+          ) &&
+          value > 0
+      );
 
   if (
     data.length < 2
@@ -1350,9 +1299,7 @@ function SwipeAction({
       ].join(" ")}
       style={{
         opacity,
-
         scale,
-
         x:
           translateX,
       }}
@@ -1415,12 +1362,6 @@ function WatchlistCard({
   const revealWidth =
     172;
 
-  /*
-   * This is now a Framer Motion value rather than React state.
-   *
-   * Moving your finger updates the GPU transform directly.
-   * React does NOT rerender the entire stock card every few pixels.
-   */
   const revealProgress =
     useTransform(
       cardX,
@@ -1591,10 +1532,6 @@ function WatchlistCard({
       return;
     }
 
-    /*
-     * No setState here.
-     * This is the main stutter fix.
-     */
     cardX.set(
       clamp(
         startingX.current +
@@ -1912,7 +1849,6 @@ function WatchlistCard({
         rounded-[20px]
       "
     >
-      {/* SWIPE ACTIONS */}
       <div
         className="
           absolute
@@ -3790,7 +3726,6 @@ export default function Watchlist() {
         )}
       </AnimatePresence>
 
-      {/* WATCHLIST SETTINGS */}
       <Dialog
         open={
           watchlistMenuOpen
@@ -4105,7 +4040,6 @@ export default function Watchlist() {
         }
       />
 
-      {/* PORTFOLIO REMOVAL */}
       <Dialog
         open={Boolean(
           portfolioRemoval
@@ -4219,7 +4153,6 @@ export default function Watchlist() {
         />
       )}
 
-      {/* HEADER */}
       <header
         className="
           sticky
@@ -4303,7 +4236,6 @@ export default function Watchlist() {
         </div>
       </header>
 
-      {/* CONTENT */}
       <main
         className="
           mx-auto
@@ -4395,7 +4327,6 @@ export default function Watchlist() {
         )}
       </main>
 
-      {/* ADD BUTTON */}
       <button
         type="button"
         aria-label="Add stock to watchlist"
