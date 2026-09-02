@@ -7,41 +7,11 @@ import React, {
   useState,
 } from "react";
 
-import {// src/pages/StockDetail.jsx
-
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-
 import {
   useLocation,
   useNavigate,
   useParams,
 } from "react-router-dom";
-
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-import {
-  ArrowLeft,
-  Loader2,
-  Newspaper,
-  Plus,
-  RefreshCw,
-  TrendingDown,
-  TrendingUp,
-  X,
-} from "lucide-react";
 
 import { financialDatasetsRequest } from "@/lib/financialDatasets";
 import { supabase } from "@/lib/supabase";
