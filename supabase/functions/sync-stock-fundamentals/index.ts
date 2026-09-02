@@ -393,6 +393,130 @@ function buildFundamentalsUpdate(
   };
 }
 
+function asRecord(
+  value: unknown,
+): UnknownRecord | null {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    return null;
+  }
+
+  return value as UnknownRecord;
+}
+
+function looksLikeFinancialMetrics(
+  value: UnknownRecord,
+): boolean {
+  const keys = [
+    "market_cap",
+    "enterprise_value",
+    "price_to_earnings_ratio",
+    "price_to_book_ratio",
+    "gross_margin",
+    "operating_margin",
+    "net_margin",
+    "return_on_equity",
+    "revenue_growth",
+    "earnings_per_share",
+  ];
+
+  return keys.some(
+    (key) =>
+      value[key] !== undefined &&
+      value[key] !== null,
+  );
+}
+
+function extractFinancialMetrics(
+  payload: unknown,
+): UnknownRecord {
+  const root =
+    asRecord(payload);
+
+  if (!root) {
+    throw new Error(
+      "Financial Datasets returned an invalid financial-metrics snapshot.",
+    );
+  }
+
+  if (
+    looksLikeFinancialMetrics(
+      root,
+    )
+  ) {
+    return root;
+  }
+
+  const directKeys = [
+    "financial_metrics",
+    "financialMetrics",
+    "metrics",
+    "snapshot",
+    "data",
+  ];
+
+  for (
+    const key of directKeys
+  ) {
+    const candidate =
+      asRecord(root[key]);
+
+    if (
+      candidate &&
+      looksLikeFinancialMetrics(
+        candidate,
+      )
+    ) {
+      return candidate;
+    }
+  }
+
+  // Some API wrappers place the record one level deeper
+  // (for example: { data: { financial_metrics: {...} } }).
+  for (
+    const outerKey of directKeys
+  ) {
+    const outer =
+      asRecord(
+        root[outerKey],
+      );
+
+    if (!outer) {
+      continue;
+    }
+
+    for (
+      const innerKey of directKeys
+    ) {
+      const candidate =
+        asRecord(
+          outer[innerKey],
+        );
+
+      if (
+        candidate &&
+        looksLikeFinancialMetrics(
+          candidate,
+        )
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  const topLevelKeys =
+    Object.keys(root)
+      .slice(0, 20)
+      .join(", ");
+
+  throw new Error(
+    `Financial Datasets response did not contain a recognizable metrics object. Top-level keys: ${topLevelKeys || "(none)"}`,
+  );
+}
+
 async function fetchFinancialDatasetsMetrics(
   symbol: string,
   apiKey: string,
@@ -459,18 +583,25 @@ async function fetchFinancialDatasetsMetrics(
     );
   }
 
+  const metrics =
+    extractFinancialMetrics(
+      payload,
+    );
+
+  // Safety guard: never overwrite a valid screener row with a
+  // fully-null fundamentals payload if the provider response shape
+  // changes again.
   if (
-    !payload ||
-    typeof payload !==
-      "object" ||
-    Array.isArray(payload)
+    !looksLikeFinancialMetrics(
+      metrics,
+    )
   ) {
     throw new Error(
-      "Financial Datasets returned an invalid financial-metrics snapshot.",
+      `No usable financial metrics were returned for ${symbol}.`,
     );
   }
 
-  return payload as UnknownRecord;
+  return metrics;
 }
 
 async function processInBatches<T, R>(
