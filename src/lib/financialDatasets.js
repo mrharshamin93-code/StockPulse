@@ -70,6 +70,75 @@ function newYorkSessionParts(timestampSeconds) {
   };
 }
 
+function formatNewsDate(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return value;
+  }
+
+  let date;
+
+  if (typeof value === "number") {
+    const milliseconds =
+      Math.abs(value) < 1e12
+        ? value * 1000
+        : value;
+
+    date = new Date(milliseconds);
+  } else {
+    const raw = String(value).trim();
+
+    if (/^\d+$/.test(raw)) {
+      const numeric = Number(raw);
+      const milliseconds =
+        Math.abs(numeric) < 1e12
+          ? numeric * 1000
+          : numeric;
+
+      date = new Date(milliseconds);
+    } else {
+      date = new Date(raw);
+    }
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function normalizeNewsPayload(data) {
+  if (!data || typeof data !== "object") {
+    return data;
+  }
+
+  if (!Array.isArray(data.articles)) {
+    return data;
+  }
+
+  return {
+    ...data,
+    articles: data.articles.map((article) => {
+      if (!article || typeof article !== "object") {
+        return article;
+      }
+
+      return {
+        ...article,
+        date: formatNewsDate(article.date),
+      };
+    }),
+  };
+}
+
 async function getStoredIntradayCandles(body) {
   const ticker = String(body?.ticker || "")
     .trim()
@@ -414,6 +483,10 @@ export async function financialDatasetsRequest(body) {
 
   if (body?.action === "metrics") {
     return normalizeMetricsPayload(data);
+  }
+
+  if (body?.action === "news") {
+    return normalizeNewsPayload(data);
   }
 
   if (
