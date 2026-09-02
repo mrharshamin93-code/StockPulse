@@ -31,6 +31,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
+import { recordStockTransaction } from "@/lib/stockTransactions";
 
 import {
   financialDatasetsRequest,
@@ -445,6 +446,22 @@ function AddToPortfolioDialog({
 
       if (error) {
         throw error;
+      }
+
+      try {
+        await recordStockTransaction({
+          userId,
+          ticker,
+          companyName,
+          type: "buy",
+          quantity: shares,
+          price: cost,
+        });
+      } catch (transactionError) {
+        console.warn(
+          "Initial buy transaction history insert failed:",
+          transactionError,
+        );
       }
 
       setQuantity("");

@@ -10,8 +10,8 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import {
-  getCachedFinancialDatasetsQuote,
-} from "../_shared/market-data-cache.ts";
+  fetchFinancialDatasetsPrices,
+} from "../_shared/financial-datasets.ts";
 
 type DeliveryKind = "scheduled" | "manual";
 type DeliveryStatus =
@@ -48,11 +48,13 @@ type StockRow = {
   quantity: number | string | null;
   purchase_price: number | string | null;
   current_price: number | string | null;
+  created_at: string;
 };
 
 type TransactionRow = {
   id: string;
   ticker: string;
+  company_name: string | null;
   type: "buy" | "sell" | string;
   quantity: number | string | null;
   price: number | string | null;
@@ -377,7 +379,7 @@ async function fetchAllTransactions(
     const { data, error } = await service
       .from("stock_transactions")
       .select(
-        "id,ticker,type,quantity,price,total,created_at",
+        "id,ticker,company_name,type,quantity,price,total,created_at",
       )
       .eq("user_id", userId)
       .gte("created_at", startIso)
@@ -400,73 +402,108 @@ async function fetchAllTransactions(
   return rows;
 }
 
-async function fetchFinancialDatasetsQuote(
-  service: SupabaseClient,
-  ticker: string,
-  storedPrice: number | null,
-): Promise<QuoteResult> {
-  if (!FINANCIAL_DATASETS_API_KEY) {
-    return {
-      ticker,
-      currentPrice: storedPrice,
-      source: storedPrice === null ? "unavailable" : "stored",
-    };
+function buildHistoricalStocks(
+  currentStocks: StockRow[],
+  transactions: TransactionRow[],
+): StockRow[] {
+  if (!transactions.length) {
+    return currentStocks;
   }
 
-  try {
-    const cached =
-      await getCachedFinancialDatasetsQuote(
-        service,
-        ticker,
-        FINANCIAL_DATASETS_API_KEY,
-      );
+  const positions = new Map<string, StockRow>();
 
-    const currentPrice =
-      positiveNumberOrNull(
-        cached.data.price,
-      );
+  for (const transaction of [...transactions].sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() -
+      new Date(b.created_at).getTime(),
+  )) {
+    const ticker = normalizeTicker(transaction.ticker);
+    const type = String(transaction.type || "").toLowerCase();
+    const quantity = numberOrZero(transaction.quantity);
+    const price = numberOrZero(transaction.price);
 
-    if (currentPrice !== null) {
-      return {
-        ticker,
-        currentPrice,
-        source: "financial_datasets",
-      };
+    if (!ticker || quantity <= 0 || price < 0) {
+      continue;
     }
 
-    throw new Error(
-      "Financial Datasets returned no valid current price.",
-    );
-  } catch (error) {
-    console.warn(`Quote fetch failed for ${ticker}:`, error);
+    const existing = positions.get(ticker);
+    const oldQuantity = numberOrZero(existing?.quantity);
+    const oldAverageCost = numberOrZero(existing?.purchase_price);
+
+    if (type === "buy") {
+      const newQuantity = oldQuantity + quantity;
+      const averageCost = newQuantity > 0
+        ? (
+          oldQuantity * oldAverageCost +
+          quantity * price
+        ) / newQuantity
+        : price;
+
+      positions.set(ticker, {
+        id: existing?.id || transaction.id,
+        ticker,
+        company_name:
+          transaction.company_name || existing?.company_name || ticker,
+        quantity: newQuantity,
+        purchase_price: averageCost,
+        current_price: null,
+        created_at: existing?.created_at || transaction.created_at,
+      });
+    } else if (type === "sell" && existing) {
+      positions.set(ticker, {
+        ...existing,
+        quantity: Math.max(0, oldQuantity - quantity),
+      });
+    }
   }
 
-  return {
-    ticker,
-    currentPrice: storedPrice,
-    source: storedPrice === null ? "unavailable" : "stored",
-  };
+  return [...positions.values()].filter(
+    (stock) => numberOrZero(stock.quantity) > 0,
+  );
 }
 
-async function fetchQuotesInBatches(
-  service: SupabaseClient,
+async function fetchHistoricalQuotesInBatches(
   stocks: StockRow[],
+  endExclusive: Date,
 ): Promise<Map<string, QuoteResult>> {
   const result = new Map<string, QuoteResult>();
-  const batchSize = 5;
+  const endDate = new Date(endExclusive.getTime() - 1);
+  const startDate = new Date(endDate);
+  startDate.setUTCDate(startDate.getUTCDate() - 10);
 
-  for (let index = 0; index < stocks.length; index += batchSize) {
-    const batch = stocks.slice(index, index + batchSize);
-
+  for (let index = 0; index < stocks.length; index += 5) {
+    const batch = stocks.slice(index, index + 5);
     const quotes = await Promise.all(
-      batch.map((stock) => {
+      batch.map(async (stock): Promise<QuoteResult> => {
         const ticker = normalizeTicker(stock.ticker);
-        const storedPrice = positiveNumberOrNull(stock.current_price);
-        return fetchFinancialDatasetsQuote(
-          service,
-          ticker,
-          storedPrice,
-        );
+
+        if (!FINANCIAL_DATASETS_API_KEY) {
+          return { ticker, currentPrice: null, source: "unavailable" };
+        }
+
+        try {
+          const prices = await fetchFinancialDatasetsPrices(
+            ticker,
+            FINANCIAL_DATASETS_API_KEY,
+            {
+              interval: "day",
+              startDate: startDate.toISOString().slice(0, 10),
+              endDate: endDate.toISOString().slice(0, 10),
+            },
+          );
+          const latest = [...prices].sort(
+            (a, b) => b.timestamp - a.timestamp,
+          )[0];
+
+          return {
+            ticker,
+            currentPrice: latest?.close || null,
+            source: latest?.close ? "financial_datasets" : "unavailable",
+          };
+        } catch (error) {
+          console.warn(`Historical quote fetch failed for ${ticker}:`, error);
+          return { ticker, currentPrice: null, source: "unavailable" };
+        }
       }),
     );
 
@@ -664,6 +701,7 @@ async function loadReportData(
     authUserResult,
     stocksResult,
     transactions,
+    historicalTransactions,
   ] = await Promise.all([
     service
       .from("profiles")
@@ -678,15 +716,23 @@ async function loadReportData(
     service
       .from("stocks")
       .select(
-        "id,ticker,company_name,quantity,purchase_price,current_price",
+        "id,ticker,company_name,quantity,purchase_price,current_price,created_at",
       )
       .eq("user_id", delivery.user_id)
+      .lt("created_at", endExclusive.toISOString())
       .order("ticker", { ascending: true }),
 
     fetchAllTransactions(
       service,
       delivery.user_id,
       start.toISOString(),
+      endExclusive.toISOString(),
+    ),
+
+    fetchAllTransactions(
+      service,
+      delivery.user_id,
+      "1970-01-01T00:00:00.000Z",
       endExclusive.toISOString(),
     ),
   ]);
@@ -755,8 +801,19 @@ async function loadReportData(
           : null
       ),
   };
-  const stocks = (stocksResult.data || []) as StockRow[];
-  const quotes = await fetchQuotesInBatches(service, stocks);
+  // A report for a completed month must never include a holding that was
+  // first added after that month ended. Transaction history supplies the
+  // activity section; this date guard prevents today's portfolio from being
+  // presented as the prior month's portfolio for new accounts.
+  const currentStocks = (stocksResult.data || []) as StockRow[];
+  const stocks = buildHistoricalStocks(
+    currentStocks,
+    historicalTransactions,
+  );
+  const quotes = await fetchHistoricalQuotesInBatches(
+    stocks,
+    endExclusive,
+  );
   const holdings = buildHoldingSummaries(stocks, quotes);
   const transactionSummaries = buildTransactionSummaries(transactions);
   const currency = normalizeCurrency(delivery.report_currency);

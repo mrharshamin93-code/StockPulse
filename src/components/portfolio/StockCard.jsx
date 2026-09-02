@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { recordStockTransaction } from "@/lib/stockTransactions";
 
 import {
   Dialog,
@@ -55,31 +56,14 @@ async function recordTransaction({
   price,
 }) {
   try {
-    const { error } = await supabase
-      .from("stock_transactions")
-      .insert({
-        user_id: userId,
-        ticker:
-          String(
-            stock?.ticker || "",
-          ).toUpperCase(),
-
-        company_name:
-          stock?.company_name || "",
-
-        type,
-        quantity,
-        price,
-        total:
-          quantity * price,
-      });
-
-    if (error) {
-      console.warn(
-        `${type} transaction history insert failed:`,
-        error,
-      );
-    }
+    await recordStockTransaction({
+      userId,
+      ticker: stock?.ticker,
+      companyName: stock?.company_name,
+      type,
+      quantity,
+      price,
+    });
   } catch (error) {
     console.warn(
       `${type} transaction history insert failed:`,

@@ -25,6 +25,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
+import { recordStockTransaction } from "@/lib/stockTransactions";
 
 import {
   getProfile,
@@ -403,6 +404,22 @@ export default function AddStockDialog({
         );
 
         return;
+      }
+
+      try {
+        await recordStockTransaction({
+          userId: user.id,
+          ticker: cleanTicker,
+          companyName: company_name,
+          type: "buy",
+          quantity: inputQuantity,
+          price: inputPurchasePrice,
+        });
+      } catch (transactionError) {
+        console.warn(
+          "Initial buy transaction history insert failed:",
+          transactionError,
+        );
       }
 
       try {
