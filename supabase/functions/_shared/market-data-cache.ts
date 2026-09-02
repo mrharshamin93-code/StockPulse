@@ -10,6 +10,7 @@ import {
 } from "./financial-datasets.ts";
 
 const PROVIDER = "financial-datasets";
+const MARKET_TIME_ZONE = "America/New_York";
 const DEFAULT_MONTHLY_LIMIT = 100_000;
 const DEFAULT_RESERVED_UNITS = 15_000;
 const DEFAULT_LEASE_SECONDS = 30;
@@ -61,6 +62,8 @@ export type MarketDataCacheOptions<T> = {
   staleMs: number;
   endpoint: string;
   requestUnits?: number;
+  getRequestUnits?: () => number;
+  usageManagedByFetcher?: boolean;
   priority?: boolean;
   fetcher: () => Promise<T>;
 };
@@ -132,6 +135,63 @@ function hasPayload(row: CacheRow | null): boolean {
   return row?.payload !== null && row?.payload !== undefined;
 }
 
+function requestUnitsFor(
+  options: MarketDataCacheOptions<unknown>,
+): number {
+  const dynamic =
+    options.getRequestUnits?.();
+
+  const value =
+    typeof dynamic === "number" &&
+    Number.isFinite(dynamic) &&
+    dynamic >= 0
+      ? dynamic
+      : options.requestUnits ?? 1;
+
+  return Math.max(
+    0,
+    Math.floor(value),
+  );
+}
+
+function marketIsoDate(
+  now = new Date(),
+): string {
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-US",
+      {
+        timeZone:
+          MARKET_TIME_ZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      },
+    ).formatToParts(now);
+
+  const value = (type: string) =>
+    parts.find(
+      (part) =>
+        part.type === type,
+    )?.value ?? "";
+
+  const year = value("year");
+  const month = value("month");
+  const day = value("day");
+
+  if (
+    year &&
+    month &&
+    day
+  ) {
+    return `${year}-${month}-${day}`;
+  }
+
+  return now
+    .toISOString()
+    .slice(0, 10);
+}
+
 function resultFromRow<T>(
   row: CacheRow,
   status: MarketDataCacheStatus,
@@ -188,18 +248,19 @@ async function claimRefresh(
   return data === true;
 }
 
-async function reserveRequest(
+async function reserveProviderUnits(
   client: SupabaseClient,
-  options: MarketDataCacheOptions<unknown>,
+  requestUnits: number,
+  priority: boolean,
 ): Promise<boolean> {
   const { data, error } = await client.rpc(
     "reserve_provider_request",
     {
       p_provider: PROVIDER,
-      p_request_units: Math.max(1, options.requestUnits ?? 1),
+      p_request_units: Math.max(1, requestUnits),
       p_monthly_limit: monthlyLimit(),
       p_reserved_units: reservedUnits(),
-      p_priority: options.priority === true,
+      p_priority: priority,
     },
   );
 
@@ -210,24 +271,58 @@ async function reserveRequest(
   return data === true;
 }
 
-async function recordRequestResult(
+async function reserveRequest(
   client: SupabaseClient,
   options: MarketDataCacheOptions<unknown>,
+): Promise<boolean> {
+  return reserveProviderUnits(
+    client,
+    Math.max(
+      1,
+      requestUnitsFor(options),
+    ),
+    options.priority === true,
+  );
+}
+
+async function recordProviderResult(
+  client: SupabaseClient,
+  endpoint: string,
+  requestUnits: number,
   success: boolean,
 ): Promise<void> {
   const { error } = await client.rpc(
     "record_provider_request_result",
     {
       p_provider: PROVIDER,
-      p_endpoint: options.endpoint,
-      p_request_units: Math.max(1, options.requestUnits ?? 1),
+      p_endpoint: endpoint,
+      p_request_units: Math.max(1, requestUnits),
       p_success: success,
     },
   );
 
   if (error) {
-    console.warn("Could not record Financial Datasets usage:", error.message);
+    console.warn(
+      "Could not record Financial Datasets usage:",
+      error.message,
+    );
   }
+}
+
+async function recordRequestResult(
+  client: SupabaseClient,
+  options: MarketDataCacheOptions<unknown>,
+  success: boolean,
+): Promise<void> {
+  await recordProviderResult(
+    client,
+    options.endpoint,
+    Math.max(
+      1,
+      requestUnitsFor(options),
+    ),
+    success,
+  );
 }
 
 async function completeRefresh<T>(
@@ -242,7 +337,9 @@ async function completeRefresh<T>(
       p_payload: payload,
       p_fresh_seconds: Math.max(1, Math.ceil(options.freshMs / 1000)),
       p_stale_seconds: Math.max(1, Math.ceil(options.staleMs / 1000)),
-      p_request_units: Math.max(1, options.requestUnits ?? 1),
+      p_request_units: requestUnitsFor(
+        options as MarketDataCacheOptions<unknown>,
+      ),
     },
   );
 
@@ -329,20 +426,32 @@ export async function getCachedMarketData<T>(
   let requestReserved = false;
 
   try {
-    requestReserved = await reserveRequest(
-      options.client,
-      options as MarketDataCacheOptions<unknown>,
-    );
+    if (!options.usageManagedByFetcher) {
+      requestReserved = await reserveRequest(
+        options.client,
+        options as MarketDataCacheOptions<unknown>,
+      );
 
-    if (!requestReserved) throw new ProviderBudgetError();
+      if (!requestReserved) {
+        throw new ProviderBudgetError();
+      }
+    }
 
     const payload = await options.fetcher();
-    await completeRefresh(options.client, options, payload);
-    await recordRequestResult(
+
+    await completeRefresh(
       options.client,
-      options as MarketDataCacheOptions<unknown>,
-      true,
+      options,
+      payload,
     );
+
+    if (!options.usageManagedByFetcher) {
+      await recordRequestResult(
+        options.client,
+        options as MarketDataCacheOptions<unknown>,
+        true,
+      );
+    }
 
     return {
       data: payload,
@@ -354,7 +463,10 @@ export async function getCachedMarketData<T>(
       },
     };
   } catch (error) {
-    if (requestReserved) {
+    if (
+      requestReserved &&
+      !options.usageManagedByFetcher
+    ) {
       await recordRequestResult(
         options.client,
         options as MarketDataCacheOptions<unknown>,
@@ -382,7 +494,7 @@ export async function getCachedMarketData<T>(
 
 export function quoteFreshMs(now = new Date()): number {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
+    timeZone: MARKET_TIME_ZONE,
     weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
@@ -437,7 +549,18 @@ export async function getCachedFinancialDatasetsPrices(
   if (!ticker) throw new Error("Ticker is required.");
 
   const interval = options.interval ?? "day";
-  const includesCurrentDate = options.endDate >= new Date().toISOString().slice(0, 10);
+
+  // Use the New York market date rather than UTC. Otherwise, after
+  // midnight UTC (8 PM ET during daylight time), today's market data
+  // can be misclassified as historical and cached for years.
+  const currentMarketDate =
+    marketIsoDate();
+
+  const includesCurrentDate =
+    options.endDate >=
+    currentMarketDate;
+
+  let actualRequestUnits = 0;
 
   return getCachedMarketData({
     client,
@@ -452,7 +575,45 @@ export async function getCachedFinancialDatasetsPrices(
     freshMs: includesCurrentDate ? PRICE_CURRENT_TTL_MS : PRICE_HISTORICAL_TTL_MS,
     staleMs: PRICE_STALE_MS,
     endpoint: "/prices",
+    usageManagedByFetcher: true,
+    getRequestUnits: () =>
+      actualRequestUnits,
     priority: options.priority,
-    fetcher: () => fetchFinancialDatasetsPrices(ticker, apiKey, options),
+    fetcher: () =>
+      fetchFinancialDatasetsPrices(
+        ticker,
+        apiKey,
+        {
+          ...options,
+          requestHooks: {
+            beforeRequest:
+              async () => {
+                const reserved =
+                  await reserveProviderUnits(
+                    client,
+                    1,
+                    options.priority === true,
+                  );
+
+                if (!reserved) {
+                  throw new ProviderBudgetError();
+                }
+              },
+            afterRequest:
+              async (
+                success,
+              ) => {
+                actualRequestUnits += 1;
+
+                await recordProviderResult(
+                  client,
+                  "/prices",
+                  1,
+                  success,
+                );
+              },
+          },
+        },
+      ),
   });
 }
