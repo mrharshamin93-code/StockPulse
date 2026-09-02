@@ -18,6 +18,7 @@ const DEFAULT_STALE_HOURS = 24;
 const MAX_STALE_HOURS = 24 * 30;
 const REQUEST_CONCURRENCY = 5;
 const QUEUE_PAGE_SIZE = 1000;
+const AUTO_BACKFILL_MAX_RUNTIME_MS = 120_000;
 
 type UnknownRecord =
   Record<string, unknown>;
@@ -782,6 +783,8 @@ async function loadSupportedFundamentalsQueue(
   supportedTickers: Set<string>,
   staleBefore: string,
   batchSize: number,
+  excludedSymbols:
+    Set<string> = new Set(),
 ): Promise<{
   stocks: StockQueueRow[];
   rowsScanned: number;
@@ -875,6 +878,14 @@ async function loadSupportedFundamentalsQueue(
       ) {
         unsupportedSkipped +=
           1;
+        continue;
+      }
+
+      if (
+        excludedSymbols.has(
+          symbol,
+        )
+      ) {
         continue;
       }
 
@@ -1096,7 +1107,9 @@ Deno.serve(
             ),
             MAX_BATCH_SIZE,
           )
-        : DEFAULT_BATCH_SIZE;
+        : requestedSymbols.length > 0
+          ? DEFAULT_BATCH_SIZE
+          : MAX_BATCH_SIZE;
 
     const requestedStaleHours =
       Number(
@@ -1116,6 +1129,11 @@ Deno.serve(
           )
         : DEFAULT_STALE_HOURS;
 
+    const backfillAll =
+      requestedSymbols.length ===
+        0 &&
+      body?.backfillAll === true;
+
     const staleBefore =
       new Date(
         Date.now() -
@@ -1129,70 +1147,37 @@ Deno.serve(
       new Date()
         .toISOString();
 
+    const startedAtMs =
+      Date.now();
+
     let syncRunId:
       number | null = null;
 
     try {
-      let stocks:
-        StockQueueRow[] = [];
+      const supportedTickers =
+        requestedSymbols.length === 0
+          ? await fetchSupportedFinancialMetricsTickers(
+              financialDatasetsApiKey,
+            )
+          : null;
 
-      if (
-        requestedSymbols.length >
-        0
-      ) {
-        stocks =
-          requestedSymbols.map(
-            (symbol) => ({
-              symbol,
-            }),
-          );
-      } else {
-        const supportedTickers =
-          await fetchSupportedFinancialMetricsTickers(
-            financialDatasetsApiKey,
-          );
+      const attemptedThisRun =
+        new Set<string>();
 
-        const queue =
-          await loadSupportedFundamentalsQueue(
-            supabase,
-            supportedTickers,
-            staleBefore,
-            batchSize,
-          );
+      const allResults:
+        ProcessResult[] = [];
 
-        stocks =
-          queue.stocks;
+      let totalRowsScanned =
+        0;
 
-        console.log(
-          `Fundamentals queue: ${queue.rowsScanned} stale rows scanned, ${queue.unsupportedSkipped} unsupported symbols skipped, ${stocks.length} supported symbols selected.`,
-        );
-      }
+      let totalUnsupportedSkipped =
+        0;
 
-      if (
-        stocks.length === 0
-      ) {
-        return jsonResponse({
-          ok: true,
-          status:
-            "idle",
-          message:
-            requestedSymbols.length > 0
-              ? "No symbols were requested."
-              : "No Financial Datasets-supported stocks have missing or stale fundamentals.",
-          staleHours,
-          staleBefore,
-          symbolsRequested:
-            0,
-          symbolsSucceeded:
-            0,
-          symbolsFailed:
-            0,
-          startedAt,
-          finishedAt:
-            new Date()
-              .toISOString(),
-        });
-      }
+      let batchesProcessed =
+        0;
+
+      let stoppedForRuntime =
+        false;
 
       const {
         data: syncRun,
@@ -1209,15 +1194,15 @@ Deno.serve(
             status:
               "running",
             symbols_requested:
-              stocks.length,
+              requestedSymbols.length,
             started_at:
               startedAt,
             metadata: {
               manualSymbols:
                 requestedSymbols.length >
                 0,
-              batchSize:
-                stocks.length,
+              backfillAll,
+              batchSize,
               staleHours,
               staleBefore,
             },
@@ -1241,103 +1226,247 @@ Deno.serve(
           );
       }
 
-      const results =
-        await processInBatches(
-          stocks,
-          REQUEST_CONCURRENCY,
-          async (
-            stock,
-          ): Promise<ProcessResult> => {
-            const symbol =
-              stock.symbol;
+      while (true) {
+        let stocks:
+          StockQueueRow[] = [];
 
-            try {
-              const metrics =
-                await fetchFinancialDatasetsMetrics(
-                  symbol,
-                  financialDatasetsApiKey,
-                );
+        if (
+          requestedSymbols.length >
+          0
+        ) {
+          if (
+            batchesProcessed >
+            0
+          ) {
+            break;
+          }
 
-              const updatedAt =
-                new Date()
-                  .toISOString();
+          stocks =
+            requestedSymbols.map(
+              (symbol) => ({
+                symbol,
+              }),
+            );
+        } else {
+          const queue =
+            await loadSupportedFundamentalsQueue(
+              supabase,
+              supportedTickers!,
+              staleBefore,
+              batchSize,
+              attemptedThisRun,
+            );
 
-              const values =
-                buildFundamentalsUpdate(
-                  metrics,
-                  updatedAt,
-                );
+          stocks =
+            queue.stocks;
 
-              const {
-                error:
-                  updateError,
-              } =
-                await supabase
-                  .from(
-                    "stock_screener_stocks",
-                  )
-                  .update(values)
-                  .eq(
-                    "symbol",
+          totalRowsScanned +=
+            queue.rowsScanned;
+
+          totalUnsupportedSkipped +=
+            queue.unsupportedSkipped;
+
+          console.log(
+            `Fundamentals queue batch ${batchesProcessed + 1}: ${queue.rowsScanned} stale rows scanned, ${queue.unsupportedSkipped} unsupported symbols skipped, ${stocks.length} supported symbols selected.`,
+          );
+        }
+
+        if (
+          stocks.length === 0
+        ) {
+          break;
+        }
+
+        for (
+          const stock of stocks
+        ) {
+          attemptedThisRun.add(
+            stock.symbol,
+          );
+        }
+
+        const results =
+          await processInBatches(
+            stocks,
+            REQUEST_CONCURRENCY,
+            async (
+              stock,
+            ): Promise<ProcessResult> => {
+              const symbol =
+                stock.symbol;
+
+              try {
+                const metrics =
+                  await fetchFinancialDatasetsMetrics(
                     symbol,
+                    financialDatasetsApiKey,
                   );
 
-              if (updateError) {
-                throw new Error(
-                  updateError.message,
+                const updatedAt =
+                  new Date()
+                    .toISOString();
+
+                const values =
+                  buildFundamentalsUpdate(
+                    metrics,
+                    updatedAt,
+                  );
+
+                const {
+                  error:
+                    updateError,
+                } =
+                  await supabase
+                    .from(
+                      "stock_screener_stocks",
+                    )
+                    .update(values)
+                    .eq(
+                      "symbol",
+                      symbol,
+                    );
+
+                if (updateError) {
+                  throw new Error(
+                    updateError.message,
+                  );
+                }
+
+                return {
+                  symbol,
+                  ok: true,
+                  updatedFields:
+                    Object.keys(
+                      values,
+                    ).length,
+                  error:
+                    null,
+                };
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : "Unknown fundamentals-sync error.";
+
+                console.error(
+                  `Fundamentals sync failed for ${symbol}: ${message}`,
                 );
+
+                return {
+                  symbol,
+                  ok: false,
+                  updatedFields:
+                    0,
+                  error:
+                    message,
+                };
               }
+            },
+          );
 
-              return {
-                symbol,
-                ok: true,
-                updatedFields:
-                  Object.keys(
-                    values,
-                  ).length,
-                error:
-                  null,
-              };
-            } catch (error) {
-              const message =
-                error instanceof Error
-                  ? error.message
-                  : "Unknown fundamentals-sync error.";
-
-              console.error(
-                `Fundamentals sync failed for ${symbol}: ${message}`,
-              );
-
-              return {
-                symbol,
-                ok: false,
-                updatedFields:
-                  0,
-                error:
-                  message,
-              };
-            }
-          },
+        allResults.push(
+          ...results,
         );
 
+        batchesProcessed +=
+          1;
+
+        if (
+          requestedSymbols.length >
+          0 ||
+          !backfillAll
+        ) {
+          break;
+        }
+
+        if (
+          Date.now() -
+            startedAtMs >=
+          AUTO_BACKFILL_MAX_RUNTIME_MS
+        ) {
+          stoppedForRuntime =
+            true;
+          break;
+        }
+      }
+
       const succeeded =
-        results.filter(
+        allResults.filter(
           (result) =>
             result.ok,
         );
 
       const failed =
-        results.filter(
+        allResults.filter(
           (result) =>
             !result.ok,
         );
 
-      const status =
-        failed.length === 0
-          ? "completed"
-          : succeeded.length > 0
-            ? "partial"
-            : "failed";
+      let remainingSupportedStale =
+        false;
+
+      if (
+        requestedSymbols.length ===
+          0 &&
+        supportedTickers
+      ) {
+        const remainingQueue =
+          await loadSupportedFundamentalsQueue(
+            supabase,
+            supportedTickers,
+            staleBefore,
+            1,
+            attemptedThisRun,
+          );
+
+        remainingSupportedStale =
+          remainingQueue
+            .stocks
+            .length >
+          0;
+
+        totalRowsScanned +=
+          remainingQueue.rowsScanned;
+
+        totalUnsupportedSkipped +=
+          remainingQueue.unsupportedSkipped;
+      }
+
+      let status:
+        "idle" |
+        "completed" |
+        "partial" |
+        "failed" |
+        "continue";
+
+      if (
+        allResults.length ===
+        0
+      ) {
+        status =
+          "idle";
+      } else if (
+        stoppedForRuntime &&
+        remainingSupportedStale
+      ) {
+        status =
+          "continue";
+      } else if (
+        failed.length ===
+        0
+      ) {
+        status =
+          "completed";
+      } else if (
+        succeeded.length >
+        0
+      ) {
+        status =
+          "partial";
+      } else {
+        status =
+          "failed";
+      }
 
       const finishedAt =
         new Date()
@@ -1356,8 +1485,10 @@ Deno.serve(
             )
             .update({
               status,
+              symbols_requested:
+                allResults.length,
               symbols_processed:
-                results.length,
+                allResults.length,
               symbols_succeeded:
                 succeeded.length,
               symbols_failed:
@@ -1378,6 +1509,22 @@ Deno.serve(
                         2000,
                       )
                   : null,
+              metadata: {
+                manualSymbols:
+                  requestedSymbols.length >
+                  0,
+                backfillAll,
+                batchSize,
+                staleHours,
+                staleBefore,
+                batchesProcessed,
+                rowsScanned:
+                  totalRowsScanned,
+                unsupportedSkipped:
+                  totalUnsupportedSkipped,
+                stoppedForRuntime,
+                remainingSupportedStale,
+              },
             })
             .eq(
               "id",
@@ -1392,19 +1539,39 @@ Deno.serve(
         }
       }
 
+      const message =
+        status === "idle"
+          ? "No Financial Datasets-supported stocks have missing or stale fundamentals."
+          : status === "continue"
+            ? "Automatic backfill stopped before the Edge Function runtime limit. Invoke the same request again to continue."
+            : backfillAll &&
+                !remainingSupportedStale
+              ? "Automatic fundamentals backfill finished."
+              : undefined;
+
       return jsonResponse({
         ok:
           status !==
           "failed",
         status,
+        message,
+        backfillAll,
         staleHours,
         staleBefore,
+        batchSize,
+        batchesProcessed,
         symbolsRequested:
-          stocks.length,
+          allResults.length,
         symbolsSucceeded:
           succeeded.length,
         symbolsFailed:
           failed.length,
+        rowsScanned:
+          totalRowsScanned,
+        unsupportedSkipped:
+          totalUnsupportedSkipped,
+        remainingSupportedStale,
+        stoppedForRuntime,
         failed:
           failed.slice(
             0,
