@@ -1159,17 +1159,17 @@ export default function Analysis() {
                       },
                     )}
                   />
-
+                  
                   <MetricCard
-                    label="Dividend Yield"
-                    value={formatMetric(
-                      metrics.dividendYield,
-                      {
-                        suffix: "%",
-                        digits: 2,
-                      },
-                    )}
-                  />
+  label="FCF / Share"
+  value={formatMetric(
+    metrics.fcfPerShare,
+    {
+      prefix: "$",
+      digits: 2,
+    },
+  )}
+/>  
                 </div>
               </div>
             </section>
