@@ -51,6 +51,24 @@ import { Input } from "@/components/ui/input";
 const LONG_PRESS_MS = 600;
 const TOOLTIP_VISIBLE_MS = 5000;
 
+const UNSUPPORTED_METRIC_KEYS = new Set([
+  "forwardPe",
+  "pcf",
+  "debtEbitda",
+  "dividendGrowth",
+]);
+
+const UNSUPPORTED_FILTER_KEYS = new Set([
+  "minForwardPe",
+  "maxForwardPe",
+  "minPcf",
+  "maxPcf",
+  "minDebtEbitda",
+  "maxDebtEbitda",
+  "minDividendGrowth",
+  "maxDividendGrowth",
+]);
+
 const SECTORS = [
   "Technology",
   "Healthcare",
@@ -120,17 +138,6 @@ const METRIC_GROUPS = [
         maxPlaceholder: "e.g. 25",
       },
       {
-        key: "forwardPe",
-        label: "Forward P/E",
-        desc:
-          "Share price divided by forecast earnings per share, typically for the next fiscal year or next twelve months. It reflects analyst earnings estimates rather than historical results.",
-        unit: "x",
-        minKey: "minForwardPe",
-        maxKey: "maxForwardPe",
-        minPlaceholder: "e.g. 5",
-        maxPlaceholder: "e.g. 30",
-      },
-      {
         key: "peg",
         label: "PEG Ratio",
         desc:
@@ -173,17 +180,6 @@ const METRIC_GROUPS = [
         maxKey: "maxEvEbitda",
         minPlaceholder: "e.g. 3",
         maxPlaceholder: "e.g. 20",
-      },
-      {
-        key: "pcf",
-        label: "P/Cash Flow",
-        desc:
-          "Market capitalization divided by operating cash flow, or share price divided by operating cash flow per share. It measures valuation relative to cash generated from normal business operations.",
-        unit: "x",
-        minKey: "minPcf",
-        maxKey: "maxPcf",
-        minPlaceholder: "e.g. 5",
-        maxPlaceholder: "e.g. 30",
       },
       {
         key: "pfcf",
@@ -436,17 +432,6 @@ const METRIC_GROUPS = [
         minPlaceholder: "e.g. 3",
         maxPlaceholder: "e.g. 20",
       },
-      {
-        key: "debtEbitda",
-        label: "Debt-to-EBITDA",
-        desc:
-          "Total debt divided by EBITDA. It measures debt relative to operating earnings before interest, taxes, depreciation and amortization.",
-        unit: "x",
-        minKey: "minDebtEbitda",
-        maxKey: "maxDebtEbitda",
-        minPlaceholder: "e.g. 0",
-        maxPlaceholder: "e.g. 4",
-      },
     ],
   },
   {
@@ -522,17 +507,6 @@ const METRIC_GROUPS = [
         maxKey: "maxPayoutRatio",
         minPlaceholder: "e.g. 0",
         maxPlaceholder: "e.g. 60",
-      },
-      {
-        key: "dividendGrowth",
-        label: "Five-Year Dividend Growth",
-        desc:
-          "The compound annual growth rate of dividends per share over the previous five years. It measures the historical pace of dividend increases.",
-        unit: "%",
-        minKey: "minDividendGrowth",
-        maxKey: "maxDividendGrowth",
-        minPlaceholder: "e.g. 3",
-        maxPlaceholder: "e.g. 20",
       },
     ],
   },
@@ -647,6 +621,12 @@ function normalizeFilters(
   delete next.minRelativeVolume;
   delete next.maxRelativeVolume;
 
+  UNSUPPORTED_FILTER_KEYS.forEach(
+    (key) => {
+      delete next[key];
+    },
+  );
+
   if (
     Array.isArray(
       next.sectors,
@@ -709,6 +689,22 @@ function getSelectedSectors(
     (sector) =>
       SECTORS.includes(
         sector,
+      ),
+  );
+}
+
+function sanitizeMetricKeys(
+  keys,
+) {
+  return (Array.isArray(keys)
+    ? keys
+    : []
+  ).filter(
+    (key) =>
+      key !==
+        "relativeVolume" &&
+      !UNSUPPORTED_METRIC_KEYS.has(
+        key,
       ),
   );
 }
@@ -963,7 +959,6 @@ function FilterChip({
   );
 }
 
-
 const QUICK_SCREEN_UI = [
   {
     icon: Cpu,
@@ -1187,15 +1182,11 @@ export default function Screener() {
   ] = useState(
     () =>
       new Set(
-        (
+        sanitizeMetricKeys(
           readSessionObject(
             "screener_metrics",
             [],
-          ) || []
-        ).filter(
-          (key) =>
-            key !==
-            "relativeVolume",
+          ) || [],
         ),
       ),
   );
@@ -1385,7 +1376,6 @@ export default function Screener() {
     };
   }, []);
 
-
   const showToast =
     useCallback(
       (message) => {
@@ -1492,6 +1482,14 @@ export default function Screener() {
   const toggleMetric = (
     key,
   ) => {
+    if (
+      UNSUPPORTED_METRIC_KEYS.has(
+        key,
+      )
+    ) {
+      return;
+    }
+
     const currentlyActive =
       activeMetrics.has(
         key,
@@ -1544,47 +1542,6 @@ export default function Screener() {
 
     setActivePreset(null);
   };
-
-  const removeMetric =
-    (key) => {
-      const definition =
-        ALL_METRIC_DEFS.find(
-          (item) =>
-            item.key === key,
-        );
-
-      setActiveMetrics(
-        (previous) => {
-          const next =
-            new Set(previous);
-
-          next.delete(key);
-
-          return next;
-        },
-      );
-
-      if (definition) {
-        setFilters(
-          (previous) => {
-            const next = {
-              ...previous,
-            };
-
-            delete next[
-              definition.minKey
-            ];
-            delete next[
-              definition.maxKey
-            ];
-
-            return next;
-          },
-        );
-      }
-
-      setActivePreset(null);
-    };
 
   const clearSectors =
     () => {
@@ -1863,9 +1820,10 @@ export default function Screener() {
               normalizeFilters(
                 filters,
               ),
-            active_metrics: [
-              ...activeMetrics,
-            ],
+            active_metrics:
+              sanitizeMetricKeys([
+                ...activeMetrics,
+              ]),
           })
           .select()
           .single();
@@ -1916,16 +1874,12 @@ export default function Screener() {
 
     const savedMetrics =
       new Set(
-        (
+        sanitizeMetricKeys(
           screen
             ?.active_metrics ||
-          screen
-            ?.activeMetrics ||
-          []
-        ).filter(
-          (key) =>
-            key !==
-            "relativeVolume",
+            screen
+              ?.activeMetrics ||
+            [],
         ),
       );
 
@@ -1999,6 +1953,14 @@ export default function Screener() {
     key,
     rawValue,
   ) => {
+    if (
+      UNSUPPORTED_FILTER_KEYS.has(
+        key,
+      )
+    ) {
+      return;
+    }
+
     setFilters(
       (previous) => {
         const next = {
@@ -2371,45 +2333,50 @@ export default function Screener() {
         createPortal(
           (
             <div
-        data-screener-action-bar className="fixed inset-x-0 bottom-0 z-[10000] border-t border-gray-100 bg-white/95 px-4 pt-3 backdrop-blur-xl" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
-      >
-        <div className="mx-auto flex w-full max-w-xl gap-2">
-          <Button
-            className="h-12 flex-1 rounded-2xl bg-gray-950 text-white hover:bg-gray-800"
-            onClick={() => {
-              setActivePreset(null);
-              void runScreen();
-            }}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="mr-2 h-4 w-4" />
-            )}
+              data-screener-action-bar
+              className="fixed inset-x-0 bottom-0 z-[10000] border-t border-gray-100 bg-white/95 px-4 pt-3 backdrop-blur-xl"
+              style={{
+                paddingBottom:
+                  "calc(env(safe-area-inset-bottom) + 12px)",
+              }}
+            >
+              <div className="mx-auto flex w-full max-w-xl gap-2">
+                <Button
+                  className="h-12 flex-1 rounded-2xl bg-gray-950 text-white hover:bg-gray-800"
+                  onClick={() => {
+                    setActivePreset(null);
+                    void runScreen();
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="mr-2 h-4 w-4" />
+                  )}
 
-            Run Screener
-          </Button>
+                  Run Screener
+                </Button>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="h-12 rounded-2xl px-4"
-            disabled={loading}
-            onClick={() => {
-              setSaveName("");
-              setSaveDialogOpen(
-                true,
-              );
-            }}
-          >
-            <Save className="h-4 w-4" />
-            <span className="sr-only">
-              Save screen
-            </span>
-          </Button>
-        </div>
-      </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 rounded-2xl px-4"
+                  disabled={loading}
+                  onClick={() => {
+                    setSaveName("");
+                    setSaveDialogOpen(
+                      true,
+                    );
+                  }}
+                >
+                  <Save className="h-4 w-4" />
+                  <span className="sr-only">
+                    Save screen
+                  </span>
+                </Button>
+              </div>
+            </div>
           ),
           document.body,
         )}
