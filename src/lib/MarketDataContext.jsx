@@ -8,7 +8,7 @@ import React, {
 } from "react";
 
 import { useAuth } from "@/lib/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { financialDatasetsRequest } from "@/lib/financialDatasets";
 
 const QUOTE_TTL_MS = 5 * 60 * 1000;
 
@@ -27,31 +27,34 @@ function normalizeTickerList(tickers) {
 }
 
 function finiteNumber(value) {
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-function timestampSeconds(value) {
-  if (!value) return null;
-  const milliseconds = Date.parse(value);
-  return Number.isFinite(milliseconds) ? Math.floor(milliseconds / 1000) : null;
-}
+function normalizeQuote(quote, fallbackTicker = "") {
+  const ticker = normalizeTicker(quote?.ticker || fallbackTicker);
 
-function mapDatabaseQuote(row) {
-  const ticker = normalizeTicker(row?.symbol);
-  if (!ticker) return null;
+  if (!ticker) {
+    return null;
+  }
 
   return {
     ticker,
-    c: finiteNumber(row?.price),
-    d: finiteNumber(row?.change_amount),
-    dp: finiteNumber(row?.change_percent),
-    h: finiteNumber(row?.day_high),
-    l: finiteNumber(row?.day_low),
-    o: finiteNumber(row?.open_price),
-    pc: finiteNumber(row?.previous_close),
-    t: timestampSeconds(row?.market_timestamp || row?.quote_updated_at),
+    c: finiteNumber(quote?.c),
+    d: finiteNumber(quote?.d),
+    dp: finiteNumber(quote?.dp),
+    h: finiteNumber(quote?.h),
+    l: finiteNumber(quote?.l),
+    o: finiteNumber(quote?.o),
+    pc: finiteNumber(quote?.pc),
+    t: finiteNumber(quote?.t),
+    cacheStatus: quote?.cacheStatus || null,
+    cacheExpiresAt: quote?.cacheExpiresAt || null,
+    error: quote?.error || null,
   };
 }
 
@@ -61,12 +64,17 @@ export function MarketDataProvider({ children }) {
   const tickersRef = useRef([]);
   const quoteCacheRef = useRef({});
 
-  const loadDatabaseQuotes = useCallback(
+  const loadQuotes = useCallback(
     async (tickers, { force = false } = {}) => {
-      if (!user?.id) return {};
+      if (!user?.id) {
+        return {};
+      }
 
       const normalizedTickers = normalizeTickerList(tickers);
-      if (!normalizedTickers.length) return {};
+
+      if (!normalizedTickers.length) {
+        return {};
+      }
 
       tickersRef.current = normalizeTickerList([
         ...tickersRef.current,
@@ -75,7 +83,7 @@ export function MarketDataProvider({ children }) {
 
       const now = Date.now();
       const resolved = {};
-      const needsDatabase = [];
+      const needsFetch = [];
 
       for (const ticker of normalizedTickers) {
         const cached = quoteCacheRef.current[ticker];
@@ -88,39 +96,46 @@ export function MarketDataProvider({ children }) {
         if (fresh) {
           resolved[ticker] = cached.data;
         } else {
-          needsDatabase.push(ticker);
+          needsFetch.push(ticker);
         }
       }
 
-      if (needsDatabase.length) {
-        const { data, error } = await supabase
-          .from("stock_screener_stocks")
-          .select(
-            "symbol,price,change_amount,change_percent,open_price,day_high,day_low,previous_close,market_timestamp,quote_updated_at",
-          )
-          .in("symbol", needsDatabase);
+      if (needsFetch.length) {
+        const payload = await financialDatasetsRequest({
+          action: "quotes",
+          tickers: needsFetch,
+        });
 
-        if (error) {
-          throw new Error(error.message || "Unable to load cached market quotes.");
-        }
+        const returnedQuotes = Array.isArray(payload?.quotes)
+          ? payload.quotes
+          : [];
 
-        const rowsByTicker = new Map(
-          (data || []).map((row) => [normalizeTicker(row?.symbol), row]),
+        const byTicker = new Map(
+          returnedQuotes
+            .map((quote) => {
+              const normalized = normalizeQuote(quote);
+              return normalized ? [normalized.ticker, normalized] : null;
+            })
+            .filter(Boolean),
         );
 
-        for (const ticker of needsDatabase) {
-          const mapped = mapDatabaseQuote(rowsByTicker.get(ticker));
-          const quote = mapped || {
-            ticker,
-            c: null,
-            d: null,
-            dp: null,
-            h: null,
-            l: null,
-            o: null,
-            pc: null,
-            t: null,
-          };
+        for (const ticker of needsFetch) {
+          const quote =
+            byTicker.get(ticker) ||
+            normalizeQuote(
+              {
+                ticker,
+                c: null,
+                d: null,
+                dp: null,
+                h: null,
+                l: null,
+                o: null,
+                pc: null,
+                t: null,
+              },
+              ticker,
+            );
 
           quoteCacheRef.current[ticker] = {
             data: quote,
@@ -144,18 +159,24 @@ export function MarketDataProvider({ children }) {
   const refreshQuotes = useCallback(
     async (tickers) => {
       const requestedTickers =
-        Array.isArray(tickers) && tickers.length ? tickers : tickersRef.current;
+        Array.isArray(tickers) && tickers.length
+          ? tickers
+          : tickersRef.current;
 
-      // Refreshes from StockPulse's Supabase cache only.
-      // Browser/page refreshes never call Financial Datasets for quotes.
-      return loadDatabaseQuotes(requestedTickers, { force: true });
+      /*
+       * Force only bypasses the browser-memory cache.
+       * The Financial Datasets Edge Function still goes through StockPulse's
+       * shared persistent market_data_cache, so a page refresh does not
+       * necessarily consume a provider request.
+       */
+      return loadQuotes(requestedTickers, { force: true });
     },
-    [loadDatabaseQuotes],
+    [loadQuotes],
   );
 
   const fetchQuotes = useCallback(
-    async (tickers) => loadDatabaseQuotes(tickers, { force: false }),
-    [loadDatabaseQuotes],
+    async (tickers) => loadQuotes(tickers, { force: false }),
+    [loadQuotes],
   );
 
   const value = useMemo(
