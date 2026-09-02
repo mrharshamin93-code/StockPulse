@@ -18,6 +18,8 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
+  ReferenceDot,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -1258,7 +1260,7 @@ function StockChart({
               />
 
               <Tooltip
-                active={tooltipVisible}
+                active={tooltipVisible && dualTouchPoints.length !== 2}
                 isAnimationActive={false}
                 content={
                   <ChartTooltip
@@ -1269,6 +1271,46 @@ function StockChart({
                   />
                 }
               />
+
+              {dualTouchPoints.length === 2 &&
+                dualTouchPoints.map((point, index) => {
+                  const xValue =
+                    activePeriod === "1D"
+                      ? point.xIndex
+                      : point.timestamp;
+                  const yValue = comparisonsActive
+                    ? Number(point[seriesDataKey(primaryTicker)])
+                    : Number(point.primaryValue);
+
+                  if (
+                    (activePeriod === "1D" && !Number.isFinite(Number(xValue))) ||
+                    (activePeriod !== "1D" && (xValue === null || xValue === undefined)) ||
+                    !Number.isFinite(yValue)
+                  ) {
+                    return null;
+                  }
+
+                  return (
+                    <React.Fragment key={`dual-touch-${index}-${point.touchIndex}`}>
+                      <ReferenceLine
+                        x={xValue}
+                        stroke="hsl(var(--muted-foreground))"
+                        strokeOpacity={0.35}
+                        strokeDasharray="3 3"
+                        ifOverflow="extendDomain"
+                      />
+                      <ReferenceDot
+                        x={xValue}
+                        y={yValue}
+                        r={5}
+                        fill={primaryColor}
+                        stroke="hsl(var(--background))"
+                        strokeWidth={2}
+                        ifOverflow="extendDomain"
+                      />
+                    </React.Fragment>
+                  );
+                })}
 
               <Line
                 type="monotone"
