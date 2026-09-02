@@ -6,6 +6,8 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 // fallback and retry backoff without spending hidden extra units.
 const DEFAULT_MAX_RETRIES = 0;
 
+const MAX_PRICE_PAGES = 100;
+
 type UnknownRecord =
   Record<string, unknown>;
 
@@ -457,6 +459,92 @@ export async function fetchFinancialDatasetsQuote(
   };
 }
 
+function normalizePriceRecord(
+  item: unknown,
+): FinancialDatasetsPrice | null {
+  const record =
+    item &&
+    typeof item === "object"
+      ? item as UnknownRecord
+      : {};
+
+  const timestamp =
+    timestampSeconds(
+      record.time ??
+        record.date,
+    );
+
+  const close = finiteNumber(
+    record.close ??
+      record.price,
+  );
+
+  if (
+    timestamp === null ||
+    timestamp <= 0 ||
+    close === null ||
+    close <= 0
+  ) {
+    return null;
+  }
+
+  const volume = finiteNumber(
+    record.volume,
+  );
+
+  return {
+    timestamp,
+    open: finiteNumber(
+      record.open,
+    ),
+    high: finiteNumber(
+      record.high,
+    ),
+    low: finiteNumber(
+      record.low,
+    ),
+    close,
+    volume:
+      volume !== null &&
+      volume >= 0
+        ? volume
+        : null,
+  };
+}
+
+function cursorFromNextPageUrl(
+  value: unknown,
+): string | null {
+  const nextPageUrl =
+    normalizeText(value);
+
+  if (!nextPageUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(
+      nextPageUrl,
+      API_BASE_URL,
+    );
+
+    if (
+      url.origin !==
+      new URL(API_BASE_URL).origin
+    ) {
+      return null;
+    }
+
+    return normalizeText(
+      url.searchParams.get(
+        "cursor",
+      ),
+    ) || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchFinancialDatasetsPrices(
   tickerValue: unknown,
   apiKey: string,
@@ -475,93 +563,117 @@ export async function fetchFinancialDatasetsPrices(
     );
   }
 
-  const payload =
-    await providerGet(
-      "/prices",
-      {
-        ticker,
-        interval:
-          options.interval ??
-          "day",
-        start_date:
-          options.startDate,
-        end_date:
-          options.endDate,
-      },
-      apiKey,
-    );
+  const baseQuery: UnknownRecord = {
+    ticker,
+    interval:
+      options.interval ??
+      "day",
+    start_date:
+      options.startDate,
+    end_date:
+      options.endDate,
+  };
 
-  const root =
-    payload &&
-    typeof payload === "object"
-      ? payload as UnknownRecord
-      : {};
+  const allPrices:
+    FinancialDatasetsPrice[] = [];
 
-  const prices =
-    Array.isArray(root.prices)
-      ? root.prices
-      : [];
+  const seenCursors =
+    new Set<string>();
 
-  return prices
-    .map((item) => {
-      const record =
-        item &&
-        typeof item === "object"
-          ? item as UnknownRecord
-          : {};
+  let cursor:
+    string | null = null;
 
-      const timestamp =
-        timestampSeconds(
-          record.time ??
-            record.date,
+  for (
+    let page = 0;
+    page < MAX_PRICE_PAGES;
+    page += 1
+  ) {
+    const payload =
+      await providerGet(
+        "/prices",
+        {
+          ...baseQuery,
+          ...(cursor
+            ? { cursor }
+            : {}),
+        },
+        apiKey,
+      );
+
+    const root =
+      payload &&
+      typeof payload === "object"
+        ? payload as UnknownRecord
+        : {};
+
+    const prices =
+      Array.isArray(
+        root.prices,
+      )
+        ? root.prices
+        : [];
+
+    for (
+      const item of prices
+    ) {
+      const normalized =
+        normalizePriceRecord(
+          item,
         );
 
-      const close = finiteNumber(
-        record.close ??
-          record.price,
-      );
-
-      if (
-        timestamp === null ||
-        timestamp <= 0 ||
-        close === null ||
-        close <= 0
-      ) {
-        return null;
+      if (normalized) {
+        allPrices.push(
+          normalized,
+        );
       }
+    }
 
-      const volume = finiteNumber(
-        record.volume,
+    const nextCursor =
+      cursorFromNextPageUrl(
+        root.next_page_url,
       );
 
-      return {
-        timestamp,
-        open: finiteNumber(
-          record.open,
-        ),
-        high: finiteNumber(
-          record.high,
-        ),
-        low: finiteNumber(
-          record.low,
-        ),
-        close,
-        volume:
-          volume !== null &&
-          volume >= 0
-            ? volume
-            : null,
-      } satisfies FinancialDatasetsPrice;
-    })
-    .filter(
-      (
-        item,
-      ): item is FinancialDatasetsPrice =>
-        item !== null,
-    )
-    .sort(
-      (left, right) =>
-        left.timestamp -
-        right.timestamp,
+    if (!nextCursor) {
+      break;
+    }
+
+    if (
+      seenCursors.has(
+        nextCursor,
+      )
+    ) {
+      break;
+    }
+
+    seenCursors.add(
+      nextCursor,
     );
+
+    cursor =
+      nextCursor;
+  }
+
+  const deduped =
+    new Map<
+      number,
+      FinancialDatasetsPrice
+    >();
+
+  for (
+    const price of
+      allPrices
+  ) {
+    deduped.set(
+      price.timestamp,
+      price,
+    );
+  }
+
+  return [
+    ...deduped.values(),
+  ].sort(
+    (left, right) =>
+      left.timestamp -
+      right.timestamp,
+  );
 }
