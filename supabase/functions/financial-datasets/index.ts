@@ -2,6 +2,7 @@ import {
   createClient,
   type SupabaseClient,
 } from "npm:@supabase/supabase-js@2";
+
 import {
   getCachedFinancialDatasetsPrices,
   getCachedFinancialDatasetsQuote,
@@ -13,11 +14,15 @@ const FINANCIAL_DATASETS_API_KEY =
 
 const SUPABASE_URL =
   Deno.env.get("SUPABASE_URL") || "";
+
 const SUPABASE_SERVICE_ROLE_KEY =
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const API_BASE_URL =
   "https://api.financialdatasets.ai";
+
+const MARKET_TIME_ZONE =
+  "America/New_York";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -26,14 +31,24 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PROFILE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const NEWS_TTL_MS = 30 * 60 * 1000;
-const METRICS_TTL_MS = 24 * 60 * 60 * 1000;
-const TICKER_DIRECTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const PROFILE_TTL_MS =
+  30 * 24 * 60 * 60 * 1000;
+
+const NEWS_TTL_MS =
+  30 * 60 * 1000;
+
+const METRICS_TTL_MS =
+  24 * 60 * 60 * 1000;
+
+const TICKER_DIRECTORY_TTL_MS =
+  7 * 24 * 60 * 60 * 1000;
+
 const QUOTE_REQUEST_CONCURRENCY = 5;
 
 const cache = new Map();
-let cacheClient: SupabaseClient | null = null;
+
+let cacheClient: SupabaseClient | null =
+  null;
 
 function getCacheClient(): SupabaseClient {
   if (
@@ -70,9 +85,15 @@ class ProviderError extends Error {
     payload: unknown = null,
   ) {
     super(message);
-    this.name = "ProviderError";
-    this.status = status;
-    this.payload = payload;
+
+    this.name =
+      "ProviderError";
+
+    this.status =
+      status;
+
+    this.payload =
+      payload;
   }
 }
 
@@ -96,29 +117,36 @@ function jsonResponse(
 function normalizeText(
   value: unknown,
 ): string {
-  return String(value ?? "").trim();
+  return String(
+    value ?? "",
+  ).trim();
 }
 
 function normalizeTicker(
   value: unknown,
 ): string {
-  return normalizeText(value)
-    .toUpperCase();
+  return normalizeText(
+    value,
+  ).toUpperCase();
 }
 
 function normalizeTickers(
   value: unknown,
 ): string[] {
-  const raw = Array.isArray(value)
-    ? value
-    : typeof value === "string"
-      ? value.split(",")
-      : [];
+  const raw =
+    Array.isArray(value)
+      ? value
+      : typeof value ===
+            "string"
+        ? value.split(",")
+        : [];
 
   return [
     ...new Set(
       raw
-        .map(normalizeTicker)
+        .map(
+          normalizeTicker,
+        )
         .filter(Boolean),
     ),
   ];
@@ -135,9 +163,12 @@ function finiteNumber(
     return null;
   }
 
-  const parsed = Number(value);
+  const parsed =
+    Number(value);
 
-  return Number.isFinite(parsed)
+  return Number.isFinite(
+    parsed,
+  )
     ? parsed
     : null;
 }
@@ -145,43 +176,52 @@ function finiteNumber(
 function timestampSeconds(
   value: unknown,
 ): number | null {
-  const numeric = finiteNumber(value);
+  const numeric =
+    finiteNumber(value);
 
-  if (numeric !== null) {
-    return numeric > 10_000_000_000
-      ? Math.floor(numeric / 1000)
-      : Math.floor(numeric);
+  if (
+    numeric !== null
+  ) {
+    return numeric >
+        10_000_000_000
+      ? Math.floor(
+          numeric / 1000,
+        )
+      : Math.floor(
+          numeric,
+        );
   }
 
-  const text = normalizeText(value);
+  const text =
+    normalizeText(
+      value,
+    );
 
   if (!text) {
     return null;
   }
 
-  const parsed = Date.parse(text);
+  const parsed =
+    Date.parse(text);
 
-  return Number.isFinite(parsed)
-    ? Math.floor(parsed / 1000)
+  return Number.isFinite(
+    parsed,
+  )
+    ? Math.floor(
+        parsed / 1000,
+      )
     : null;
 }
 
-function isoDateFromUnix(
-  value: unknown,
+/*
+ * Financial Datasets validates start_date/end_date against the
+ * U.S. market calendar. Never derive those dates with toISOString()
+ * directly from "now", because after 8 PM ET (or 7 PM EST) UTC has
+ * already advanced to the following calendar day.
+ */
+function marketIsoDate(
+  date: Date,
 ): string | null {
-  const seconds = finiteNumber(value);
-
-  if (
-    seconds === null ||
-    seconds <= 0
-  ) {
-    return null;
-  }
-
-  const date = new Date(
-    seconds * 1000,
-  );
-
   if (
     Number.isNaN(
       date.getTime(),
@@ -190,13 +230,101 @@ function isoDateFromUnix(
     return null;
   }
 
-  return date
-    .toISOString()
-    .slice(0, 10);
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-US",
+      {
+        timeZone:
+          MARKET_TIME_ZONE,
+        year:
+          "numeric",
+        month:
+          "2-digit",
+        day:
+          "2-digit",
+      },
+    ).formatToParts(
+      date,
+    );
+
+  const value = (
+    type: string,
+  ) =>
+    parts.find(
+      (part) =>
+        part.type ===
+        type,
+    )?.value ?? "";
+
+  const year =
+    value("year");
+
+  const month =
+    value("month");
+
+  const day =
+    value("day");
+
+  if (
+    !year ||
+    !month ||
+    !day
+  ) {
+    return null;
+  }
+
+  return (
+    `${year}-${month}-${day}`
+  );
+}
+
+function isoDateFromUnix(
+  value: unknown,
+): string | null {
+  const seconds =
+    finiteNumber(value);
+
+  if (
+    seconds === null ||
+    seconds <= 0
+  ) {
+    return null;
+  }
+
+  return marketIsoDate(
+    new Date(
+      seconds * 1000,
+    ),
+  );
 }
 
 function todayIso(): string {
-  return new Date()
+  return (
+    marketIsoDate(
+      new Date(),
+    ) ||
+    new Date()
+      .toISOString()
+      .slice(0, 10)
+  );
+}
+
+/*
+ * Treat YYYY-MM-DD as a calendar date, not as a market timestamp.
+ * Noon UTC avoids DST boundary surprises while doing month/year math.
+ */
+function calendarDateFromIso(
+  isoDate: string,
+): Date {
+  return new Date(
+    `${isoDate}T12:00:00.000Z`,
+  );
+}
+
+function isoFromCalendarDate(
+  date: Date,
+): string {
+  return date
     .toISOString()
     .slice(0, 10);
 }
@@ -204,15 +332,19 @@ function todayIso(): string {
 function subtractDaysIso(
   days: number,
 ): string {
-  const date = new Date();
+  const date =
+    calendarDateFromIso(
+      todayIso(),
+    );
 
   date.setUTCDate(
-    date.getUTCDate() - days,
+    date.getUTCDate() -
+      days,
   );
 
-  return date
-    .toISOString()
-    .slice(0, 10);
+  return isoFromCalendarDate(
+    date,
+  );
 }
 
 function periodBounds(
@@ -222,99 +354,128 @@ function periodBounds(
   endDate: string;
 } {
   const normalized =
-    normalizeText(period)
-      .toUpperCase() || "1Y";
+    normalizeText(
+      period,
+    ).toUpperCase() ||
+    "1Y";
 
-  const endDate = todayIso();
-  const date = new Date();
+  const endDate =
+    todayIso();
 
-  switch (normalized) {
+  const date =
+    calendarDateFromIso(
+      endDate,
+    );
+
+  switch (
+    normalized
+  ) {
     case "1D":
       date.setUTCDate(
-        date.getUTCDate() - 7,
+        date.getUTCDate() -
+          7,
       );
       break;
 
     case "1W":
     case "5D":
       date.setUTCDate(
-        date.getUTCDate() - 14,
+        date.getUTCDate() -
+          14,
       );
       break;
 
     case "1M":
       date.setUTCMonth(
-        date.getUTCMonth() - 1,
+        date.getUTCMonth() -
+          1,
       );
       break;
 
     case "3M":
       date.setUTCMonth(
-        date.getUTCMonth() - 3,
+        date.getUTCMonth() -
+          3,
       );
       break;
 
     case "6M":
       date.setUTCMonth(
-        date.getUTCMonth() - 6,
+        date.getUTCMonth() -
+          6,
       );
       break;
 
     case "YTD":
-      date.setUTCMonth(0, 1);
+      date.setUTCMonth(
+        0,
+        1,
+      );
       break;
 
     case "2Y":
       date.setUTCFullYear(
-        date.getUTCFullYear() - 2,
+        date.getUTCFullYear() -
+          2,
       );
       break;
 
     case "5Y":
       date.setUTCFullYear(
-        date.getUTCFullYear() - 5,
+        date.getUTCFullYear() -
+          5,
       );
       break;
 
     case "10Y":
       date.setUTCFullYear(
-        date.getUTCFullYear() - 10,
+        date.getUTCFullYear() -
+          10,
       );
       break;
 
     case "ALL":
       date.setUTCFullYear(
-        date.getUTCFullYear() - 30,
+        date.getUTCFullYear() -
+          30,
       );
       break;
 
     case "1Y":
     default:
       date.setUTCFullYear(
-        date.getUTCFullYear() - 1,
+        date.getUTCFullYear() -
+          1,
       );
       break;
   }
 
   return {
-    startDate: date
-      .toISOString()
-      .slice(0, 10),
+    startDate:
+      isoFromCalendarDate(
+        date,
+      ),
     endDate,
   };
 }
 
 function intervalFromResolution(
   resolution: unknown,
-): "day" | "week" | "month" | "year" {
+):
+  | "day"
+  | "week"
+  | "month"
+  | "year" {
   const normalized =
-    normalizeText(resolution)
-      .toUpperCase();
+    normalizeText(
+      resolution,
+    ).toUpperCase();
 
   if (
     normalized === "W" ||
     normalized === "1W" ||
-    normalized === "WEEK"
+    normalized ===
+      "WEEK"
   ) {
     return "week";
   }
@@ -322,7 +483,8 @@ function intervalFromResolution(
   if (
     normalized === "M" ||
     normalized === "1M" ||
-    normalized === "MONTH"
+    normalized ===
+      "MONTH"
   ) {
     return "month";
   }
@@ -330,14 +492,17 @@ function intervalFromResolution(
   if (
     normalized === "Y" ||
     normalized === "1Y" ||
-    normalized === "YEAR"
+    normalized ===
+      "YEAR"
   ) {
     return "year";
   }
 
-  // Financial Datasets historical prices are EOD.
-  // Unsupported intraday resolutions intentionally fall back
-  // to daily candles.
+  /*
+   * Financial Datasets historical prices are EOD.
+   * Unsupported intraday resolutions intentionally fall back
+   * to daily candles.
+   */
   return "day";
 }
 
@@ -354,48 +519,82 @@ async function withCache<T>(
     Date.now() <
       existing.expiresAt
   ) {
-    return existing.value as T;
+    return existing
+      .value as T;
   }
 
-  const [dataType, tickerValue] =
+  const [
+    dataType,
+    tickerValue,
+  ] =
     key.split(":");
 
   const result =
-    await getCachedMarketData({
-      client: getCacheClient(),
-      key,
-      dataType:
-        dataType || "market-data",
-      ticker:
-        tickerValue || null,
-      parameters: { key },
-      freshMs: ttlMs,
-      staleMs: Math.max(
-        ttlMs,
-        dataType === "news"
-          ? 24 * 60 * 60 * 1000
-          : 30 * 24 * 60 * 60 * 1000,
-      ),
-      endpoint:
-        dataType === "profile"
-          ? "/company/facts"
-          : dataType === "news"
-            ? "/news"
-            : dataType === "candles"
-              ? "/prices"
-              : dataType === "metrics"
-                ? "/financial-metrics/snapshot"
-                : "/company/facts/tickers/",
-      fetcher,
-    });
+    await getCachedMarketData(
+      {
+        client:
+          getCacheClient(),
+
+        key,
+
+        dataType:
+          dataType ||
+          "market-data",
+
+        ticker:
+          tickerValue ||
+          null,
+
+        parameters: {
+          key,
+        },
+
+        freshMs:
+          ttlMs,
+
+        staleMs:
+          Math.max(
+            ttlMs,
+            dataType ===
+                "news"
+              ? 24 *
+                  60 *
+                  60 *
+                  1000
+              : 30 *
+                  24 *
+                  60 *
+                  60 *
+                  1000,
+          ),
+
+        endpoint:
+          dataType ===
+              "profile"
+            ? "/company/facts"
+            : dataType ===
+                  "news"
+              ? "/news"
+              : dataType ===
+                    "candles"
+                ? "/prices"
+                : dataType ===
+                      "metrics"
+                  ? "/financial-metrics/snapshot"
+                  : "/company/facts/tickers/",
+
+        fetcher,
+      },
+    );
 
   const value =
     result.data;
 
   const persistentExpiration =
     Date.parse(
-      result.cache.expiresAt ||
-      "",
+      result.cache
+        .expiresAt ||
+        "",
     );
 
   const memoryExpiration =
@@ -406,15 +605,20 @@ async function withCache<T>(
       Date.now()
       ? Math.min(
           persistentExpiration,
-          Date.now() + ttlMs,
+          Date.now() +
+            ttlMs,
         )
-      : Date.now() + 15_000;
+      : Date.now() +
+        15_000;
 
-  cache.set(key, {
-    value,
-    expiresAt:
-      memoryExpiration,
-  });
+  cache.set(
+    key,
+    {
+      value,
+      expiresAt:
+        memoryExpiration,
+    },
+  );
 
   return value;
 }
@@ -425,7 +629,8 @@ function providerMessage(
 ): string {
   if (
     payload &&
-    typeof payload === "object"
+    typeof payload ===
+      "object"
   ) {
     const record =
       payload as Record<
@@ -450,29 +655,48 @@ function providerMessage(
   }
 
   if (
-    typeof payload === "string" &&
+    typeof payload ===
+      "string" &&
     payload.trim()
   ) {
     return payload.trim();
   }
 
-  if (status === 401) {
-    return "Financial Datasets rejected the API key.";
+  if (
+    status === 401
+  ) {
+    return (
+      "Financial Datasets rejected the API key."
+    );
   }
 
-  if (status === 402) {
-    return "Financial Datasets requires an active paid plan or API credits.";
+  if (
+    status === 402
+  ) {
+    return (
+      "Financial Datasets requires an active paid plan or API credits."
+    );
   }
 
-  if (status === 404) {
-    return "The requested ticker or Financial Datasets resource was not found.";
+  if (
+    status === 404
+  ) {
+    return (
+      "The requested ticker or Financial Datasets resource was not found."
+    );
   }
 
-  if (status === 429) {
-    return "Financial Datasets rate limit reached.";
+  if (
+    status === 429
+  ) {
+    return (
+      "Financial Datasets rate limit reached."
+    );
   }
 
-  return `Financial Datasets returned status ${status}.`;
+  return (
+    `Financial Datasets returned status ${status}.`
+  );
 }
 
 async function providerGet(
@@ -481,8 +705,6 @@ async function providerGet(
     string,
     unknown
   > = {},
-  // Every attempt consumes a provider request. Cache backoff replaces
-  // immediate provider retries so quota accounting stays exact.
   retries = 0,
 ): Promise<unknown> {
   if (
@@ -494,16 +716,23 @@ async function providerGet(
     );
   }
 
-  const url = new URL(
-    `${API_BASE_URL}${path}`,
-  );
+  const url =
+    new URL(
+      `${API_BASE_URL}${path}`,
+    );
 
   for (
-    const [key, value] of
-      Object.entries(query)
+    const [
+      key,
+      value,
+    ] of
+      Object.entries(
+        query,
+      )
   ) {
     if (
-      value !== undefined &&
+      value !==
+        undefined &&
       value !== null &&
       value !== ""
     ) {
@@ -530,7 +759,8 @@ async function providerGet(
   const text =
     await response.text();
 
-  let payload: unknown = null;
+  let payload:
+    unknown = null;
 
   if (text) {
     try {
@@ -542,7 +772,8 @@ async function providerGet(
   }
 
   if (
-    response.status === 429 &&
+    response.status ===
+      429 &&
     retries > 0
   ) {
     await new Promise(
@@ -550,7 +781,8 @@ async function providerGet(
         setTimeout(
           resolve,
           1000 *
-            (3 - retries),
+            (3 -
+              retries),
         ),
     );
 
@@ -561,7 +793,9 @@ async function providerGet(
     );
   }
 
-  if (!response.ok) {
+  if (
+    !response.ok
+  ) {
     throw new ProviderError(
       providerMessage(
         response.status,
@@ -605,24 +839,43 @@ async function getQuote(
       FINANCIAL_DATASETS_API_KEY,
     );
 
-  const quote = result.data;
+  const quote =
+    result.data;
 
   return {
-    ticker: quote.ticker,
-    c: quote.price,
-    d: quote.changeAmount,
-    dp: quote.changePercent,
-    h: quote.high,
-    l: quote.low,
-    o: quote.open,
-    pc: quote.previousClose,
-    t: quote.timestamp,
-    cacheStatus: result.cache.status,
-    cacheExpiresAt: result.cache.expiresAt,
+    ticker:
+      quote.ticker,
+    c:
+      quote.price,
+    d:
+      quote.changeAmount,
+    dp:
+      quote.changePercent,
+    h:
+      quote.high,
+    l:
+      quote.low,
+    o:
+      quote.open,
+    pc:
+      quote.previousClose,
+    t:
+      quote.timestamp,
+
+    cacheStatus:
+      result.cache
+        .status,
+
+    cacheExpiresAt:
+      result.cache
+        .expiresAt,
   };
 }
 
-async function mapWithConcurrency<T, R>(
+async function mapWithConcurrency<
+  T,
+  R,
+>(
   values: T[],
   concurrency: number,
   worker: (
@@ -638,10 +891,15 @@ async function mapWithConcurrency<T, R>(
 
   async function runWorker() {
     while (true) {
-      const index = nextIndex;
+      const index =
+        nextIndex;
+
       nextIndex += 1;
 
-      if (index >= values.length) {
+      if (
+        index >=
+        values.length
+      ) {
         return;
       }
 
@@ -655,12 +913,14 @@ async function mapWithConcurrency<T, R>(
   await Promise.all(
     Array.from(
       {
-        length: Math.min(
-          concurrency,
-          values.length,
-        ),
+        length:
+          Math.min(
+            concurrency,
+            values.length,
+          ),
       },
-      () => runWorker(),
+      () =>
+        runWorker(),
     ),
   );
 
@@ -674,15 +934,20 @@ async function getQuotes(
     await mapWithConcurrency(
       tickers,
       QUOTE_REQUEST_CONCURRENCY,
-      async (ticker) => {
+      async (
+        ticker,
+      ) => {
         try {
           return await getQuote(
             ticker,
           );
-        } catch (error) {
+        } catch (
+          error
+        ) {
           return emptyQuote(
             ticker,
-            error instanceof Error
+            error instanceof
+                Error
               ? error.message
               : "Quote request failed.",
           );
@@ -690,7 +955,9 @@ async function getQuotes(
       },
     );
 
-  return { quotes };
+  return {
+    quotes,
+  };
 }
 
 async function getProfile(
@@ -703,12 +970,15 @@ async function getProfile(
       const payload =
         await providerGet(
           "/company/facts",
-          { ticker },
+          {
+            ticker,
+          },
         );
 
       const root =
         payload &&
-        typeof payload === "object"
+        typeof payload ===
+          "object"
           ? payload as Record<
               string,
               unknown
@@ -717,7 +987,8 @@ async function getProfile(
 
       const facts =
         root.company_facts &&
-        typeof root.company_facts ===
+        typeof root
+            .company_facts ===
           "object"
           ? root.company_facts as Record<
               string,
@@ -734,45 +1005,56 @@ async function getProfile(
         ticker:
           normalizeTicker(
             facts.ticker,
-          ) || ticker,
+          ) ||
+          ticker,
 
         name:
           normalizeText(
             facts.name,
-          ) || ticker,
+          ) ||
+          ticker,
 
         exchange:
           normalizeText(
             facts.exchange,
-          ) || null,
+          ) ||
+          null,
 
         industry:
           normalizeText(
             facts.industry ??
               facts.sic_industry,
-          ) || null,
+          ) ||
+          null,
 
         sector:
           normalizeText(
             facts.sector ??
               facts.sic_sector,
-          ) || null,
+          ) ||
+          null,
 
         country:
           normalizeText(
             facts.location,
-          ) || "US",
+          ) ||
+          "US",
 
-        currency: "USD",
-        logo: null,
+        currency:
+          "USD",
+
+        logo:
+          null,
 
         weburl:
           normalizeText(
             facts.website_url,
-          ) || null,
+          ) ||
+          null,
 
         marketCapitalization:
-          marketCap === null
+          marketCap ===
+            null
             ? null
             : marketCap /
               1_000_000,
@@ -782,10 +1064,12 @@ async function getProfile(
         cik:
           normalizeText(
             facts.cik,
-          ) || null,
+          ) ||
+          null,
 
         isActive:
-          typeof facts.is_active ===
+          typeof facts
+              .is_active ===
             "boolean"
             ? facts.is_active
             : null,
@@ -798,7 +1082,8 @@ async function getProfile(
         secFilingsUrl:
           normalizeText(
             facts.sec_filings_url,
-          ) || null,
+          ) ||
+          null,
       };
     },
   );
@@ -810,7 +1095,8 @@ function normalizeNewsArticle(
 ) {
   const record =
     item &&
-    typeof item === "object"
+    typeof item ===
+      "object"
       ? item as Record<
           string,
           unknown
@@ -829,7 +1115,8 @@ function normalizeNewsArticle(
     ticker:
       normalizeTicker(
         record.ticker,
-      ) || ticker,
+      ) ||
+      ticker,
 
     title:
       normalizeText(
@@ -904,7 +1191,8 @@ async function getNews(
 
       const root =
         payload &&
-        typeof payload === "object"
+        typeof payload ===
+          "object"
           ? payload as Record<
               string,
               unknown
@@ -912,7 +1200,9 @@ async function getNews(
           : {};
 
       const items =
-        Array.isArray(root.news)
+        Array.isArray(
+          root.news,
+        )
           ? root.news
           : [];
 
@@ -934,7 +1224,8 @@ async function getNews(
       return {
         ticker,
         articles,
-        news: articles,
+        news:
+          articles,
       };
     },
   );
@@ -962,29 +1253,45 @@ async function getCandles(
       body.period,
     );
 
+  const requestedStartDate =
+    isoDateFromUnix(
+      body.from,
+    ) ??
+    normalizeText(
+      body.start_date ??
+        body.startDate,
+    );
+
+  const requestedEndDate =
+    isoDateFromUnix(
+      body.to,
+    ) ??
+    normalizeText(
+      body.end_date ??
+        body.endDate,
+    );
+
   const startDate =
-    (
-      isoDateFromUnix(
-        body.from,
-      ) ??
-      normalizeText(
-        body.start_date ??
-          body.startDate,
-      )
-    ) ||
+    requestedStartDate ||
     fallback.startDate;
 
-  const endDate =
-    (
-      isoDateFromUnix(
-        body.to,
-      ) ??
-      normalizeText(
-        body.end_date ??
-          body.endDate,
-      )
-    ) ||
+  /*
+   * Clamp the caller's end date to the current New York market date.
+   * This gives us a second layer of protection if a client ever passes
+   * an ISO date from UTC directly.
+   */
+  const currentMarketDate =
+    todayIso();
+
+  const endDateCandidate =
+    requestedEndDate ||
     fallback.endDate;
+
+  const endDate =
+    endDateCandidate >
+      currentMarketDate
+      ? currentMarketDate
+      : endDateCandidate;
 
   const cached =
     await getCachedFinancialDatasetsPrices(
@@ -1000,34 +1307,91 @@ async function getCandles(
 
   const candles =
     cached.data
-      .map((price) => ({
-        t: price.timestamp,
-        o: price.open,
-        h: price.high,
-        l: price.low,
-        c: price.close,
-        v: price.volume,
-      }))
+      .map(
+        (price) => ({
+          t:
+            price.timestamp,
+          o:
+            price.open,
+          h:
+            price.high,
+          l:
+            price.low,
+          c:
+            price.close,
+          v:
+            price.volume,
+        }),
+      )
       .sort(
-        (left, right) =>
-          Number(left.t) -
-          Number(right.t),
+        (
+          left,
+          right,
+        ) =>
+          Number(
+            left.t,
+          ) -
+          Number(
+            right.t,
+          ),
       );
 
   return {
     ticker,
     interval,
-    s: candles.length ? "ok" : "no_data",
+
+    s:
+      candles.length
+        ? "ok"
+        : "no_data",
+
     candles,
-    prices: candles,
-    t: candles.map((item) => item.t),
-    o: candles.map((item) => item.o),
-    h: candles.map((item) => item.h),
-    l: candles.map((item) => item.l),
-    c: candles.map((item) => item.c),
-    v: candles.map((item) => item.v),
-    cacheStatus: cached.cache.status,
-    cacheExpiresAt: cached.cache.expiresAt,
+    prices:
+      candles,
+
+    t:
+      candles.map(
+        (item) =>
+          item.t,
+      ),
+
+    o:
+      candles.map(
+        (item) =>
+          item.o,
+      ),
+
+    h:
+      candles.map(
+        (item) =>
+          item.h,
+      ),
+
+    l:
+      candles.map(
+        (item) =>
+          item.l,
+      ),
+
+    c:
+      candles.map(
+        (item) =>
+          item.c,
+      ),
+
+    v:
+      candles.map(
+        (item) =>
+          item.v,
+      ),
+
+    cacheStatus:
+      cached.cache
+        .status,
+
+    cacheExpiresAt:
+      cached.cache
+        .expiresAt,
   };
 }
 
@@ -1041,12 +1405,15 @@ async function getMetrics(
       const payload =
         await providerGet(
           "/financial-metrics/snapshot",
-          { ticker },
+          {
+            ticker,
+          },
         );
 
       const root =
         payload &&
-        typeof payload === "object"
+        typeof payload ===
+          "object"
           ? payload as Record<
               string,
               unknown
@@ -1055,7 +1422,8 @@ async function getMetrics(
 
       const snapshot =
         root.snapshot &&
-        typeof root.snapshot ===
+        typeof root
+            .snapshot ===
           "object"
           ? root.snapshot
           : null;
@@ -1063,7 +1431,8 @@ async function getMetrics(
       return {
         ticker,
         snapshot,
-        metrics: snapshot,
+        metrics:
+          snapshot,
       };
     },
   );
@@ -1074,7 +1443,8 @@ function normalizeTickerDirectory(
 ) {
   const root =
     payload &&
-    typeof payload === "object"
+    typeof payload ===
+      "object"
       ? payload as Record<
           string,
           unknown
@@ -1090,69 +1460,82 @@ function normalizeTickerDirectory(
   const list =
     possibleLists.find(
       Array.isArray,
-    ) as unknown[] | undefined;
+    ) as
+      | unknown[]
+      | undefined;
 
   if (!list) {
     return [];
   }
 
   return list
-    .map((item) => {
-      if (
-        typeof item === "string"
-      ) {
-        const ticker =
-          normalizeTicker(item);
+    .map(
+      (item) => {
+        if (
+          typeof item ===
+            "string"
+        ) {
+          const ticker =
+            normalizeTicker(
+              item,
+            );
 
-        return ticker
-          ? {
-              ticker,
-              name: ticker,
-              exchange: "",
-            }
-          : null;
-      }
-
-      if (
-        item &&
-        typeof item === "object"
-      ) {
-        const record =
-          item as Record<
-            string,
-            unknown
-          >;
-
-        const ticker =
-          normalizeTicker(
-            record.ticker ??
-              record.symbol,
-          );
-
-        if (!ticker) {
-          return null;
+          return ticker
+            ? {
+                ticker,
+                name:
+                  ticker,
+                exchange:
+                  "",
+              }
+            : null;
         }
 
-        return {
-          ticker,
+        if (
+          item &&
+          typeof item ===
+            "object"
+        ) {
+          const record =
+            item as Record<
+              string,
+              unknown
+            >;
 
-          name:
-            normalizeText(
-              record.name ??
-                record.company_name ??
-                record.description,
-            ) || ticker,
+          const ticker =
+            normalizeTicker(
+              record.ticker ??
+                record.symbol,
+            );
 
-          exchange:
-            normalizeText(
-              record.exchange ??
-                record.primary_exchange,
-            ),
-        };
-      }
+          if (
+            !ticker
+          ) {
+            return null;
+          }
 
-      return null;
-    })
+          return {
+            ticker,
+
+            name:
+              normalizeText(
+                record.name ??
+                  record.company_name ??
+                  record.description,
+              ) ||
+              ticker,
+
+            exchange:
+              normalizeText(
+                record.exchange ??
+                  record.primary_exchange,
+              ),
+          };
+        }
+
+        return null;
+      },
+    )
     .filter(Boolean);
 }
 
@@ -1188,7 +1571,8 @@ async function searchTickers(
         Math.floor(
           finiteNumber(
             limitValue,
-          ) ?? 8,
+          ) ??
+            8,
         ),
         1,
       ),
@@ -1203,8 +1587,10 @@ async function searchTickers(
     };
   }
 
-  // Exact ticker lookup gives us a company name and exchange
-  // even if the ticker-directory endpoint only returns strings.
+  /*
+   * Exact ticker lookup gives us a company name and exchange
+   * even if the ticker-directory endpoint only returns strings.
+   */
   try {
     const exact =
       await getProfile(
@@ -1218,16 +1604,23 @@ async function searchTickers(
     ) {
       const results = [
         {
-          ticker: query,
-          symbol: query,
+          ticker:
+            query,
+
+          symbol:
+            query,
+
           displaySymbol:
             query,
+
           name:
             exact.name ||
             query,
+
           description:
             exact.name ||
             query,
+
           exchange:
             exact.exchange ||
             "",
@@ -1238,11 +1631,14 @@ async function searchTickers(
         count:
           results.length,
         results,
-        result: results,
+        result:
+          results,
       };
     }
   } catch {
-    // Continue to partial ticker matching.
+    /*
+     * Continue to partial ticker matching.
+     */
   }
 
   const directory =
@@ -1253,7 +1649,9 @@ async function searchTickers(
       (item: any) =>
         item.ticker
           .toUpperCase()
-          .startsWith(query),
+          .startsWith(
+            query,
+          ),
     );
 
   const contains =
@@ -1261,14 +1659,20 @@ async function searchTickers(
       (item: any) =>
         !item.ticker
           .toUpperCase()
-          .startsWith(query) &&
+          .startsWith(
+            query,
+          ) &&
         (
           item.ticker
             .toUpperCase()
-            .includes(query) ||
+            .includes(
+              query,
+            ) ||
           item.name
             .toUpperCase()
-            .includes(query)
+            .includes(
+              query,
+            )
         ),
     );
 
@@ -1276,21 +1680,29 @@ async function searchTickers(
     ...startsWith,
     ...contains,
   ]
-    .slice(0, limit)
+    .slice(
+      0,
+      limit,
+    )
     .map(
       (item: any) => ({
         ticker:
           item.ticker,
+
         symbol:
           item.ticker,
+
         displaySymbol:
           item.ticker,
+
         name:
           item.name ||
           item.ticker,
+
         description:
           item.name ||
           item.ticker,
+
         exchange:
           item.exchange ||
           "",
@@ -1298,9 +1710,11 @@ async function searchTickers(
     );
 
   return {
-    count: results.length,
+    count:
+      results.length,
     results,
-    result: results,
+    result:
+      results,
   };
 }
 
@@ -1309,7 +1723,8 @@ Deno.serve(
     request: Request,
   ): Promise<Response> => {
     if (
-      request.method === "OPTIONS"
+      request.method ===
+        "OPTIONS"
     ) {
       return new Response(
         "ok",
@@ -1321,7 +1736,8 @@ Deno.serve(
     }
 
     if (
-      request.method !== "POST"
+      request.method !==
+        "POST"
     ) {
       return jsonResponse(
         {
@@ -1336,11 +1752,14 @@ Deno.serve(
       const body =
         await request
           .json()
-          .catch(() => ({}));
+          .catch(
+            () => ({}),
+          );
 
       const requestBody =
         body &&
-        typeof body === "object"
+        typeof body ===
+          "object"
           ? body as Record<
               string,
               unknown
@@ -1357,7 +1776,9 @@ Deno.serve(
           requestBody.ticker,
         );
 
-      switch (action) {
+      switch (
+        action
+      ) {
         case "quote": {
           if (!ticker) {
             return jsonResponse(
@@ -1382,7 +1803,9 @@ Deno.serve(
               requestBody.tickers,
             );
 
-          if (!tickers.length) {
+          if (
+            !tickers.length
+          ) {
             return jsonResponse(
               {
                 error:
@@ -1434,7 +1857,8 @@ Deno.serve(
               Math.floor(
                 finiteNumber(
                   requestBody.limit,
-                ) ?? 10,
+                ) ??
+                  10,
               ),
             ),
           );
@@ -1498,7 +1922,9 @@ Deno.serve(
             400,
           );
       }
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Financial Datasets Edge Function error:",
         error,
@@ -1512,6 +1938,7 @@ Deno.serve(
           {
             error:
               error.message,
+
             provider_status:
               error.status,
           },
@@ -1522,7 +1949,8 @@ Deno.serve(
       return jsonResponse(
         {
           error:
-            error instanceof Error
+            error instanceof
+                Error
               ? error.message
               : "Financial data request failed.",
         },
