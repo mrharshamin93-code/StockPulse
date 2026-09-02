@@ -801,10 +801,7 @@ async function loadSupportedFundamentalsQueue(
     stocks.length <
     batchSize
   ) {
-    const {
-      data,
-      error,
-    } =
+    const queueResponse =
       await supabase
         .from(
           "stock_screener_stocks",
@@ -844,14 +841,20 @@ async function loadSupportedFundamentalsQueue(
             1,
         );
 
-    if (error) {
+    if (!queueResponse) {
       throw new Error(
-        `Could not load the fundamentals queue: ${error.message}`,
+        "Supabase returned no response while loading the fundamentals queue.",
+      );
+    }
+
+    if (queueResponse.error) {
+      throw new Error(
+        `Could not load the fundamentals queue: ${queueResponse.error.message}`,
       );
     }
 
     const rows =
-      (data ?? []) as
+      (queueResponse.data ?? []) as
         StockQueueRow[];
 
     if (
@@ -1179,11 +1182,7 @@ Deno.serve(
       let stoppedForRuntime =
         false;
 
-      const {
-        data: syncRun,
-        error:
-          syncRunError,
-      } =
+      const syncRunResponse =
         await supabase
           .from(
             "stock_sync_runs",
@@ -1210,19 +1209,23 @@ Deno.serve(
           .select("id")
           .maybeSingle();
 
-      if (syncRunError) {
+      if (!syncRunResponse) {
+        console.warn(
+          "Supabase returned no response while creating the fundamentals-sync log.",
+        );
+      } else if (syncRunResponse.error) {
         console.warn(
           "Could not create fundamentals-sync log:",
-          syncRunError,
+          syncRunResponse.error,
         );
       } else if (
-        syncRun?.id !==
+        syncRunResponse.data?.id !==
           undefined &&
-        syncRun?.id !== null
+        syncRunResponse.data?.id !== null
       ) {
         syncRunId =
           Number(
-            syncRun.id,
+            syncRunResponse.data.id,
           );
       }
 
@@ -1312,10 +1315,7 @@ Deno.serve(
                     updatedAt,
                   );
 
-                const {
-                  error:
-                    updateError,
-                } =
+                const updateResponse =
                   await supabase
                     .from(
                       "stock_screener_stocks",
@@ -1326,9 +1326,15 @@ Deno.serve(
                       symbol,
                     );
 
-                if (updateError) {
+                if (!updateResponse) {
                   throw new Error(
-                    updateError.message,
+                    `Supabase returned no response while updating ${symbol}.`,
+                  );
+                }
+
+                if (updateResponse.error) {
+                  throw new Error(
+                    updateResponse.error.message,
                   );
                 }
 
@@ -1475,10 +1481,7 @@ Deno.serve(
       if (
         syncRunId !== null
       ) {
-        const {
-          error:
-            finishLogError,
-        } =
+        const finishLogResponse =
           await supabase
             .from(
               "stock_sync_runs",
@@ -1531,10 +1534,14 @@ Deno.serve(
               syncRunId,
             );
 
-        if (finishLogError) {
+        if (!finishLogResponse) {
+          console.warn(
+            "Supabase returned no response while finishing the fundamentals-sync log.",
+          );
+        } else if (finishLogResponse.error) {
           console.warn(
             "Could not finish fundamentals-sync log:",
-            finishLogError,
+            finishLogResponse.error,
           );
         }
       }
@@ -1593,10 +1600,7 @@ Deno.serve(
       if (
         syncRunId !== null
       ) {
-        const {
-          error:
-            finishLogError,
-        } =
+        const failedLogResponse =
           await supabase
             .from(
               "stock_sync_runs",
@@ -1617,10 +1621,14 @@ Deno.serve(
               syncRunId,
             );
 
-        if (finishLogError) {
+        if (!failedLogResponse) {
+          console.warn(
+            "Supabase returned no response while recording the failed fundamentals-sync run.",
+          );
+        } else if (failedLogResponse.error) {
           console.warn(
             "Could not finish failed fundamentals-sync log:",
-            finishLogError,
+            failedLogResponse.error,
           );
         }
       }
