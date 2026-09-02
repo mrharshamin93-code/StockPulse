@@ -140,47 +140,6 @@ function normalizeNewsPayload(data) {
 }
 
 
-async function getGrokNewsFallback(body) {
-  const ticker = String(body?.ticker || "")
-    .trim()
-    .toUpperCase();
-
-  if (!ticker) {
-    return null;
-  }
-
-  const { data, error } =
-    await supabase.functions.invoke(
-      "grok-news",
-      {
-        body: {
-          ticker,
-          limit: Number(body?.limit) || 10,
-        },
-      },
-    );
-
-  if (error) {
-    console.warn(
-      "Grok news fallback error:",
-      error,
-    );
-
-    return null;
-  }
-
-  if (data?.error) {
-    console.warn(
-      "Grok news fallback error:",
-      data.error,
-    );
-
-    return null;
-  }
-
-  return normalizeNewsPayload(data);
-}
-
 async function getStoredIntradayCandles(body) {
   const ticker = String(body?.ticker || "")
     .trim()
@@ -499,56 +458,37 @@ export async function financialDatasetsRequest(body) {
     }
   }
 
+  const functionName =
+    body?.action === "news"
+      ? "stock-news"
+      : "financial-datasets";
+
   const { data, error } =
     await supabase.functions.invoke(
-      "financial-datasets",
+      functionName,
       {
         body: requestBody,
       },
     );
 
   if (body?.action === "news") {
-    if (error || data?.error) {
-      const fallback =
-        await getGrokNewsFallback(body);
+    if (error) {
+      console.error(
+        "Stock news Edge Function error:",
+        error,
+      );
 
-      if (fallback) {
-        return fallback;
-      }
+      throw new Error(
+        error.message ||
+          "News request failed.",
+      );
+    }
 
-      if (error) {
-        console.error(
-          "Financial Datasets Edge Function error:",
-          error,
-        );
-
-        throw new Error(
-          error.message ||
-            "Market data request failed.",
-        );
-      }
-
+    if (data?.error) {
       throw new Error(data.error);
     }
 
-    const normalizedNews =
-      normalizeNewsPayload(data);
-
-    const articles =
-      Array.isArray(normalizedNews?.articles)
-        ? normalizedNews.articles
-        : Array.isArray(normalizedNews?.news)
-          ? normalizedNews.news
-          : [];
-
-    if (articles.length > 0) {
-      return normalizedNews;
-    }
-
-    const fallback =
-      await getGrokNewsFallback(body);
-
-    return fallback || normalizedNews;
+    return normalizeNewsPayload(data);
   }
 
   if (error) {
