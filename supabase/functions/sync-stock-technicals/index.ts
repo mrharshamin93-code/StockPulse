@@ -1,1145 +1,381 @@
-import {
-  createClient,
-  type SupabaseClient,
-} from "npm:@supabase/supabase-js@2";
-import {
-  getCachedFinancialDatasetsPrices,
-} from "../_shared/market-data-cache.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const DEFAULT_BATCH_SIZE = 100;
+const MAX_BATCH_SIZE = 250;
+const MIN_HISTORY = 64;
+const SMA_FAST = 20;
+const SMA_SLOW = 50;
+const RSI_PERIOD = 14;
+
+type Candle = { trading_date: string; close: number };
+type StockRow = { symbol: string };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-sync-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-sync-secret",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const DEFAULT_BATCH_SIZE = 50;
-const MAX_BATCH_SIZE = 100;
-const DEFAULT_STALE_HOURS = 20;
-const MAX_STALE_HOURS = 168;
-const REQUEST_CONCURRENCY = 5;
-const CANDLE_LOOKBACK_DAYS = 220;
-
-const SMA_FAST_PERIOD = 20;
-const SMA_SLOW_PERIOD = 50;
-const RSI_PERIOD = 14;
-const AVERAGE_VOLUME_PERIOD = 30;
-
-type UnknownRecord = Record<string, unknown>;
-
-type StockQueueRow = {
-  symbol: string;
-};
-
-type Candle = {
-  timestamp: number;
-  close: number;
-  volume: number | null;
-};
-
-type ProcessResult = {
-  symbol: string;
-  ok: boolean;
-  updatedFields: number;
-  error: string | null;
-};
-
-function jsonResponse(
-  body: unknown,
-  status = 200,
-) {
-  return new Response(
-    JSON.stringify(body),
-    {
-      status,
-      headers: {
-        ...corsHeaders,
-        "Content-Type":
-          "application/json; charset=utf-8",
-      },
+function response(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json; charset=utf-8",
     },
-  );
+  });
 }
 
-function normalizeText(
-  value: unknown,
-) {
-  return String(value ?? "")
-    .trim();
+function normalizeSymbol(v: unknown) {
+  return String(v ?? "").trim().toUpperCase();
 }
 
-function normalizeSymbol(
-  value: unknown,
-) {
-  return normalizeText(value)
-    .toUpperCase();
+function finite(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
-function roundNumber(
-  value: number | null,
-  digits = 6,
-) {
-  if (value === null) {
-    return null;
-  }
-
-  const multiplier =
-    10 ** digits;
-
-  return Math.round(
-    value * multiplier,
-  ) / multiplier;
+function round(v: number | null, d = 6) {
+  if (v === null) return null;
+  const m = 10 ** d;
+  return Math.round(v * m) / m;
 }
 
-function average(
-  values: number[],
-): number | null {
-  if (values.length === 0) {
-    return null;
-  }
-
-  return values.reduce(
-    (total, value) =>
-      total + value,
-    0,
-  ) / values.length;
+function avg(a: number[]) {
+  return a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
 }
 
-function smaAt(
-  closes: number[],
-  period: number,
-  index: number,
-): number | null {
-  const start =
-    index - period + 1;
-
-  if (start < 0) {
-    return null;
-  }
-
-  return average(
-    closes.slice(
-      start,
-      index + 1,
-    ),
-  );
+function smaAt(c: number[], p: number, i: number) {
+  const s = i - p + 1;
+  return s < 0 ? null : avg(c.slice(s, i + 1));
 }
 
-function percentageReturn(
-  closes: number[],
-  sessions: number,
-): number | null {
-  if (
-    closes.length <=
-    sessions
-  ) {
-    return null;
-  }
+function pctReturn(c: number[], sessions: number) {
+  if (c.length <= sessions) return null;
 
-  const current =
-    closes[
-      closes.length - 1
-    ];
+  const a = c[c.length - 1];
+  const b = c[c.length - 1 - sessions];
 
-  const previous =
-    closes[
-      closes.length -
-        1 -
-        sessions
-    ];
-
-  if (
-    !Number.isFinite(current) ||
-    !Number.isFinite(previous) ||
-    previous <= 0
-  ) {
-    return null;
-  }
-
-  return (
-    (current / previous - 1) *
-    100
-  );
+  return b > 0 ? (a / b - 1) * 100 : null;
 }
 
-function calculateRsi(
-  closes: number[],
-  period = RSI_PERIOD,
-): number | null {
-  if (
-    closes.length <
-    period + 1
-  ) {
-    return null;
-  }
+function rsi(c: number[], period = RSI_PERIOD) {
+  if (c.length < period + 1) return null;
 
-  let averageGain = 0;
-  let averageLoss = 0;
+  let gain = 0;
+  let loss = 0;
 
-  for (
-    let index = 1;
-    index <= period;
-    index += 1
-  ) {
-    const change =
-      closes[index] -
-      closes[index - 1];
+  for (let i = 1; i <= period; i++) {
+    const ch = c[i] - c[i - 1];
 
-    if (change >= 0) {
-      averageGain +=
-        change;
+    if (ch >= 0) {
+      gain += ch;
     } else {
-      averageLoss +=
-        Math.abs(change);
+      loss += -ch;
     }
   }
 
-  averageGain /= period;
-  averageLoss /= period;
+  gain /= period;
+  loss /= period;
 
-  for (
-    let index =
-      period + 1;
-    index < closes.length;
-    index += 1
-  ) {
-    const change =
-      closes[index] -
-      closes[index - 1];
+  for (let i = period + 1; i < c.length; i++) {
+    const ch = c[i] - c[i - 1];
 
-    const gain =
-      Math.max(change, 0);
-
-    const loss =
-      Math.max(-change, 0);
-
-    averageGain =
-      (
-        averageGain *
-          (period - 1) +
-        gain
-      ) /
+    gain =
+      (gain * (period - 1) + Math.max(ch, 0)) /
       period;
 
-    averageLoss =
-      (
-        averageLoss *
-          (period - 1) +
-        loss
-      ) /
+    loss =
+      (loss * (period - 1) + Math.max(-ch, 0)) /
       period;
   }
 
-  if (averageLoss === 0) {
-    return averageGain === 0
-      ? 50
-      : 100;
+  if (loss === 0) {
+    return gain === 0 ? 50 : 100;
   }
 
-  const relativeStrength =
-    averageGain /
-    averageLoss;
-
-  return 100 -
-    100 /
-      (1 +
-        relativeStrength);
+  return 100 - 100 / (1 + gain / loss);
 }
 
-function buildTechnicalUpdate(
-  candles: Candle[],
-  checkedAt: string,
-) {
-  if (
-    candles.length <
-    64
-  ) {
+function buildUpdate(candles: Candle[], checkedAt: string) {
+  if (candles.length < MIN_HISTORY) {
     throw new Error(
-      "Financial Datasets returned fewer than 64 usable daily candles.",
+      `Only ${candles.length} daily closes available; ${MIN_HISTORY} required.`,
     );
   }
 
-  const closes =
-    candles.map(
-      (candle) =>
-        candle.close,
-    );
+  const closes = candles.map((x) => x.close);
+  const last = closes.length - 1;
 
-  const lastIndex =
-    closes.length - 1;
+  const s20 = smaAt(closes, SMA_FAST, last);
+  const s50 = smaAt(closes, SMA_SLOW, last);
 
-  const latestClose =
-    closes[lastIndex];
-
-  const sma20 =
-    smaAt(
-      closes,
-      SMA_FAST_PERIOD,
-      lastIndex,
-    );
-
-  const sma50 =
-    smaAt(
-      closes,
-      SMA_SLOW_PERIOD,
-      lastIndex,
-    );
-
-  if (
-    sma20 === null ||
-    sma50 === null
-  ) {
-    throw new Error(
-      "Not enough candle history to calculate moving averages.",
-    );
+  if (s20 === null || s50 === null) {
+    throw new Error("Not enough history for moving averages.");
   }
 
-  let crossoverIndex:
-    number | null = null;
+  let cross: number | null = null;
 
-  for (
-    let index =
-      SMA_SLOW_PERIOD;
-    index <= lastIndex;
-    index += 1
-  ) {
-    const fastCurrent =
-      smaAt(
-        closes,
-        SMA_FAST_PERIOD,
-        index,
-      );
-
-    const slowCurrent =
-      smaAt(
-        closes,
-        SMA_SLOW_PERIOD,
-        index,
-      );
-
-    const fastPrevious =
-      smaAt(
-        closes,
-        SMA_FAST_PERIOD,
-        index - 1,
-      );
-
-    const slowPrevious =
-      smaAt(
-        closes,
-        SMA_SLOW_PERIOD,
-        index - 1,
-      );
+  for (let i = SMA_SLOW; i <= last; i++) {
+    const fc = smaAt(closes, SMA_FAST, i);
+    const sc = smaAt(closes, SMA_SLOW, i);
+    const fp = smaAt(closes, SMA_FAST, i - 1);
+    const sp = smaAt(closes, SMA_SLOW, i - 1);
 
     if (
-      fastCurrent !== null &&
-      slowCurrent !== null &&
-      fastPrevious !== null &&
-      slowPrevious !== null &&
-      fastCurrent > slowCurrent &&
-      fastPrevious <= slowPrevious
+      fc !== null &&
+      sc !== null &&
+      fp !== null &&
+      sp !== null &&
+      fc > sc &&
+      fp <= sp
     ) {
-      crossoverIndex =
-        index;
+      cross = i;
     }
   }
 
-  const crossoverAt =
-    crossoverIndex === null
-      ? null
-      : new Date(
-          candles[
-            crossoverIndex
-          ].timestamp *
-            1000,
-        ).toISOString();
+  return {
+    technicals_checked_at: checkedAt,
+    technicals_updated_at: checkedAt,
+    technicals_error: null,
 
-  const crossoverDaysAgo =
-    crossoverIndex === null
-      ? null
-      : lastIndex -
-        crossoverIndex;
+    sma_20: round(s20),
+    sma_50: round(s50),
 
-  const previousVolumes =
-    candles
-      .slice(
-        Math.max(
-          0,
-          candles.length -
-            AVERAGE_VOLUME_PERIOD -
-            1,
-        ),
-        candles.length - 1,
-      )
-      .map(
-        (candle) =>
-          candle.volume,
-      )
-      .filter(
-        (
-          value,
-        ): value is number =>
-          value !== null &&
-          Number.isFinite(
-            value,
-          ),
-      );
+    price_above_sma_20: closes[last] > s20,
+    sma_20_above_sma_50: s20 > s50,
 
-  const averageVolume =
-    average(
-      previousVolumes,
-    );
+    bullish_ma_crossover_at:
+      cross === null
+        ? null
+        : `${candles[cross].trading_date}T00:00:00.000Z`,
 
-  const latestVolume =
-    candles[lastIndex]
-      .volume;
+    bullish_ma_crossover_days_ago:
+      cross === null ? null : last - cross,
 
-  const relativeVolume =
-    latestVolume !== null &&
-    averageVolume !== null &&
-    averageVolume > 0
-      ? latestVolume /
-        averageVolume
-      : null;
+    rsi_14: round(rsi(closes)),
 
-  const update:
-    UnknownRecord = {
-      technicals_checked_at:
-        checkedAt,
-      technicals_updated_at:
-        checkedAt,
-      technicals_error:
-        null,
-      sma_20:
-        roundNumber(
-          sma20,
-        ),
-      sma_50:
-        roundNumber(
-          sma50,
-        ),
-      price_above_sma_20:
-        latestClose > sma20,
-      sma_20_above_sma_50:
-        sma20 > sma50,
-      bullish_ma_crossover_at:
-        crossoverAt,
-      bullish_ma_crossover_days_ago:
-        crossoverDaysAgo,
-      rsi_14:
-        roundNumber(
-          calculateRsi(
-            closes,
-          ),
-        ),
-      return_1_week:
-        roundNumber(
-          percentageReturn(
-            closes,
-            5,
-          ),
-        ),
-      return_1_month:
-        roundNumber(
-          percentageReturn(
-            closes,
-            21,
-          ),
-        ),
-      return_3_month:
-        roundNumber(
-          percentageReturn(
-            closes,
-            63,
-          ),
-        ),
-      average_volume_30d:
-        averageVolume === null
-          ? null
-          : Math.round(
-              averageVolume,
-            ),
-      relative_volume:
-        roundNumber(
-          relativeVolume,
-        ),
-    };
-
-  return update;
+    return_1_week: round(pctReturn(closes, 5)),
+    return_1_month: round(pctReturn(closes, 21)),
+    return_3_month: round(pctReturn(closes, 63)),
+  };
 }
 
-async function fetchFinancialDatasetsCandles(
-  client: SupabaseClient,
-  symbol: string,
-  apiKey: string,
-): Promise<Candle[]> {
-  const endDate =
-    new Date()
-      .toISOString()
-      .slice(0, 10);
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      headers: corsHeaders,
+    });
+  }
 
-  const start = new Date();
-  start.setUTCDate(
-    start.getUTCDate() -
-      CANDLE_LOOKBACK_DAYS,
-  );
-
-  const startDate =
-    start.toISOString()
-      .slice(0, 10);
-
-  const cached =
-    await getCachedFinancialDatasetsPrices(
-      client,
-      symbol,
-      apiKey,
+  if (req.method !== "POST") {
+    return response(
       {
-        interval: "day",
-        startDate,
-        endDate,
+        ok: false,
+        error: "Method not allowed.",
       },
-    );
-
-  const prices =
-    cached.data;
-
-  if (!prices.length) {
-    throw new Error(
-      "Financial Datasets returned no usable daily prices.",
+      405,
     );
   }
 
-  return prices.map(
-    (price) => ({
-      timestamp:
-        price.timestamp,
-      close: price.close,
-      volume: price.volume,
-    }),
-  );
-}
+  const expected = Deno.env.get("STOCK_SYNC_SECRET");
+  const received = req.headers.get("x-sync-secret");
 
-async function processInBatches<T, R>(
-  values: T[],
-  concurrency: number,
-  worker: (
-    value: T,
-  ) => Promise<R>,
-) {
-  const results: R[] = [];
-
-  for (
-    let index = 0;
-    index < values.length;
-    index += concurrency
-  ) {
-    const batch =
-      values.slice(
-        index,
-        index + concurrency,
-      );
-
-    const batchResults =
-      await Promise.all(
-        batch.map(worker),
-      );
-
-    results.push(
-      ...batchResults,
+  if (!expected || !received || expected !== received) {
+    return response(
+      {
+        ok: false,
+        error: "Unauthorized stock technical sync request.",
+      },
+      401,
     );
   }
 
-  return results;
-}
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-Deno.serve(
-  async (request) => {
-    if (
-      request.method ===
-      "OPTIONS"
-    ) {
-      return new Response(
-        "ok",
-        {
-          headers:
-            corsHeaders,
-        },
-      );
-    }
+  if (!url || !key) {
+    return response(
+      {
+        ok: false,
+        error: "Supabase service credentials are unavailable.",
+      },
+      503,
+    );
+  }
 
-    if (
-      request.method !==
-      "POST"
-    ) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "Method not allowed.",
-        },
-        405,
-      );
-    }
+  const db = createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
 
-    const expectedSecret =
-      Deno.env.get(
-        "STOCK_SYNC_SECRET",
-      );
+  const body = await req.json().catch(() => ({}));
 
-    const receivedSecret =
-      request.headers.get(
-        "x-sync-secret",
-      );
-
-    if (
-      !expectedSecret ||
-      !receivedSecret ||
-      receivedSecret !==
-        expectedSecret
-    ) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "Unauthorized stock technical sync request.",
-        },
-        401,
-      );
-    }
-
-    const financialDatasetsApiKey =
-      Deno.env.get(
-        "FINANCIAL_DATASETS_API_KEY",
-      );
-
-    const supabaseUrl =
-      Deno.env.get(
-        "SUPABASE_URL",
-      );
-
-    const serviceRoleKey =
-      Deno.env.get(
-        "SUPABASE_SERVICE_ROLE_KEY",
-      );
-
-    if (!financialDatasetsApiKey) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "FINANCIAL_DATASETS_API_KEY is not configured.",
-        },
-        503,
-      );
-    }
-
-    if (
-      !supabaseUrl ||
-      !serviceRoleKey
-    ) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "Supabase service credentials are unavailable.",
-        },
-        503,
-      );
-    }
-
-    const supabase =
-      createClient(
-        supabaseUrl,
-        serviceRoleKey,
-        {
-          auth: {
-            persistSession:
-              false,
-            autoRefreshToken:
-              false,
-          },
-        },
-      );
-
-    const body =
-      await request
-        .json()
-        .catch(() => ({}));
-
-    const rawSymbols: unknown[] =
-      Array.isArray(
-        body?.symbols,
-      )
-        ? body.symbols
-        : [];
-
-    const requestedSymbols = [
-      ...new Set(
-        rawSymbols
+  const explicit = Array.isArray(body?.symbols)
+    ? [...new Set(
+        body.symbols
           .map(normalizeSymbol)
           .filter(Boolean),
-      ),
-    ].slice(
-      0,
-      MAX_BATCH_SIZE,
-    );
+      )].slice(0, MAX_BATCH_SIZE)
+    : [];
 
-    const requestedBatchSize =
-      Math.trunc(
-        Number(
-          body?.batchSize,
-        ),
-      );
+  const requested = Math.trunc(Number(body?.batchSize));
 
-    const batchSize =
-      Number.isFinite(
-        requestedBatchSize,
+  const batchSize = Number.isFinite(requested)
+    ? Math.min(
+        Math.max(requested, 1),
+        MAX_BATCH_SIZE,
       )
-        ? Math.min(
-            Math.max(
-              requestedBatchSize,
-              1,
-            ),
-            MAX_BATCH_SIZE,
-          )
-        : DEFAULT_BATCH_SIZE;
+    : DEFAULT_BATCH_SIZE;
 
-    const requestedStaleHours =
-      Number(
-        body?.staleHours,
-      );
+  const checkedAt = new Date().toISOString();
 
-    const staleHours =
-      Number.isFinite(
-        requestedStaleHours,
-      )
-        ? Math.min(
-            Math.max(
-              requestedStaleHours,
-              1,
-            ),
-            MAX_STALE_HOURS,
-          )
-        : DEFAULT_STALE_HOURS;
+  try {
+    let stocks: StockRow[];
 
-    const staleBefore =
-      new Date(
-        Date.now() -
-          staleHours *
-            60 *
-            60 *
-            1000,
-      ).toISOString();
+    if (explicit.length) {
+      stocks = explicit.map((symbol) => ({ symbol }));
+    } else {
+      const { data, error } = await db
+        .from("stock_screener_stocks")
+        .select("symbol")
+        .eq("is_active", true)
+        .eq("is_common_stock", true)
+        .order("technicals_checked_at", {
+          ascending: true,
+          nullsFirst: true,
+        })
+        .order("symbol", {
+          ascending: true,
+        })
+        .limit(batchSize);
 
-    const startedAt =
-      new Date()
-        .toISOString();
+      if (error) {
+        throw new Error(
+          `Could not load technical queue: ${error.message}`,
+        );
+      }
 
-    let syncRunId:
-      number | null = null;
+      stocks = (data ?? []) as StockRow[];
+    }
 
-    try {
-      let stocks:
-        StockQueueRow[] = [];
+    if (!stocks.length) {
+      return response({
+        ok: true,
+        status: "idle",
+        symbolsRequested: 0,
+      });
+    }
 
-      if (
-        requestedSymbols.length >
-        0
-      ) {
-        stocks =
-          requestedSymbols.map(
-            (symbol) => ({
-              symbol,
-            }),
-          );
-      } else {
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "stock_screener_stocks",
-            )
-            .select("symbol")
-            .eq(
-              "is_active",
-              true,
-            )
-            .eq(
-              "is_common_stock",
-              true,
-            )
-            .or(
-              `technicals_checked_at.is.null,technicals_checked_at.lt.${staleBefore}`,
-            )
-            .order(
-              "technicals_checked_at",
-              {
-                ascending:
-                  true,
-                nullsFirst:
-                  true,
-              },
-            )
-            .order(
-              "symbol",
-              {
-                ascending:
-                  true,
-              },
-            )
-            .limit(
-              batchSize,
-            );
+    const results = [];
+
+    for (const stock of stocks) {
+      const symbol = normalizeSymbol(stock.symbol);
+
+      try {
+        const { data, error } = await db
+          .from("stock_daily_prices")
+          .select("trading_date,close")
+          .eq("ticker", symbol)
+          .order("trading_date", {
+            ascending: true,
+          })
+          .limit(400);
 
         if (error) {
-          throw new Error(
-            `Could not load the technical queue: ${error.message}`,
-          );
+          throw new Error(error.message);
         }
 
-        stocks =
-          (data ?? []) as StockQueueRow[];
-      }
+        const candles: Candle[] = (data ?? [])
+          .map((r: any) => ({
+            trading_date: String(r.trading_date),
+            close: finite(r.close) ?? 0,
+          }))
+          .filter((x) => x.close > 0);
 
-      if (
-        stocks.length === 0
-      ) {
-        return jsonResponse({
+        const update = buildUpdate(
+          candles,
+          checkedAt,
+        );
+
+        const { error: updateError } = await db
+          .from("stock_screener_stocks")
+          .update(update)
+          .eq("symbol", symbol);
+
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
+        results.push({
+          symbol,
           ok: true,
-          status:
-            "idle",
-          message:
-            "No stocks have missing or stale technicals.",
-          staleHours,
-          staleBefore,
-          symbolsRequested:
-            0,
-          symbolsSucceeded:
-            0,
-          symbolsFailed:
-            0,
-          startedAt,
-          finishedAt:
-            new Date()
-              .toISOString(),
+          candles: candles.length,
+        });
+      } catch (e) {
+        const message =
+          e instanceof Error
+            ? e.message
+            : "Unknown technical calculation error.";
+
+        await db
+          .from("stock_screener_stocks")
+          .update({
+            technicals_checked_at: checkedAt,
+            technicals_error: message.slice(0, 1000),
+          })
+          .eq("symbol", symbol);
+
+        results.push({
+          symbol,
+          ok: false,
+          error: message,
         });
       }
-
-      const {
-        data: syncRun,
-        error:
-          syncRunError,
-      } =
-        await supabase
-          .from(
-            "stock_sync_runs",
-          )
-          .insert({
-            job_name:
-              "sync-stock-technicals",
-            status:
-              "running",
-            symbols_requested:
-              stocks.length,
-            started_at:
-              startedAt,
-            metadata: {
-              manualSymbols:
-                requestedSymbols.length >
-                0,
-              batchSize:
-                stocks.length,
-              staleHours,
-              staleBefore,
-              lookbackDays:
-                CANDLE_LOOKBACK_DAYS,
-            },
-          })
-          .select("id")
-          .maybeSingle();
-
-      if (syncRunError) {
-        console.warn(
-          "Could not create technical-sync log:",
-          syncRunError,
-        );
-      } else if (
-        syncRun?.id !==
-          undefined &&
-        syncRun?.id !== null
-      ) {
-        syncRunId =
-          Number(
-            syncRun.id,
-          );
-      }
-
-      const results =
-        await processInBatches(
-          stocks,
-          REQUEST_CONCURRENCY,
-          async (
-            stock,
-          ): Promise<ProcessResult> => {
-            const symbol =
-              stock.symbol;
-
-            const checkedAt =
-              new Date()
-                .toISOString();
-
-            try {
-              const candles =
-                await fetchFinancialDatasetsCandles(
-                  supabase,
-                  symbol,
-                  financialDatasetsApiKey,
-                );
-
-              const update =
-                buildTechnicalUpdate(
-                  candles,
-                  checkedAt,
-                );
-
-              const {
-                error:
-                  updateError,
-              } =
-                await supabase
-                  .from(
-                    "stock_screener_stocks",
-                  )
-                  .update(update)
-                  .eq(
-                    "symbol",
-                    symbol,
-                  );
-
-              if (updateError) {
-                throw new Error(
-                  updateError.message,
-                );
-              }
-
-              return {
-                symbol,
-                ok: true,
-                updatedFields:
-                  Object.keys(
-                    update,
-                  ).length,
-                error:
-                  null,
-              };
-            } catch (error) {
-              const message =
-                error instanceof Error
-                  ? error.message
-                  : "Unknown technical-sync error.";
-
-              const {
-                error:
-                  failureUpdateError,
-              } =
-                await supabase
-                  .from(
-                    "stock_screener_stocks",
-                  )
-                  .update({
-                    technicals_checked_at:
-                      checkedAt,
-                    technicals_error:
-                      message.slice(
-                        0,
-                        1000,
-                      ),
-                  })
-                  .eq(
-                    "symbol",
-                    symbol,
-                  );
-
-              if (
-                failureUpdateError
-              ) {
-                console.error(
-                  `Could not record technical failure for ${symbol}:`,
-                  failureUpdateError,
-                );
-              }
-
-              return {
-                symbol,
-                ok: false,
-                updatedFields:
-                  0,
-                error:
-                  message,
-              };
-            }
-          },
-        );
-
-      const succeeded =
-        results.filter(
-          (result) =>
-            result.ok,
-        );
-
-      const failed =
-        results.filter(
-          (result) =>
-            !result.ok,
-        );
-
-      const status =
-        failed.length === 0
-          ? "completed"
-          : succeeded.length > 0
-            ? "partial"
-            : "failed";
-
-      const finishedAt =
-        new Date()
-          .toISOString();
-
-      if (
-        syncRunId !== null
-      ) {
-        const {
-          error:
-            finishLogError,
-        } =
-          await supabase
-            .from(
-              "stock_sync_runs",
-            )
-            .update({
-              status,
-              symbols_processed:
-                results.length,
-              symbols_succeeded:
-                succeeded.length,
-              symbols_failed:
-                failed.length,
-              finished_at:
-                finishedAt,
-              error_message:
-                failed.length > 0
-                  ? failed
-                      .slice(
-                        0,
-                        10,
-                      )
-                      .map(
-                        (result) =>
-                          `${result.symbol}: ${result.error}`,
-                      )
-                      .join(" | ")
-                      .slice(
-                        0,
-                        4000,
-                      )
-                  : null,
-              metadata: {
-                manualSymbols:
-                  requestedSymbols.length >
-                  0,
-                requestedBatchSize:
-                  batchSize,
-                staleHours,
-                staleBefore,
-                lookbackDays:
-                  CANDLE_LOOKBACK_DAYS,
-                failures:
-                  failed
-                    .slice(
-                      0,
-                      20,
-                    )
-                    .map(
-                      (result) => ({
-                        symbol:
-                          result.symbol,
-                        error:
-                          result.error,
-                      }),
-                    ),
-              },
-            })
-            .eq(
-              "id",
-              syncRunId,
-            );
-
-        if (finishLogError) {
-          console.warn(
-            "Technical sync completed, but the sync log could not be finalized:",
-            finishLogError,
-          );
-        }
-      }
-
-      return jsonResponse({
-        ok:
-          succeeded.length > 0,
-        status,
-        symbolsRequested:
-          stocks.length,
-        symbolsSucceeded:
-          succeeded.length,
-        symbolsFailed:
-          failed.length,
-        staleHours,
-        staleBefore,
-        results,
-        startedAt,
-        finishedAt,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unknown technical-sync error.";
-
-      console.error(
-        "sync-stock-technicals:",
-        error,
-      );
-
-      if (
-        syncRunId !== null
-      ) {
-        await supabase
-          .from(
-            "stock_sync_runs",
-          )
-          .update({
-            status:
-              "failed",
-            error_message:
-              message,
-            finished_at:
-              new Date()
-                .toISOString(),
-          })
-          .eq(
-            "id",
-            syncRunId,
-          );
-      }
-
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            message,
-        },
-        500,
-      );
     }
-  },
-);
+
+    const succeeded = results.filter(
+      (x: any) => x.ok,
+    ).length;
+
+    return response({
+      ok: succeeded > 0,
+
+      status:
+        succeeded === results.length
+          ? "completed"
+          : succeeded
+            ? "partial"
+            : "failed",
+
+      source: "stock_daily_prices",
+      providerRequests: 0,
+
+      symbolsRequested: results.length,
+      symbolsSucceeded: succeeded,
+      symbolsFailed: results.length - succeeded,
+
+      results,
+    });
+  } catch (e) {
+    const message =
+      e instanceof Error
+        ? e.message
+        : "Unknown technical sync error.";
+
+    console.error(
+      "sync-stock-technicals:",
+      e,
+    );
+
+    return response(
+      {
+        ok: false,
+        error: message,
+      },
+      500,
+    );
+  }
+});
