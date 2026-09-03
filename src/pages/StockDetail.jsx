@@ -1374,6 +1374,7 @@ function BuyDetailDialog({
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -1395,11 +1396,17 @@ function BuyDetailDialog({
 
     if (!(parsedQuantity > 0) || !(parsedPrice > 0)) return;
 
+    setSubmitError("");
     setLoading(true);
 
     try {
       await onDone(parsedQuantity, parsedPrice);
       setQuantity("");
+    } catch (error) {
+      console.error("Buy failed:", error);
+      setSubmitError(
+        "Unable to complete the purchase. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -1447,6 +1454,12 @@ function BuyDetailDialog({
             />
           </div>
 
+          {submitError && (
+            <p className="rounded-[12px] bg-red-500/10 px-3 py-2 text-[12px] leading-5 text-red-600">
+              {submitError}
+            </p>
+          )}
+
           <Button
             type="submit"
             disabled={loading}
@@ -1469,6 +1482,7 @@ function SellDetailDialog({
 }) {
   const [quantity, setQuantity] = useState("");
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const max = Number(stock?.quantity) || 0;
 
   async function handleSubmit(event) {
@@ -1478,11 +1492,17 @@ function SellDetailDialog({
 
     if (!(parsedQuantity > 0) || parsedQuantity > max) return;
 
+    setSubmitError("");
     setLoading(true);
 
     try {
       await onDone(parsedQuantity);
       setQuantity("");
+    } catch (error) {
+      console.error("Sell failed:", error);
+      setSubmitError(
+        "Unable to complete the sale. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -1527,6 +1547,12 @@ function SellDetailDialog({
               </button>
             </div>
           </div>
+
+          {submitError && (
+            <p className="rounded-[12px] bg-red-500/10 px-3 py-2 text-[12px] leading-5 text-red-600">
+              {submitError}
+            </p>
+          )}
 
           <Button
             type="submit"
@@ -1975,17 +2001,6 @@ export default function StockDetail() {
   async function handleBuyDone(quantity, price) {
     if (!user || !stock) return;
 
-    const oldQuantity = Number(stock.quantity) || 0;
-    const oldAverageCost = Number(stock.purchase_price) || 0;
-    const newQuantity = oldQuantity + quantity;
-
-    const newAverageCost = oldQuantity
-      ? (
-          oldAverageCost * oldQuantity +
-          price * quantity
-        ) / newQuantity
-      : price;
-
     let currentPrice = price;
 
     try {
@@ -2004,125 +2019,40 @@ export default function StockDetail() {
       );
     }
 
-    await supabase
-      .from("stock_transactions")
-      .insert({
-        user_id: user.id,
-        ticker: stock.ticker.toUpperCase(),
-        company_name: stock.company_name,
-        type: "buy",
-        quantity,
-        price,
-        total: quantity * price,
-      });
+    const holdingId = stock._watchlistOnly
+      ? null
+      : stock.id || stockId || null;
 
-    if (stock._watchlistOnly) {
-      const normalizedTicker = stock.ticker.toUpperCase();
-
-      const {
-        data: existingHolding,
-        error: existingHoldingError,
-      } = await supabase
-        .from("stocks")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("ticker", normalizedTicker)
-        .maybeSingle();
-
-      if (existingHoldingError) throw existingHoldingError;
-
-      if (existingHolding) {
-        const existingQuantity =
-          Number(existingHolding.quantity) || 0;
-
-        const existingAverageCost =
-          Number(existingHolding.purchase_price) || 0;
-
-        const combinedQuantity =
-          existingQuantity + quantity;
-
-        const combinedAverageCost =
-          existingQuantity > 0
-            ? (
-                existingAverageCost * existingQuantity +
-                price * quantity
-              ) / combinedQuantity
-            : price;
-
-        const {
-          data: updatedHolding,
-          error: updateExistingError,
-        } = await supabase
-          .from("stocks")
-          .update({
-            quantity: combinedQuantity,
-            purchase_price:
-              +combinedAverageCost.toFixed(4),
-            current_price: currentPrice,
-          })
-          .eq("id", existingHolding.id)
-          .select()
-          .single();
-
-        if (updateExistingError) {
-          throw updateExistingError;
-        }
-
-        setStock({
-          ...updatedHolding,
-          _watchlistOnly: false,
-        });
-
-        setBuyOpen(false);
-        return;
+    const {
+      data,
+      error,
+    } = await supabase.rpc(
+      "execute_stock_trade",
+      {
+        p_ticker: stock.ticker.toUpperCase(),
+        p_company_name:
+          stock.company_name || stock.ticker,
+        p_trade_type: "buy",
+        p_quantity: quantity,
+        p_price: price,
+        p_current_price: currentPrice,
+        p_sector: stock.sector || "",
+        p_stock_id: holdingId,
       }
+    );
 
-      const { data, error } = await supabase
-        .from("stocks")
-        .insert({
-          user_id: user.id,
-          ticker: normalizedTicker,
-          company_name: stock.company_name,
-          quantity,
-          purchase_price: price,
-          current_price: currentPrice,
-          sector: stock.sector || "",
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setStock({
-        ...data,
-        _watchlistOnly: false,
-      });
-
-      setBuyOpen(false);
-      return;
+    if (error) {
+      throw error;
     }
 
-    const holdingId = stock.id || stockId;
-
-    if (!holdingId) {
-      throw new Error("Unable to identify portfolio holding.");
+    if (!data?.success || !data?.stock) {
+      throw new Error(
+        "The purchase could not be completed."
+      );
     }
-
-    const { data, error } = await supabase
-      .from("stocks")
-      .update({
-        quantity: newQuantity,
-        purchase_price: +newAverageCost.toFixed(4),
-        current_price: currentPrice,
-      })
-      .eq("id", holdingId)
-      .select()
-      .single();
-
-    if (error) throw error;
 
     setStock({
-      ...data,
+      ...data.stock,
       _watchlistOnly: false,
     });
 
@@ -2133,67 +2063,77 @@ export default function StockDetail() {
     if (!user || !stock || stock._watchlistOnly) return;
 
     const heldQuantity = Number(stock.quantity) || 0;
+
+    if (!(quantity > 0) || quantity > heldQuantity) {
+      throw new Error(
+        "Enter a valid number of shares to sell."
+      );
+    }
+
     const sellPrice =
       Number(stock.current_price) ||
       Number(stock.purchase_price) ||
       0;
 
-    const soldQuantity = Math.min(quantity, heldQuantity);
-
-    const remainingQuantity =
-      +Math.max(
-        0,
-        heldQuantity - soldQuantity
-      ).toFixed(6);
-
-    await supabase
-      .from("stock_transactions")
-      .insert({
-        user_id: user.id,
-        ticker: stock.ticker.toUpperCase(),
-        company_name: stock.company_name,
-        type: "sell",
-        quantity: soldQuantity,
-        price: sellPrice,
-        total: soldQuantity * sellPrice,
-      });
+    if (!(sellPrice > 0)) {
+      throw new Error(
+        "A valid stock price is required before selling."
+      );
+    }
 
     const holdingId = stock.id || stockId;
 
     if (!holdingId) {
-      throw new Error("Unable to identify portfolio holding.");
+      throw new Error(
+        "Unable to identify portfolio holding."
+      );
     }
 
-    if (remainingQuantity <= 0) {
-      const { error } = await supabase
-        .from("stocks")
-        .delete()
-        .eq("id", holdingId);
+    const {
+      data,
+      error,
+    } = await supabase.rpc(
+      "execute_stock_trade",
+      {
+        p_ticker: stock.ticker.toUpperCase(),
+        p_company_name:
+          stock.company_name || stock.ticker,
+        p_trade_type: "sell",
+        p_quantity: quantity,
+        p_price: sellPrice,
+        p_current_price: sellPrice,
+        p_sector: stock.sector || "",
+        p_stock_id: holdingId,
+      }
+    );
 
-      if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
-      setSellOpen(false);
+    if (!data?.success) {
+      throw new Error(
+        "The sale could not be completed."
+      );
+    }
+
+    setSellOpen(false);
+
+    if (data.deleted) {
       navigate("/home");
       return;
     }
 
-    const { data, error } = await supabase
-      .from("stocks")
-      .update({
-        quantity: remainingQuantity,
-      })
-      .eq("id", holdingId)
-      .select()
-      .single();
-
-    if (error) throw error;
+    if (!data.stock) {
+      throw new Error(
+        "The updated portfolio holding was not returned."
+      );
+    }
 
     setStock({
-      ...data,
+      ...data.stock,
       _watchlistOnly: false,
     });
-
-    setSellOpen(false);
   }
 
   if (loading) {
