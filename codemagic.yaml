@@ -98,18 +98,22 @@ workflows:
           xcode-project use-profiles \
             --project "$XCODE_PROJECT"
 
-      - name: Set next App Store build number
+      - name: Set iOS build number
         script: |
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          NEXT_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          NEXT_BUILD_NUMBER="$BUILD_NUMBER"
 
-          echo "Latest App Store build: $LATEST_BUILD_NUMBER"
-          echo "Next build number: $NEXT_BUILD_NUMBER"
+          if [ -z "$NEXT_BUILD_NUMBER" ] || [ "$NEXT_BUILD_NUMBER" -lt 2 ]; then
+            NEXT_BUILD_NUMBER=2
+          fi
+
+          echo "Codemagic BUILD_NUMBER: $BUILD_NUMBER"
+          echo "Using iOS build number: $NEXT_BUILD_NUMBER"
 
           sed -i '' \
             "s/CURRENT_PROJECT_VERSION = [0-9][0-9]*;/CURRENT_PROJECT_VERSION = $NEXT_BUILD_NUMBER;/g" \
             ios/App/App.xcodeproj/project.pbxproj
 
+          echo "Xcode build numbers after update:"
           grep "CURRENT_PROJECT_VERSION" ios/App/App.xcodeproj/project.pbxproj
 
       - name: Build signed IPA
