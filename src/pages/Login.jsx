@@ -1,230 +1,122 @@
 import React, { useEffect, useState } from "react";
-import {
-  Link,
-  useNavigate,
-  useSearchParams,
-} from "react-router-dom";
-import {
-  BarChart3,
-  Loader2,
-} from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { BarChart3, Loader2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
-import {
-  isNativeApp,
-  signInWithGoogle,
-} from "@/lib/mobileAuth";
-
+import { isNativeApp, signInWithGoogle } from "@/lib/mobileAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+function friendlyLoginError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+
+  if (message.includes("invalid login credentials")) {
+    return "Invalid email or password.";
+  }
+
+  if (message.includes("email not confirmed")) {
+    return "Please confirm your email address before signing in.";
+  }
+
+  if (message.includes("rate limit") || message.includes("too many")) {
+    return "Too many sign-in attempts. Please wait a few minutes and try again.";
+  }
+
+  return "Unable to sign in right now. Please try again.";
+}
+
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const nativeApp = isNativeApp();
 
-  const [searchParams] =
-    useSearchParams();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState("");
+  const [error, setError] = useState("");
 
-  const nativeApp =
-    isNativeApp();
-
-  const [email, setEmail] =
-    useState("");
-
-  const [
-    password,
-    setPassword,
-  ] = useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [
-    oauthLoading,
-    setOauthLoading,
-  ] = useState("");
-
-  const [error, setError] =
-    useState("");
-
-  /*
-   * Native OAuth errors are sent back to the
-   * login screen by mobileAuth.js.
-   */
   useEffect(() => {
-    const callbackError =
-      searchParams.get("error");
-
-    if (callbackError) {
-      setError(callbackError);
+    if (searchParams.get("error")) {
+      setError("Google sign-in could not be completed. Please try again.");
     }
   }, [searchParams]);
 
-  const handleSubmit =
-    async (event) => {
-      event.preventDefault();
+  async function handleSubmit(event) {
+    event.preventDefault();
 
-      setLoading(true);
-      setError("");
+    if (loading || oauthLoading) return;
 
-      try {
-        const {
-          error:
-            signInError,
-        } =
-          await supabase.auth
-            .signInWithPassword({
-              email:
-                email.trim(),
+    setLoading(true);
+    setError("");
 
-              password,
-            });
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
-        if (signInError) {
-          if (
-            signInError.message
-              .includes(
-                "Invalid login credentials",
-              )
-          ) {
-            throw new Error(
-              "Invalid email or password",
-            );
-          }
+      if (signInError) throw signInError;
 
-          if (
-            signInError.message
-              .includes(
-                "Email not confirmed",
-              )
-          ) {
-            throw new Error(
-              "Please confirm your email address before logging in.",
-            );
-          }
+      navigate("/", { replace: true });
+    } catch (submitError) {
+      console.error("Email sign-in failed:", submitError);
+      setError(friendlyLoginError(submitError));
+    } finally {
+      setLoading(false);
+    }
+  }
 
-          throw signInError;
-        }
+  async function handleGoogleLogin() {
+    if (loading || oauthLoading) return;
 
-        navigate(
-          "/",
-          {
-            replace: true,
-          },
-        );
-      } catch (submitError) {
-        setError(
-          submitError instanceof Error
-            ? submitError.message
-            : "Invalid email or password",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+    setError("");
+    setOauthLoading("google");
 
-  const handleGoogleLogin =
-    async () => {
-      if (oauthLoading) {
-        return;
-      }
+    try {
+      await signInWithGoogle();
 
-      setError("");
-
-      setOauthLoading(
-        "google",
-      );
-
-      try {
-        await signInWithGoogle();
-
-        /*
-         * Web OAuth redirects away from this
-         * page immediately.
-         *
-         * Native OAuth leaves the app open
-         * while the system browser handles
-         * authentication. The appUrlOpen
-         * listener in mobileAuth.js completes
-         * the login afterward.
-         */
-        if (nativeApp) {
-          setOauthLoading("");
-        }
-      } catch (oauthError) {
-        console.error(
-          "Google sign-in failed:",
-          oauthError,
-        );
-
-        setError(
-          oauthError instanceof Error
-            ? oauthError.message
-            : "Google sign-in failed.",
-        );
-
+      if (nativeApp) {
         setOauthLoading("");
       }
-    };
+    } catch (oauthError) {
+      console.error("Google sign-in failed:", oauthError);
+      setError("Google sign-in could not be completed. Please try again.");
+      setOauthLoading("");
+    }
+  }
 
-  /*
-   * Apple remains web-only until the native
-   * Apple Developer configuration is ready.
-   */
-  const handleAppleLogin =
-    async () => {
-      if (
-        nativeApp ||
-        oauthLoading
-      ) {
-        return;
-      }
+  async function handleAppleLogin() {
+    if (nativeApp || loading || oauthLoading) return;
 
-      setError("");
+    setError("");
+    setOauthLoading("apple");
 
-      setOauthLoading(
-        "apple",
-      );
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "apple",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
 
-      try {
-        const {
-          error:
-            oauthError,
-        } =
-          await supabase.auth
-            .signInWithOAuth({
-              provider:
-                "apple",
+      if (oauthError) throw oauthError;
+    } catch (oauthError) {
+      console.error("Apple sign-in failed:", oauthError);
+      setError("Apple sign-in could not be completed. Please try again.");
+      setOauthLoading("");
+    }
+  }
 
-              options: {
-                redirectTo:
-                  `${window.location.origin}/auth/callback`,
-              },
-            });
-
-        if (oauthError) {
-          throw oauthError;
-        }
-      } catch (oauthError) {
-        setError(
-          oauthError instanceof Error
-            ? oauthError.message
-            : "Apple sign-in failed.",
-        );
-
-        setOauthLoading("");
-      }
-    };
+  const busy = loading || oauthLoading !== "";
 
   return (
     <div
       className="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-8"
       style={{
-        paddingTop:
-          "calc(env(safe-area-inset-top) + 24px)",
-
-        paddingBottom:
-          "calc(env(safe-area-inset-bottom) + 24px)",
+        paddingTop: "calc(env(safe-area-inset-top) + 24px)",
+        paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)",
       }}
     >
       <div className="w-full max-w-sm">
@@ -255,85 +147,28 @@ export default function Login() {
           <Button
             variant="outline"
             className="flex h-11 w-full items-center justify-center gap-3 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
-            onClick={
-              handleGoogleLogin
-            }
+            onClick={handleGoogleLogin}
             type="button"
-            disabled={
-              loading ||
-              oauthLoading !==
-                ""
-            }
+            disabled={busy}
           >
-            {oauthLoading ===
-            "google" ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-            ) : (
-              <svg
-                className="block h-5 w-5 shrink-0"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                  fill="#4285F4"
-                />
-
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                  fill="#FBBC05"
-                />
-
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
-              </svg>
-            )}
-
-            <span>
-              Continue with Google
-            </span>
+            {oauthLoading === "google" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            Continue with Google
           </Button>
 
           {!nativeApp ? (
             <Button
               variant="outline"
               className="flex h-11 w-full items-center justify-center gap-3 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
-              onClick={
-                handleAppleLogin
-              }
+              onClick={handleAppleLogin}
               type="button"
-              disabled={
-                loading ||
-                oauthLoading !==
-                  ""
-              }
+              disabled={busy}
             >
-              {oauthLoading ===
-              "apple" ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-              ) : (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-visible">
-                  <svg
-                    className="block h-4 w-4 overflow-visible fill-current"
-                    viewBox="0 0 24 28"
-                    aria-hidden="true"
-                    preserveAspectRatio="xMidYMid meet"
-                  >
-                    <path d="M17.05 14.536c-.03-3.223 2.633-4.773 2.754-4.847-1.5-2.19-3.826-2.49-4.644-2.523-1.978-.2-3.86 1.164-4.864 1.164-1.003 0-2.55-1.135-4.195-1.104-2.158.032-4.15 1.256-5.26 3.193-2.246 3.89-.572 9.641 1.614 12.798 1.07 1.553 2.347 3.297 4.02 3.235 1.612-.064 2.22-1.043 4.167-1.043 1.946 0 2.493 1.043 4.196 1.01 1.734-.03 2.83-1.57 3.89-3.128 1.23-1.796 1.736-3.537 1.766-3.628-.038-.012-3.39-1.3-3.424-5.127zM13.87 5.89c.888-1.077 1.488-2.574 1.324-4.07-1.28.052-2.83.853-3.748 1.93-.823.95-1.544 2.47-1.35 3.925 1.43.11 2.886-.727 3.774-1.785z" />
-                  </svg>
-                </span>
-              )}
-
-              <span>
-                Continue with Apple
-              </span>
+              {oauthLoading === "apple" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              Continue with Apple
             </Button>
           ) : null}
 
@@ -341,59 +176,31 @@ export default function Login() {
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-gray-200" />
             </div>
-
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-gray-400">
-                or
-              </span>
+              <span className="bg-white px-2 text-gray-400">or</span>
             </div>
           </div>
 
-          <form
-            onSubmit={
-              handleSubmit
-            }
-            className="space-y-4"
-          >
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">
-                Email
-              </Label>
-
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
-                onChange={(
-                  event,
-                ) =>
-                  setEmail(
-                    event.target
-                      .value,
-                  )
-                }
+                onChange={(event) => setEmail(event.target.value)}
                 required
                 autoComplete="email"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">
-                Password
-              </Label>
-
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
-                onChange={(
-                  event,
-                ) =>
-                  setPassword(
-                    event.target
-                      .value,
-                  )
-                }
+                onChange={(event) => setPassword(event.target.value)}
                 required
                 autoComplete="current-password"
               />
@@ -402,16 +209,9 @@ export default function Login() {
             <Button
               type="submit"
               className="h-11 w-full bg-gray-900 text-white hover:bg-gray-800"
-              disabled={
-                loading ||
-                oauthLoading !==
-                  ""
-              }
+              disabled={busy}
             >
-              {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Sign In
             </Button>
           </form>
@@ -433,19 +233,12 @@ export default function Login() {
           </div>
 
           <p className="text-center text-xs leading-relaxed text-gray-400">
-            By continuing, you
-            agree to the{" "}
-            <Link
-              to="/terms"
-              className="underline hover:text-gray-600"
-            >
+            By continuing, you agree to the{" "}
+            <Link to="/terms" className="underline hover:text-gray-600">
               Terms
             </Link>{" "}
             and acknowledge the{" "}
-            <Link
-              to="/privacy"
-              className="underline hover:text-gray-600"
-            >
+            <Link to="/privacy" className="underline hover:text-gray-600">
               Privacy Policy
             </Link>
             .
@@ -456,38 +249,15 @@ export default function Login() {
           aria-label="Legal and support"
           className="mt-5 flex items-center justify-center gap-3 text-[11px] text-gray-500"
         >
-          <Link
-            to="/privacy"
-            className="transition-colors hover:text-gray-900 hover:underline"
-          >
+          <Link to="/privacy" className="hover:text-gray-900 hover:underline">
             Privacy
           </Link>
-
-          <span
-            aria-hidden="true"
-            className="text-gray-300"
-          >
-            •
-          </span>
-
-          <Link
-            to="/terms"
-            className="transition-colors hover:text-gray-900 hover:underline"
-          >
+          <span aria-hidden="true" className="text-gray-300">•</span>
+          <Link to="/terms" className="hover:text-gray-900 hover:underline">
             Terms
           </Link>
-
-          <span
-            aria-hidden="true"
-            className="text-gray-300"
-          >
-            •
-          </span>
-
-          <Link
-            to="/contact-us"
-            className="transition-colors hover:text-gray-900 hover:underline"
-          >
+          <span aria-hidden="true" className="text-gray-300">•</span>
+          <Link to="/contact-us" className="hover:text-gray-900 hover:underline">
             Contact Us
           </Link>
         </nav>
