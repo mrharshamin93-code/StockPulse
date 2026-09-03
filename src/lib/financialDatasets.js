@@ -469,6 +469,27 @@ function normalizeCandlePayload(data, originalBody) {
   };
 }
 
+function safeProviderError(action) {
+  if (action === "metrics") {
+    return new Error(
+      "Fundamentals are temporarily unavailable.",
+    );
+  }
+
+  if (
+    action === "candles" ||
+    action === "candles_range"
+  ) {
+    return new Error(
+      "Chart is unavailable for now.",
+    );
+  }
+
+  return new Error(
+    "Market data is temporarily unavailable. Please try again.",
+  );
+}
+
 export async function financialDatasetsRequest(body) {
   const requestBody = normalizeCandleRequest(body);
 
@@ -509,20 +530,17 @@ export async function financialDatasetsRequest(body) {
     );
 
   if (body?.action === "news") {
-    if (error) {
+    if (error || data?.error) {
       console.error(
-        "Stock news Edge Function error:",
-        error,
+        "Stock news request failed:",
+        error || data?.error,
       );
 
-      throw new Error(
-        error.message ||
-          "News request failed.",
-      );
-    }
-
-    if (data?.error) {
-      throw new Error(data.error);
+      return {
+        articles: [],
+        news: [],
+        unavailable: true,
+      };
     }
 
     return normalizeNewsPayload(data);
@@ -534,14 +552,20 @@ export async function financialDatasetsRequest(body) {
       error,
     );
 
-    throw new Error(
-      error.message ||
-        "Market data request failed.",
+    throw safeProviderError(
+      String(body?.action || "").toLowerCase(),
     );
   }
 
   if (data?.error) {
-    throw new Error(data.error);
+    console.error(
+      "Financial Datasets provider error:",
+      data.error,
+    );
+
+    throw safeProviderError(
+      String(body?.action || "").toLowerCase(),
+    );
   }
 
   if (body?.action === "metrics") {
