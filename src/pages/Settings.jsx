@@ -22,6 +22,7 @@ export default function Settings() {
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const savedCurrency =
     localStorage.getItem("stockpulse_currency") || "USD";
@@ -53,20 +54,71 @@ export default function Settings() {
     }
   };
 
-  const handleDeleteAccount = () => {
-    /*
-      Connect this to your secure server-side
-      account-deletion endpoint.
+  const handleDeleteAccount = async () => {
+    if (isDeletingAccount) return;
 
-      Never expose the Supabase service-role key
-      in frontend code.
-    */
+    try {
+      setIsDeletingAccount(true);
 
-    window.alert(
-      "Account deletion still needs to be connected to the secure server endpoint."
-    );
+      const {
+        data,
+        error,
+      } = await supabase.functions.invoke(
+        "delete-account",
+        {
+          body: {
+            confirmation: "DELETE_ACCOUNT",
+          },
+        }
+      );
 
-    setShowDeleteModal(false);
+      if (error) {
+        throw error;
+      }
+
+      if (!data?.success) {
+        throw new Error(
+          data?.error ||
+            "The account could not be deleted."
+        );
+      }
+
+      try {
+        await supabase.auth.signOut({
+          scope: "local",
+        });
+      } catch (signOutError) {
+        console.warn(
+          "Local sign-out after account deletion failed:",
+          signOutError
+        );
+      }
+
+      try {
+        localStorage.removeItem(
+          "stockpulse_currency"
+        );
+      } catch {
+        // Local storage cleanup is best-effort.
+      }
+
+      setShowDeleteModal(false);
+
+      navigate("/login", {
+        replace: true,
+      });
+    } catch (error) {
+      console.error(
+        "Unable to delete account:",
+        error
+      );
+
+      window.alert(
+        "Unable to delete your account right now. Please try again."
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   return (
@@ -221,6 +273,7 @@ export default function Settings() {
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onConfirm={handleDeleteAccount}
+        deleting={isDeletingAccount}
       />
     </div>
   );
@@ -390,6 +443,7 @@ function DeleteAccountModal({
   open,
   onClose,
   onConfirm,
+  deleting = false,
 }) {
   const [confirmationText, setConfirmationText] =
     useState("");
@@ -401,14 +455,15 @@ function DeleteAccountModal({
     "DELETE";
 
   const handleClose = () => {
+    if (deleting) return;
+
     setConfirmationText("");
     onClose();
   };
 
   const handleConfirm = () => {
-    if (!canDelete) return;
+    if (!canDelete || deleting) return;
 
-    setConfirmationText("");
     onConfirm();
   };
 
@@ -503,6 +558,7 @@ function DeleteAccountModal({
               event.target.value
             )
           }
+          disabled={deleting}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck="false"
@@ -518,12 +574,14 @@ function DeleteAccountModal({
             text-[15px]
             text-foreground
             outline-none
-            transition-[border-color,box-shadow]
+            transition-[border-color,box-shadow,opacity]
             duration-150
             placeholder:text-muted-foreground
             focus:border-red-500
             focus:ring-2
             focus:ring-red-100
+            disabled:cursor-not-allowed
+            disabled:opacity-60
             dark:focus:ring-red-950/40
           "
         />
@@ -533,6 +591,7 @@ function DeleteAccountModal({
           <button
             type="button"
             onClick={handleClose}
+            disabled={deleting}
             className="
               h-[46px]
               rounded-[13px]
@@ -540,10 +599,12 @@ function DeleteAccountModal({
               text-[15px]
               font-semibold
               text-foreground
-              transition-[transform,background-color]
+              transition-[transform,background-color,opacity]
               duration-150
               active:scale-[0.98]
               active:bg-muted/70
+              disabled:cursor-not-allowed
+              disabled:opacity-60
             "
           >
             Cancel
@@ -551,7 +612,7 @@ function DeleteAccountModal({
 
           <button
             type="button"
-            disabled={!canDelete}
+            disabled={!canDelete || deleting}
             onClick={handleConfirm}
             className={[
               `
@@ -563,12 +624,14 @@ function DeleteAccountModal({
                 transition-[transform,background-color,opacity]
                 duration-150
               `,
-              canDelete
+              canDelete && !deleting
                 ? "bg-red-600 active:scale-[0.98] active:bg-red-700"
                 : "cursor-not-allowed bg-red-300 dark:bg-red-900/50",
             ].join(" ")}
           >
-            Delete
+            {deleting
+              ? "Deleting..."
+              : "Delete"}
           </button>
         </div>
       </div>
