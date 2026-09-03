@@ -1401,6 +1401,23 @@ Deno.serve(
               );
       }
 
+      /*
+       * A negative P/E represents a company with negative earnings, so it is
+       * not meaningfully "lower" than a positive valuation multiple. Keep the
+       * Lowest P/E screen focused on profitable companies instead of placing
+       * loss-making companies at the top of the results.
+       */
+      if (
+        sortColumn === "pe" &&
+        ascending
+      ) {
+        query =
+          query.gt(
+            "pe",
+            0,
+          );
+      }
+
       query =
         query
           .order(
