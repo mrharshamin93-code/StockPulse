@@ -18,6 +18,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import { financialDatasetsRequest } from "@/lib/financialDatasets";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -286,10 +287,65 @@ export default function PriceAlerts() {
       return;
     }
 
+    const normalizedTicker =
+      ticker
+        .trim()
+        .toUpperCase();
+
     setSaving(true);
     setError("");
 
     try {
+      let quote;
+
+      try {
+        quote = await financialDatasetsRequest({
+          action: "quote",
+          ticker: normalizedTicker,
+        });
+      } catch (validationError) {
+        const message = String(
+          validationError?.message ||
+            "",
+        ).toLowerCase();
+
+        if (
+          message.includes("no prices") ||
+          message.includes("no data") ||
+          message.includes("no usable quote") ||
+          message.includes("invalid ticker") ||
+          message.includes("valid ticker") ||
+          message.includes("not found")
+        ) {
+          setError("Ticker not found.");
+          return;
+        }
+
+        console.error(
+          "Ticker validation failed:",
+          validationError,
+        );
+
+        setError(
+          "Unable to verify this ticker right now. Please try again.",
+        );
+        return;
+      }
+
+      const validatedPrice = Number(
+        quote?.c ??
+          quote?.price ??
+          quote?.current_price,
+      );
+
+      if (
+        !Number.isFinite(validatedPrice) ||
+        validatedPrice <= 0
+      ) {
+        setError("Ticker not found.");
+        return;
+      }
+
       const {
         error: insertError,
       } =
@@ -300,9 +356,7 @@ export default function PriceAlerts() {
               user.id,
 
             ticker:
-              ticker
-                .trim()
-                .toUpperCase(),
+              normalizedTicker,
 
             condition,
 
@@ -943,9 +997,12 @@ export default function PriceAlerts() {
                 onChange={(
                   event,
                 ) =>
-                  setTicker(
-                    event.target.value.toUpperCase(),
-                  )
+                  {
+                    setTicker(
+                      event.target.value.toUpperCase(),
+                    );
+                    setError("");
+                  }
                 }
                 required
                 className="uppercase"
