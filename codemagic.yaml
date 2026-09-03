@@ -52,3 +52,72 @@ workflows:
       - "$HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app"
       - "$HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM"
       - "/tmp/xcodebuild_logs/*.log"
+
+  ios-testflight:
+    name: StockPulse TestFlight
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+
+    environment:
+      groups:
+        - appstore_credentials
+
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.harshamin.stockpulse
+
+      node: 22
+      xcode: latest
+
+      vars:
+        APP_STORE_APPLE_ID: "6808373094"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+
+    cache:
+      cache_paths:
+        - "$HOME/.npm"
+        - "$CM_BUILD_DIR/node_modules"
+        - "$CM_BUILD_DIR/SourcePackages"
+
+    scripts:
+      - name: Install JavaScript dependencies
+        script: |
+          npm ci
+
+      - name: Build and sync Capacitor iOS
+        script: |
+          npm run build:ios
+
+      - name: Set up iOS code signing
+        script: |
+          xcode-project use-profiles \
+            --project "$XCODE_PROJECT"
+
+      - name: Set next App Store build number
+        script: |
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          cd ios/App
+          agvtool new-version -all $((LATEST_BUILD_NUMBER + 1))
+
+      - name: Build signed IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" \
+            --archive-flags "-clonedSourcePackagesDirPath $CM_BUILD_DIR/SourcePackages"
+
+    artifacts:
+      - "build/ios/ipa/*.ipa"
+      - "ios/App/build/ios/ipa/*.ipa"
+      - "$HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app"
+      - "$HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM"
+      - "/tmp/xcodebuild_logs/*.log"
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
