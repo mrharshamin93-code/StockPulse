@@ -101,8 +101,16 @@ workflows:
       - name: Set next App Store build number
         script: |
           LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          cd ios/App
-          agvtool new-version -all $((LATEST_BUILD_NUMBER + 1))
+          NEXT_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+
+          echo "Latest App Store build: $LATEST_BUILD_NUMBER"
+          echo "Next build number: $NEXT_BUILD_NUMBER"
+
+          sed -i '' \
+            "s/CURRENT_PROJECT_VERSION = [0-9][0-9]*;/CURRENT_PROJECT_VERSION = $NEXT_BUILD_NUMBER;/g" \
+            ios/App/App.xcodeproj/project.pbxproj
+
+          grep "CURRENT_PROJECT_VERSION" ios/App/App.xcodeproj/project.pbxproj
 
       - name: Build signed IPA
         script: |
