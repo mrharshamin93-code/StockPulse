@@ -192,3 +192,41 @@ a:has(> .lucide-arrow-left) {
 :root[data-stockpulse-theme] [class~="hover:bg-gray-50"]:hover {
   background-color: hsl(var(--muted));
 }
+
+@keyframes stockpulse-analysis-progress {
+  from {
+    background-size: 2% 100%;
+  }
+
+  to {
+    background-size: 100% 100%;
+  }
+}
+
+/* Analysis page: approximate progress for an uncached AI analysis (~85 seconds). */
+main > div[class~="mt-6"][class~="py-10"][class~="text-center"] > p:last-child::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 18px 0 0;
+  border-radius: 9999px;
+  background-color: hsl(var(--muted));
+  background-image: linear-gradient(
+    to right,
+    hsl(var(--foreground)),
+    hsl(var(--foreground))
+  );
+  background-repeat: no-repeat;
+  background-size: 2% 100%;
+  animation: stockpulse-analysis-progress 85s linear forwards;
+}
+
+main > div[class~="mt-6"][class~="py-10"][class~="text-center"] > p:last-child::after {
+  content: "Please wait up to 2 minutes";
+  display: block;
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: hsl(var(--muted-foreground));
+}
