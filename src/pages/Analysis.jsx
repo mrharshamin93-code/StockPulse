@@ -1081,11 +1081,6 @@ export default function Analysis() {
                         <TrendingDown className="h-3.5 w-3.5" />
                       )}
 
-                      {quoteChange !==
-                      null
-                        ? `${quoteChange >= 0 ? "+" : ""}${quoteChange.toFixed(2)} · `
-                        : ""}
-
                       {quoteChangePercent >=
                       0
                         ? "+"
