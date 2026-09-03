@@ -623,6 +623,8 @@ function StockChart({
 
   const primaryTicker = normalizeTickerInput(ticker);
   const comparisonsActive = compareTickers.length > 0;
+  const longRangeUnavailable =
+    activePeriod === "10Y" || activePeriod === "All";
 
   useEffect(() => {
     setCompareTickers([]);
@@ -733,6 +735,13 @@ function StockChart({
     setPrimaryReturn(fallbackReturn);
     onPeriodReturnChange(fallbackReturn);
 
+    if (longRangeUnavailable) {
+      setChartData([]);
+      setChartError("");
+      setChartLoading(false);
+      return undefined;
+    }
+
     const controller = new AbortController();
 
     async function loadChart() {
@@ -803,11 +812,7 @@ function StockChart({
         setChartData([]);
         setPrimaryReturn(fallbackReturn);
         onPeriodReturnChange(fallbackReturn);
-
-        setChartError(
-          error?.message ||
-            "Unable to load chart data"
-        );
+        setChartError("Chart is unavailable for now.");
       } finally {
         if (!controller.signal.aborted) {
           setChartLoading(false);
@@ -823,6 +828,7 @@ function StockChart({
     activePeriod,
     compareTickers,
     comparisonsActive,
+    longRangeUnavailable,
     onPeriodReturnChange,
     onDailyReturnChange,
     initialDailyReturn,
@@ -1169,23 +1175,23 @@ function StockChart({
         onTouchEndCapture={finishChartTouch}
         onTouchCancelCapture={finishChartTouch}
       >
-        {chartLoading && (
+        {!longRangeUnavailable && chartLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         )}
 
-        {chartError ? (
+        {longRangeUnavailable ? (
           <div className="flex h-full items-center justify-center rounded-[16px] border border-dashed border-border bg-muted/25 px-5 text-center">
-            <div>
-              <p className="text-[14px] font-semibold text-foreground">
-                Chart unavailable
-              </p>
-
-              <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
-                {chartError}
-              </p>
-            </div>
+            <p className="text-[14px] font-semibold text-muted-foreground">
+              Chart is unavailable for now.
+            </p>
+          </div>
+        ) : chartError ? (
+          <div className="flex h-full items-center justify-center rounded-[16px] border border-dashed border-border bg-muted/25 px-5 text-center">
+            <p className="text-[14px] font-semibold text-muted-foreground">
+              Chart is unavailable for now.
+            </p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -1346,7 +1352,7 @@ function StockChart({
           </ResponsiveContainer>
         )}
 
-        {dualTouchPoints.length === 2 && (
+        {!longRangeUnavailable && dualTouchPoints.length === 2 && (
           <TwoPointPercentageTooltip
             startPoint={dualTouchPoints[0]}
             endPoint={dualTouchPoints[1]}
