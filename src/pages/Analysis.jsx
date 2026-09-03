@@ -13,7 +13,6 @@ import {
   Database,
   Loader2,
   Newspaper,
-  RefreshCw,
   Search,
   Sparkles,
   ThumbsDown,
@@ -709,16 +708,6 @@ export default function Analysis() {
     runAnalysis,
   ]);
 
-  function handleRefresh() {
-    setQuery(
-      activeTicker,
-    );
-
-    void runAnalysis(
-      activeTicker,
-    );
-  }
-
   function handleSubmit(
     event,
   ) {
@@ -805,13 +794,6 @@ export default function Analysis() {
       ? quote.c
       : null;
 
-  const quoteChange =
-    Number.isFinite(
-      quote?.d,
-    )
-      ? quote.d
-      : null;
-
   const quoteChangePercent =
     Number.isFinite(
       quote?.dp,
@@ -836,14 +818,15 @@ export default function Analysis() {
 
   return (
     <div
-      className="min-h-full bg-background text-foreground"
+      className="min-h-full w-full max-w-full overflow-x-hidden overscroll-x-none bg-background text-foreground touch-pan-y"
       style={{
         paddingBottom:
           "calc(env(safe-area-inset-bottom) + 72px)",
+        maxWidth: "100vw",
       }}
     >
       <header
-        className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur-xl"
+        className="sticky top-0 z-30 w-full max-w-full overflow-x-hidden border-b border-border/70 bg-background/95 backdrop-blur-xl"
         style={{
           paddingTop:
             "env(safe-area-inset-top)",
@@ -881,7 +864,7 @@ export default function Analysis() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[430px] px-4 pb-7 pt-4">
+      <main className="mx-auto w-full max-w-[430px] overflow-x-hidden px-4 pb-7 pt-4">
         {showEmptyState ? (
           <EmptyStateHero
             query={query}
@@ -959,15 +942,16 @@ export default function Analysis() {
 
         {!loadingInsights &&
         analysis ? (
-          <div className="space-y-5">
+          <div className="w-full max-w-full space-y-5 overflow-x-hidden">
             <form
               onSubmit={
                 handleSubmit
               }
+              className="w-full max-w-full"
             >
-              <div className="flex items-stretch gap-2">
+              <div className="flex w-full max-w-full items-stretch gap-2 overflow-x-hidden">
                 <div className="relative min-w-0 flex-1">
-                  <div className="flex h-[48px] items-center rounded-[14px] border border-border bg-card">
+                  <div className="flex h-[48px] w-full min-w-0 items-center rounded-[14px] border border-border bg-card">
                     <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
 
                     <Input
@@ -1010,7 +994,7 @@ export default function Analysis() {
                   disabled={
                     isLoading
                   }
-                  className="h-[48px] rounded-[14px] px-4 text-[11px]"
+                  className="h-[48px] shrink-0 rounded-[14px] px-4 text-[11px]"
                 >
                   Analyze
                 </Button>
@@ -1023,11 +1007,11 @@ export default function Analysis() {
               ) : null}
             </form>
 
-            <section className="rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+            <section className="w-full max-w-full overflow-hidden rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+              <div className="flex min-w-0 items-start">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
 
                     <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-emerald-600">
                       AI Assessment
@@ -1042,23 +1026,12 @@ export default function Analysis() {
                     {activeCompany}
                   </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={
-                    handleRefresh
-                  }
-                  aria-label="Refresh analysis"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-muted-foreground transition-colors active:bg-muted"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
               </div>
 
               {quotePrice !==
               null ? (
-                <div className="mt-4 flex items-end justify-between gap-3">
-                  <p className="text-[30px] font-bold leading-none tracking-[-0.8px]">
+                <div className="mt-4 flex min-w-0 items-end justify-between gap-3">
+                  <p className="min-w-0 text-[30px] font-bold leading-none tracking-[-0.8px]">
                     $
                     {quotePrice.toFixed(
                       2,
@@ -1069,7 +1042,7 @@ export default function Analysis() {
                   null ? (
                     <div
                       className={[
-                        "inline-flex h-[30px] items-center gap-1 rounded-[9px] px-2.5 text-[12px] font-semibold",
+                        "inline-flex h-[30px] shrink-0 items-center gap-1 rounded-[9px] px-2.5 text-[12px] font-semibold",
                         pricePositive
                           ? "bg-emerald-500/10 text-emerald-600"
                           : "bg-red-500/10 text-red-600",
@@ -1095,7 +1068,7 @@ export default function Analysis() {
                 </div>
               ) : null}
 
-              <p className="mt-4 text-[13px] leading-[1.55] text-foreground/85">
+              <p className="mt-4 break-words text-[13px] leading-[1.55] text-foreground/85">
                 {analysis.summary}
               </p>
 
@@ -1104,7 +1077,7 @@ export default function Analysis() {
               </p>
             </section>
 
-            <section>
+            <section className="w-full max-w-full overflow-hidden">
               <div className="mb-2 flex items-center gap-1.5 px-2">
                 <Database className="h-3.5 w-3.5 text-muted-foreground" />
 
@@ -1113,8 +1086,8 @@ export default function Analysis() {
                 </h2>
               </div>
 
-              <div className="rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
-                <div className="grid grid-cols-2 gap-2">
+              <div className="w-full max-w-full overflow-hidden rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+                <div className="grid min-w-0 grid-cols-2 gap-2">
                   <MetricCard
                     label="Market Cap"
                     value={formatMetric(
@@ -1201,13 +1174,13 @@ export default function Analysis() {
               </div>
             </section>
 
-            <section>
+            <section className="w-full max-w-full overflow-hidden">
               <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                 Investment View
               </h2>
 
-              <div className="space-y-2">
-                <div className="rounded-[22px] border border-emerald-500/20 bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+              <div className="w-full max-w-full space-y-2">
+                <div className="w-full max-w-full overflow-hidden rounded-[22px] border border-emerald-500/20 bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
                   <div className="mb-3 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-emerald-500/10 text-emerald-600">
                       <ThumbsUp className="h-4 w-4" />
@@ -1226,12 +1199,13 @@ export default function Analysis() {
                       ) => (
                         <div
                           key={`${item.title}-${index}`}
+                          className="min-w-0"
                         >
-                          <p className="text-[13px] font-semibold text-emerald-600">
+                          <p className="break-words text-[13px] font-semibold text-emerald-600">
                             {item.title}
                           </p>
 
-                          <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
+                          <p className="mt-0.5 break-words text-[12px] leading-5 text-muted-foreground">
                             {item.detail}
                           </p>
                         </div>
@@ -1240,7 +1214,7 @@ export default function Analysis() {
                   </div>
                 </div>
 
-                <div className="rounded-[22px] border border-red-500/20 bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+                <div className="w-full max-w-full overflow-hidden rounded-[22px] border border-red-500/20 bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
                   <div className="mb-3 flex items-center gap-2">
                     <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-red-500/10 text-red-600">
                       <ThumbsDown className="h-4 w-4" />
@@ -1259,12 +1233,13 @@ export default function Analysis() {
                       ) => (
                         <div
                           key={`${item.title}-${index}`}
+                          className="min-w-0"
                         >
-                          <p className="text-[13px] font-semibold text-red-600">
+                          <p className="break-words text-[13px] font-semibold text-red-600">
                             {item.title}
                           </p>
 
-                          <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
+                          <p className="mt-0.5 break-words text-[12px] leading-5 text-muted-foreground">
                             {item.detail}
                           </p>
                         </div>
@@ -1275,7 +1250,7 @@ export default function Analysis() {
               </div>
             </section>
 
-            <section>
+            <section className="w-full max-w-full overflow-hidden">
               <div className="mb-2 flex items-center justify-between px-2">
                 <div className="flex items-center gap-1.5">
                   <Newspaper className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1286,7 +1261,7 @@ export default function Analysis() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
+              <div className="w-full max-w-full overflow-hidden rounded-[22px] border border-border bg-card shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
                 {loadingNews ? (
                   <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1315,32 +1290,32 @@ export default function Analysis() {
                             : undefined
                         }
                         className={[
-                          "block px-4 py-4 transition-colors active:bg-muted/50",
+                          "block min-w-0 max-w-full overflow-hidden px-4 py-4 transition-colors active:bg-muted/50",
                           index <
                           news.length - 1
                             ? "border-b border-border/80"
                             : "",
                         ].join(" ")}
                       >
-                        <h3 className="text-[13px] font-semibold leading-[1.4]">
+                        <h3 className="break-words text-[13px] font-semibold leading-[1.4]">
                           {item.title}
                         </h3>
 
                         {item.summary ? (
-                          <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted-foreground">
+                          <p className="mt-1.5 line-clamp-2 break-words text-[11px] leading-5 text-muted-foreground">
                             {item.summary}
                           </p>
                         ) : null}
 
-                        <div className="mt-2 flex items-center gap-2 text-[9px] text-muted-foreground">
+                        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[9px] text-muted-foreground">
                           {item.source ? (
-                            <span>
+                            <span className="break-words">
                               {item.source}
                             </span>
                           ) : null}
 
                           {item.date ? (
-                            <span>
+                            <span className="break-words">
                               {item.date}
                             </span>
                           ) : null}
