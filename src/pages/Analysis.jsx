@@ -200,7 +200,7 @@ function EmptyStateHero({
       >
         <div className="flex items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
-            <div className="flex h-[54px] items-center rounded-[15px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
+            <div className="flex h-[46px] items-center rounded-[10px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
               <Search className="ml-3.5 h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 
               <Input
@@ -229,7 +229,7 @@ function EmptyStateHero({
           <Button
             type="submit"
             disabled={isLoading}
-            className="h-[54px] min-w-[112px] shrink-0 rounded-[15px] bg-black px-4 text-[13px] font-semibold text-white hover:bg-black/90"
+            className="h-[46px] min-w-[104px] shrink-0 rounded-[10px] bg-black px-4 text-[13px] font-semibold text-white hover:bg-black/90"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
