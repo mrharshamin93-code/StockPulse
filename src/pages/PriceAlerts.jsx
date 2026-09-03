@@ -184,8 +184,7 @@ export default function PriceAlerts() {
         );
 
         setError(
-          loadError?.message ||
-            "Unable to load price alerts.",
+          "Unable to load price alerts. Please try again.",
         );
       } finally {
         setLoading(false);
@@ -398,8 +397,7 @@ export default function PriceAlerts() {
       );
 
       setError(
-        saveError?.message ||
-          "Unable to create the alert.",
+        "Unable to create the alert. Please try again.",
       );
     } finally {
       setSaving(false);
@@ -427,9 +425,13 @@ export default function PriceAlerts() {
         );
 
     if (deleteError) {
+      console.error(
+        "Price alert deletion failed:",
+        deleteError,
+      );
+
       setError(
-        deleteError.message ||
-          "Unable to delete the alert.",
+        "Unable to delete the alert. Please try again.",
       );
       return;
     }
@@ -470,9 +472,13 @@ export default function PriceAlerts() {
         );
 
     if (updateError) {
+      console.error(
+        "Price alert update failed:",
+        updateError,
+      );
+
       setError(
-        updateError.message ||
-          "Unable to update the alert.",
+        "Unable to update the alert. Please try again.",
       );
       return;
     }
@@ -525,9 +531,13 @@ export default function PriceAlerts() {
           );
 
       if (updateError) {
+        console.error(
+          "Price alert notification update failed:",
+          updateError,
+        );
+
         setError(
-          updateError.message ||
-            "Unable to open the notification.",
+          "Unable to open the notification. Please try again.",
         );
         return;
       }
@@ -580,9 +590,13 @@ export default function PriceAlerts() {
         );
 
     if (deleteError) {
+      console.error(
+        "Price alert notification deletion failed:",
+        deleteError,
+      );
+
       setError(
-        deleteError.message ||
-          "Unable to delete the notification.",
+        "Unable to delete the notification. Please try again.",
       );
       return;
     }
@@ -619,7 +633,7 @@ export default function PriceAlerts() {
               </h2>
 
               <p className="mt-1 text-xs leading-5 text-gray-500">
-                Supabase checks enabled alerts and saves a notification here when a target is reached. Native iPhone push delivery will be connected after the iOS app and Apple Developer account are ready.
+                StockPulse checks enabled alerts and saves a notification here when a target is reached.
               </p>
             </div>
 
@@ -830,9 +844,7 @@ export default function PriceAlerts() {
 
                         {alert.notification_error ? (
                           <p className="mt-1 text-[10px] text-red-500">
-                            {
-                              alert.notification_error
-                            }
+                            Notification delivery encountered an issue.
                           </p>
                         ) : null}
                       </div>
