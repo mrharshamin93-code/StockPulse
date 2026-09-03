@@ -36,11 +36,11 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.stockpulse.app</string>
+			<string>com.harshamin.stockpulse</string>
 
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.stockpulse.app</string>
+				<string>com.harshamin.stockpulse</string>
 			</array>
 		</dict>
 	</array>

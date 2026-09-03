@@ -5,10 +5,10 @@ import { Browser } from "@capacitor/browser";
 import { supabase } from "@/lib/supabase";
 
 export const IOS_AUTH_CALLBACK =
-  "com.stockpulse.app://auth/callback";
+  "com.harshamin.stockpulse://auth/callback";
 
 export const IOS_RESET_PASSWORD_URL =
-  "com.stockpulse.app://reset-password";
+  "com.harshamin.stockpulse://reset-password";
 
 export function isNativeApp() {
   return Capacitor.isNativePlatform();
