@@ -1,70 +1,34 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import {
-  AlertCircle,
-  Loader2,
-} from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 
-/*
- * OAuth authorization codes can only be exchanged once.
- * Keep one promise across component re-renders so a slow
- * mobile browser cannot start a duplicate exchange.
- */
 let callbackPromise = null;
+const AUTH_STEP_TIMEOUT_MS = 20000;
 
-const AUTH_STEP_TIMEOUT_MS =
-  20000;
-
-function runWithTimeout(
-  operation,
-  timeoutMessage
-) {
+function runWithTimeout(operation, timeoutMessage) {
   let timeoutId;
 
-  const timeoutPromise =
-    new Promise((_, reject) => {
-      timeoutId =
-        window.setTimeout(() => {
-          reject(
-            new Error(
-              timeoutMessage
-            )
-          );
-        }, AUTH_STEP_TIMEOUT_MS);
-    });
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, AUTH_STEP_TIMEOUT_MS);
+  });
 
-  return Promise.race([
-    operation,
-    timeoutPromise,
-  ]).finally(() => {
-    window.clearTimeout(
-      timeoutId
-    );
+  return Promise.race([operation, timeoutPromise]).finally(() => {
+    window.clearTimeout(timeoutId);
   });
 }
 
 function getSafeNextPath() {
-  const searchParams =
-    new URLSearchParams(
-      window.location.search
-    );
-
-  const requestedPath =
-    searchParams.get("next") ||
-    "/";
+  const searchParams = new URLSearchParams(window.location.search);
+  const requestedPath = searchParams.get("next") || "/";
 
   if (
     !requestedPath.startsWith("/") ||
     requestedPath.startsWith("//") ||
-    requestedPath.startsWith(
-      "/auth/callback"
-    )
+    requestedPath.startsWith("/auth/callback")
   ) {
     return "/";
   }
@@ -72,218 +36,126 @@ function getSafeNextPath() {
   return requestedPath;
 }
 
-function getProviderError(
-  searchParams
-) {
-  const rawError =
-    searchParams.get(
-      "error_description"
-    ) ||
-    searchParams.get("error") ||
-    searchParams.get(
-      "error_code"
-    ) ||
-    "";
-
-  if (!rawError) {
-    return "";
-  }
-
-  try {
-    return decodeURIComponent(
-      rawError.replace(
-        /\+/g,
-        " "
-      )
-    );
-  } catch {
-    return rawError;
-  }
+function hasProviderError(searchParams) {
+  return Boolean(
+    searchParams.get("error_description") ||
+      searchParams.get("error") ||
+      searchParams.get("error_code"),
+  );
 }
 
-async function completeOAuthCallback(
-  reportStage
-) {
-  const searchParams =
-    new URLSearchParams(
-      window.location.search
-    );
+async function completeOAuthCallback(reportStage) {
+  const searchParams = new URLSearchParams(window.location.search);
 
-  const providerError =
-    getProviderError(
-      searchParams
-    );
-
-  if (providerError) {
-    throw new Error(
-      providerError
-    );
+  if (hasProviderError(searchParams)) {
+    throw new Error("provider_error");
   }
 
-  const nextPath =
-    getSafeNextPath();
+  const nextPath = getSafeNextPath();
 
-  /*
-   * A refreshed callback may already have a persisted
-   * session even though its one-use code is still visible.
-   */
-  reportStage(
-    "Checking browser session…"
-  );
+  reportStage("Checking browser session…");
 
   const {
     data: existingData,
     error: existingError,
   } = await runWithTimeout(
     supabase.auth.getSession(),
-    "Checking the existing browser session timed out. Please reload and try Google sign-in again."
+    "session_check_timeout",
   );
 
   if (existingError) {
-    console.warn(
-      "Existing session check failed:",
-      existingError
-    );
+    console.warn("Existing OAuth session check failed:", existingError);
   }
 
   if (existingData?.session?.user) {
     return nextPath;
   }
 
-  const code =
-    searchParams.get("code");
+  const code = searchParams.get("code");
 
   if (!code) {
-    throw new Error(
-      "Google did not return an authorization code. " +
-        "Please begin the sign-in process again."
-    );
+    throw new Error("missing_code");
   }
 
-  reportStage(
-    "Exchanging secure Google sign-in code…"
-  );
+  reportStage("Completing secure sign-in…");
 
-  const {
-    data,
-    error,
-  } = await runWithTimeout(
-    supabase.auth.exchangeCodeForSession(
-      code
-    ),
-    "The secure Google code exchange timed out. Check that this exact preview callback URL is allowed in Supabase."
+  const { data, error } = await runWithTimeout(
+    supabase.auth.exchangeCodeForSession(code),
+    "code_exchange_timeout",
   );
 
   if (error) {
-    /*
-     * If another render completed first, recover its
-     * persisted session before displaying an error.
-     */
-    reportStage(
-      "Recovering saved session…"
-    );
+    console.error("OAuth code exchange failed:", error);
 
-    const {
-      data: recoveredData,
-    } = await runWithTimeout(
+    reportStage("Recovering saved session…");
+
+    const { data: recoveredData } = await runWithTimeout(
       supabase.auth.getSession(),
-      "Session recovery timed out after the Google code exchange."
+      "session_recovery_timeout",
     );
 
     if (recoveredData?.session?.user) {
       return nextPath;
     }
 
-    throw error;
+    throw new Error("code_exchange_failed");
   }
 
   if (!data?.session?.user) {
-    throw new Error(
-      "Google sign-in completed, but no session was created."
-    );
+    throw new Error("missing_session");
   }
 
-  reportStage(
-    "Saving your login session…"
-  );
+  reportStage("Saving your login session…");
 
   const {
     data: verifiedData,
     error: verificationError,
   } = await runWithTimeout(
     supabase.auth.getSession(),
-    "Saving the Google login session timed out."
+    "session_verification_timeout",
   );
 
   if (verificationError) {
-    throw verificationError;
+    console.error("OAuth session verification failed:", verificationError);
+    throw new Error("session_verification_failed");
   }
 
   if (!verifiedData?.session?.user) {
-    throw new Error(
-      "The login session could not be saved in this browser."
-    );
+    throw new Error("session_not_saved");
   }
 
   return nextPath;
 }
 
-function runCallbackOnce(
-  reportStage
-) {
+function runCallbackOnce(reportStage) {
   if (!callbackPromise) {
-    callbackPromise =
-      completeOAuthCallback(
-        reportStage
-      );
+    callbackPromise = completeOAuthCallback(reportStage);
   }
 
   return callbackPromise;
 }
 
 export default function AuthCallback() {
-  const [status, setStatus] =
-    useState("processing");
-
-  const [message, setMessage] =
-    useState(
-      "Completing your Google sign-in…"
-    );
-
-  const nextPath = useMemo(
-    () => getSafeNextPath(),
-    []
-  );
+  const [status, setStatus] = useState("processing");
+  const [message, setMessage] = useState("Completing your sign-in…");
+  const nextPath = useMemo(() => getSafeNextPath(), []);
 
   useEffect(() => {
     let active = true;
 
-    runCallbackOnce(
-      setMessage
-    )
+    runCallbackOnce(setMessage)
       .then(() => {
-        if (!active) {
-          return;
-        }
-
-        window.location.replace(
-          nextPath
-        );
+        if (!active) return;
+        window.location.replace(nextPath);
       })
       .catch((error) => {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
-        console.error(
-          "OAuth callback failed:",
-          error
-        );
+        console.error("OAuth callback failed:", error);
 
         setStatus("error");
         setMessage(
-          error?.message ||
-            "Google sign-in failed."
+          "Sign-in could not be completed. Please return to the login page and try again.",
         );
       });
 
@@ -293,9 +165,7 @@ export default function AuthCallback() {
   }, [nextPath]);
 
   function returnToLogin() {
-    window.location.replace(
-      "/login"
-    );
+    window.location.replace("/login");
   }
 
   if (status === "error") {
@@ -310,16 +180,14 @@ export default function AuthCallback() {
             Couldn&apos;t sign you in
           </h1>
 
-          <p className="mt-2 break-words text-sm leading-6 text-gray-500">
+          <p role="alert" className="mt-2 text-sm leading-6 text-gray-500">
             {message}
           </p>
 
           <Button
             type="button"
             className="mt-5 w-full"
-            onClick={
-              returnToLogin
-            }
+            onClick={returnToLogin}
           >
             Back to login
           </Button>
@@ -337,9 +205,7 @@ export default function AuthCallback() {
           Signing you in
         </h1>
 
-        <p className="mt-2 text-sm text-gray-500">
-          {message}
-        </p>
+        <p className="mt-2 text-sm text-gray-500">{message}</p>
       </div>
     </div>
   );
