@@ -197,71 +197,54 @@ function EmptyStateHero({
 
       <form
         onSubmit={onSubmit}
-        className="mt-8 w-full"
+        className="mt-5"
       >
-        <div className="flex w-full items-stretch gap-2">
+        <div className="flex items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
-            <div className="flex h-[40px] items-center rounded-lg border border-gray-300 bg-white">
-              <Search className="ml-4 h-5 w-5 shrink-0 text-gray-400" />
+            <div className="flex h-[50px] items-center rounded-[15px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
+              <Search className="ml-3.5 h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 
               <Input
-                placeholder="Enter Ticker"
+                placeholder="Ticker or company"
                 value={query}
                 onChange={onQueryChange}
-                className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 text-sm uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
+                className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-[14px] uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
                 autoComplete="off"
                 autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 
-            {showSuggestions &&
-              suggestions.length > 0 && (
-                <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white text-left shadow-xl">
-                  {suggestions.map(
-                    (stock) => (
-                      <button
-                        key={stock.ticker}
-                        type="button"
-                        onClick={() =>
-                          onSuggestionSelect(
-                            stock,
-                          )
-                        }
-                        className="w-full border-b border-gray-100 px-4 py-3 transition-colors last:border-0 hover:bg-gray-50"
-                      >
-                        <p className="text-sm font-semibold text-black">
-                          {stock.ticker}
-                        </p>
-
-                        <p className="text-xs text-gray-500">
-                          {stock.name}
-                        </p>
-                      </button>
-                    ),
-                  )}
-                </div>
-              )}
+            {showSuggestions ? (
+              <SearchSuggestions
+                suggestions={
+                  suggestions
+                }
+                onSelect={
+                  onSuggestionSelect
+                }
+              />
+            ) : null}
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={isLoading}
-            className="flex h-[40px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-sm font-semibold transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{
-              backgroundColor: "#000000",
-              color: "#ffffff",
-            }}
+            className="h-[50px] min-w-[86px] shrink-0 rounded-[15px] px-3 text-[12px] font-semibold"
           >
-            Analyze
-            <Sparkles className="ml-1.5 h-4 w-4" />
-          </button>
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Analyze"
+            )}
+          </Button>
         </div>
 
-        {error && (
-          <p className="mt-3 text-sm text-red-600">
+        {error ? (
+          <p className="mt-2 px-1 text-[12px] text-red-600">
             {error}
           </p>
-        )}
+        ) : null}
       </form>
 
       <section className="mt-5">
@@ -464,34 +447,87 @@ export default function Analysis() {
         );
 
         const insightsCall =
-          supabase.functions
-            .invoke(
-              "stock-analysis",
-              {
-                body: {
-                  ticker:
-                    normalizedTicker,
-
-                  company_name:
-                    companyName,
-                },
-              },
-            )
-            .then(
-              ({
+          (async () => {
+            const invokeJob = async (mode) => {
+              const {
                 data,
-                error:
-                  functionError,
-              }) => {
-                if (
-                  functionError
-                ) {
-                  throw functionError;
-                }
+                error: functionError,
+              } = await supabase.functions.invoke(
+                "stock-analysis-job",
+                {
+                  body: {
+                    mode,
+                    ticker: normalizedTicker,
+                    company_name: companyName,
+                  },
+                },
+              );
 
-                return data;
-              },
+              if (functionError) {
+                throw functionError;
+              }
+
+              return data;
+            };
+
+            const started =
+              await invokeJob("start");
+
+            if (
+              started?.status ===
+                "ready" &&
+              started?.analysis
+            ) {
+              return started.analysis;
+            }
+
+            const pollStartedAt =
+              Date.now();
+            const timeoutMs =
+              120000;
+            const pollEveryMs =
+              2000;
+
+            while (
+              Date.now() -
+                pollStartedAt <
+              timeoutMs
+            ) {
+              await new Promise(
+                (resolve) =>
+                  setTimeout(
+                    resolve,
+                    pollEveryMs,
+                  ),
+              );
+
+              if (
+                requestId.current !==
+                currentRequest
+              ) {
+                throw new Error(
+                  "Analysis request cancelled.",
+                );
+              }
+
+              const status =
+                await invokeJob(
+                  "status",
+                );
+
+              if (
+                status?.status ===
+                  "ready" &&
+                status?.analysis
+              ) {
+                return status.analysis;
+              }
+            }
+
+            throw new Error(
+              "Analysis is taking longer than 2 minutes. Please try again.",
             );
+          })();
 
         const quoteCall =
           fetchMarketData(
@@ -895,6 +931,29 @@ export default function Analysis() {
             <p className="mt-1 text-[11px] text-muted-foreground">
               Generating AI assessment…
             </p>
+
+            <div className="mx-auto mt-5 h-1.5 w-full max-w-[300px] overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-foreground"
+                style={{
+                  width: "100%",
+                  transformOrigin: "left",
+                  animation:
+                    "stockpulse-analysis-scale 85s linear forwards",
+                }}
+              />
+            </div>
+
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Please wait up to 2 minutes
+            </p>
+
+            <style>{`
+              @keyframes stockpulse-analysis-scale {
+                from { transform: scaleX(0.02); }
+                to { transform: scaleX(1); }
+              }
+            `}</style>
           </div>
         ) : null}
 
@@ -905,15 +964,14 @@ export default function Analysis() {
               onSubmit={
                 handleSubmit
               }
-              className="w-full"
             >
-              <div className="flex w-full items-stretch gap-2">
+              <div className="flex items-stretch gap-2">
                 <div className="relative min-w-0 flex-1">
-                  <div className="flex h-[36px] items-center rounded-lg border border-gray-300 bg-white">
-                    <Search className="ml-3 h-4 w-4 shrink-0 text-gray-400" />
+                  <div className="flex h-[48px] items-center rounded-[14px] border border-border bg-card">
+                    <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
 
                     <Input
-                      placeholder="Enter Ticker"
+                      placeholder="Ticker or company"
                       value={query}
                       onChange={(
                         event,
@@ -928,67 +986,41 @@ export default function Analysis() {
                           true,
                         );
                       }}
-                      className="h-full min-w-0 flex-1 rounded-lg border-0 bg-transparent px-3 uppercase text-black shadow-none placeholder:normal-case placeholder:text-gray-400 focus-visible:ring-0"
+                      className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-[13px] uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
                       autoComplete="off"
                       autoCorrect="off"
+                      spellCheck={false}
                     />
                   </div>
 
-                  {showSuggestions &&
-                    suggestions.length > 0 && (
-                      <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
-                        {suggestions.map(
-                          (stock) => (
-                            <button
-                              key={
-                                stock.ticker
-                              }
-                              type="button"
-                              onClick={() =>
-                                handleSuggestionSelect(
-                                  stock,
-                                )
-                              }
-                              className="w-full border-b border-gray-100 px-4 py-3 text-left last:border-0 hover:bg-gray-50"
-                            >
-                              <p className="text-sm font-semibold text-black">
-                                {
-                                  stock.ticker
-                                }
-                              </p>
-
-                              <p className="text-xs text-gray-500">
-                                {
-                                  stock.name
-                                }
-                              </p>
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    )}
+                  {showSuggestions ? (
+                    <SearchSuggestions
+                      suggestions={
+                        suggestions
+                      }
+                      onSelect={
+                        handleSuggestionSelect
+                      }
+                    />
+                  ) : null}
                 </div>
 
-                <button
+                <Button
                   type="submit"
-                  disabled={isLoading}
-                  className="flex h-[36px] shrink-0 items-center justify-center rounded-lg border border-black px-5 text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{
-                    backgroundColor:
-                      "#000000",
-                    color:
-                      "#ffffff",
-                  }}
+                  disabled={
+                    isLoading
+                  }
+                  className="h-[48px] rounded-[14px] px-4 text-[11px]"
                 >
                   Analyze
-                </button>
+                </Button>
               </div>
 
-              {error && (
-                <p className="mt-2 text-sm text-red-600">
+              {error ? (
+                <p className="mt-2 px-1 text-[12px] text-red-600">
                   {error}
                 </p>
-              )}
+              ) : null}
             </form>
 
             <section className="rounded-[22px] border border-border bg-card p-4 shadow-[0_3px_10px_rgba(0,0,0,0.035)]">
@@ -1159,17 +1191,17 @@ export default function Analysis() {
                       },
                     )}
                   />
-                  
+
                   <MetricCard
-  label="FCF / Share"
-  value={formatMetric(
-    metrics.fcfPerShare,
-    {
-      prefix: "$",
-      digits: 2,
-    },
-  )}
-/>  
+                    label="Dividend Yield"
+                    value={formatMetric(
+                      metrics.dividendYield,
+                      {
+                        suffix: "%",
+                        digits: 2,
+                      },
+                    )}
+                  />
                 </div>
               </div>
             </section>
