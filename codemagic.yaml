@@ -5,6 +5,9 @@ workflows:
     instance_type: mac_mini_m2
 
     environment:
+      groups:
+        - stockpulse_app
+
       node: 22
       xcode: latest
 
@@ -61,6 +64,7 @@ workflows:
     environment:
       groups:
         - appstore_credentials
+        - stockpulse_app
 
       ios_signing:
         distribution_type: app_store
