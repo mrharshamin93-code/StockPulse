@@ -43,6 +43,8 @@ const tabs = [
   },
 ];
 
+const TAB_BAR_HEIGHT = 56;
+
 export default function NavigationLayout() {
   const location = useLocation();
   const { pathname } = location;
@@ -122,11 +124,21 @@ export default function NavigationLayout() {
   );
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden">
-      <div className="relative min-h-0 flex-1">
+    <div className="relative h-[100dvh] w-full max-w-full overflow-hidden overscroll-none bg-background">
+      <div
+        className="absolute inset-x-0 top-0 min-h-0 overflow-hidden"
+        style={{
+          bottom: showTabs
+            ? `calc(${TAB_BAR_HEIGHT}px + env(safe-area-inset-bottom))`
+            : "0px",
+        }}
+      >
         <div
           ref={contentScrollRef}
-          className="absolute inset-0 overflow-y-auto overscroll-y-contain"
+          className="absolute inset-0 overflow-x-hidden overflow-y-auto overscroll-none touch-pan-y"
+          style={{
+            WebkitOverflowScrolling: "touch",
+          }}
         >
           <Outlet />
         </div>
@@ -146,13 +158,16 @@ export default function NavigationLayout() {
 
       {showTabs && (
         <nav
-          className="relative z-50 shrink-0 border-t border-gray-100 bg-[hsl(var(--card))]"
+          className="fixed inset-x-0 bottom-0 z-50 w-full shrink-0 overflow-hidden overscroll-none border-t border-gray-100 bg-[hsl(var(--card))]"
           style={{
             paddingBottom:
               "env(safe-area-inset-bottom)",
+            touchAction: "manipulation",
+            WebkitTransform: "translateZ(0)",
+            transform: "translateZ(0)",
           }}
         >
-          <div className="mx-auto flex max-w-lg">
+          <div className="mx-auto flex h-[56px] w-full max-w-lg">
             {tabs.map(
               ({
                 label,
@@ -172,11 +187,16 @@ export default function NavigationLayout() {
                         path
                       )
                     }
-                    className={`relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors ${
+                    draggable={false}
+                    className={`relative flex min-w-0 flex-1 select-none flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium transition-colors ${
                       active
                         ? "text-[hsl(var(--primary))]"
                         : "text-gray-400"
                     }`}
+                    style={{
+                      WebkitUserSelect: "none",
+                      WebkitTouchCallout: "none",
+                    }}
                   >
                     {label ===
                     "Watchlist" ? (
