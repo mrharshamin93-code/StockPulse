@@ -1207,6 +1207,11 @@ export default function Screener() {
   ] = useState(null);
 
   const [
+    showAllQuickScreens,
+    setShowAllQuickScreens,
+  ] = useState(false);
+
+  const [
     savedScreens,
     setSavedScreens,
   ] = useState([]);
@@ -2063,14 +2068,31 @@ export default function Screener() {
 
             <button
               type="button"
+              onClick={() =>
+                setShowAllQuickScreens(
+                  (current) =>
+                    !current,
+                )
+              }
+              aria-expanded={
+                showAllQuickScreens
+              }
               className="min-h-9 rounded-lg px-2 text-xs font-medium text-black transition-colors hover:bg-gray-50 hover:text-black"
             >
-              View All
+              {showAllQuickScreens
+                ? "Show Less"
+                : "View All"}
             </button>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            {POPULAR_SCREENS.slice(0, 4).map(
+            {(showAllQuickScreens
+              ? POPULAR_SCREENS
+              : POPULAR_SCREENS.slice(
+                  0,
+                  4,
+                )
+            ).map(
               (preset, index) => {
                 const ui =
                   QUICK_SCREEN_UI[index];
