@@ -461,13 +461,22 @@ export default function MonthlyReport() {
 
   const readyReports =
     useMemo(
-      () =>
-        reports.filter(
-          (report) =>
-            report.status ===
-              "ready" &&
-            report.storage_path,
-        ),
+      () => {
+        const seenMonths = new Set();
+
+        return reports.filter((report) => {
+          if (
+            report.status !== "ready" ||
+            !report.storage_path ||
+            seenMonths.has(report.report_month)
+          ) {
+            return false;
+          }
+
+          seenMonths.add(report.report_month);
+          return true;
+        });
+      },
       [reports],
     );
 

@@ -1746,6 +1746,50 @@ async function cleanupOldReports(
   }
 }
 
+async function cleanupSupersededReports(
+  service: SupabaseClient,
+  delivery: MonthlyReportDelivery,
+): Promise<void> {
+  const { data, error } = await service
+    .from("monthly_report_deliveries")
+    .select("id,storage_path")
+    .eq("user_id", delivery.user_id)
+    .eq("report_month", delivery.report_month)
+    .neq("id", delivery.id);
+
+  if (error) {
+    console.warn("Unable to load superseded report records:", error);
+    return;
+  }
+
+  const superseded = data || [];
+  if (!superseded.length) return;
+
+  const paths = superseded
+    .map((report) => String(report.storage_path || ""))
+    .filter(Boolean);
+
+  if (paths.length) {
+    const { error: storageError } = await service.storage
+      .from(REPORT_BUCKET)
+      .remove(paths);
+
+    if (storageError) {
+      console.warn("Unable to delete superseded report files:", storageError);
+      return;
+    }
+  }
+
+  const { error: deleteError } = await service
+    .from("monthly_report_deliveries")
+    .delete()
+    .in("id", superseded.map((report) => report.id));
+
+  if (deleteError) {
+    console.warn("Unable to delete superseded report records:", deleteError);
+  }
+}
+
 async function markDeliveryFailed(
   service: SupabaseClient,
   delivery: MonthlyReportDelivery,
@@ -1857,6 +1901,7 @@ async function processDelivery(
       }
     }
 
+    await cleanupSupersededReports(service, delivery);
     await cleanupOldReports(service, delivery.user_id);
 
     return {
