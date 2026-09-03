@@ -1675,8 +1675,11 @@ function WatchlistCard({
   function openPriceAlert(
     event
   ) {
-    event.preventDefault();
-    event.stopPropagation();
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    suppressClick.current =
+      true;
 
     const selectedTicker =
       String(
@@ -1699,6 +1702,14 @@ function WatchlistCard({
             selectedTicker,
         },
       }
+    );
+
+    window.setTimeout(
+      () => {
+        suppressClick.current =
+          false;
+      },
+      250
     );
   }
 
