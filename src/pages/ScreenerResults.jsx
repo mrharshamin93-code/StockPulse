@@ -684,7 +684,9 @@ export default function ScreenerResults() {
     );
 
   const routeError =
-    state?.error || "";
+    state?.error
+      ? "Unable to load screener results. Please try again."
+      : "";
 
   const storedSession =
     useMemo(
@@ -1292,9 +1294,7 @@ export default function ScreenerResults() {
           );
 
           setError(
-            loadError
-              ?.message ||
-              "Unable to load screener results.",
+            "Unable to load screener results. Please try again.",
           );
 
           if (
@@ -1606,9 +1606,7 @@ export default function ScreenerResults() {
         );
 
         showToast(
-          addError
-            ?.message ||
-            "Failed to add to watchlist",
+          "Unable to add this stock to your watchlist. Please try again.",
         );
       } finally {
         setAddingTicker("");
