@@ -64,11 +64,8 @@ const PERIOD_CONFIG = {
   "1Y": { resolution: "D", daysBack: 370 },
   "2Y": { resolution: "W", daysBack: 740 },
   "5Y": { resolution: "W", daysBack: 1840 },
-  // Financial Datasets supports yearly bars and the Build plan includes
-  // long-range history. Yearly aggregation keeps 10Y/All responses small
-  // enough to complete reliably inside an Edge Function request.
-  "10Y": { resolution: "Y", daysBack: 3680 },
-  All: { resolution: "Y", daysBack: null },
+  "10Y": { resolution: "M", daysBack: 3680 },
+  All: { resolution: "M", daysBack: null },
 };
 
 const FUNDAMENTAL_METRICS = [
@@ -92,23 +89,6 @@ const UNAVAILABLE_VALUE = "—";
 
 function normalizeTickerInput(value) {
   return String(value || "").trim().toUpperCase();
-}
-
-function friendlyChartError(error) {
-  const message = String(error?.message || "");
-
-  if (
-    !message ||
-    /edge function|non-2xx|failed to fetch|network/i.test(message)
-  ) {
-    return "Historical prices are temporarily unavailable. Please try again.";
-  }
-
-  if (/no chart data/i.test(message)) {
-    return "No historical prices are available for this period.";
-  }
-
-  return message;
 }
 
 function roundPrice(value) {
@@ -162,16 +142,7 @@ function getPeriodBounds(period) {
   const to = Math.floor(Date.now() / 1000);
 
   if (period === "All") {
-    const earliestSupportedDate = new Date();
-    earliestSupportedDate.setUTCFullYear(
-      earliestSupportedDate.getUTCFullYear() - 30,
-    );
-
-    return {
-      from: Math.floor(earliestSupportedDate.getTime() / 1000),
-      to,
-      resolution: config.resolution,
-    };
+    return { from: 1, to, resolution: config.resolution };
   }
 
   if (period === "YTD") {
@@ -833,7 +804,10 @@ function StockChart({
         setPrimaryReturn(fallbackReturn);
         onPeriodReturnChange(fallbackReturn);
 
-        setChartError(friendlyChartError(error));
+        setChartError(
+          error?.message ||
+            "Unable to load chart data"
+        );
       } finally {
         if (!controller.signal.aborted) {
           setChartLoading(false);

@@ -19,10 +19,12 @@ import {
   ThumbsUp,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react";
 
 import { useParams } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 
@@ -63,41 +65,6 @@ function isValidAnalysis(result) {
       Array.isArray(result.pros) &&
       Array.isArray(result.cons),
   );
-}
-
-function cleanAnalysisText(value) {
-  return String(value || "")
-    // Some model responses append bare source indexes even though the UI has
-    // no corresponding footnote list.
-    .replace(/\s+(?:\[\d+\]|\d{1,2})\s*$/g, "")
-    .trim();
-}
-
-function normalizeAnalysis(result) {
-  return {
-    ...result,
-    summary: cleanAnalysisText(result?.summary),
-    pros: (result?.pros || []).map((item) => ({
-      ...item,
-      title: cleanAnalysisText(item?.title),
-      detail: cleanAnalysisText(item?.detail),
-    })),
-    cons: (result?.cons || []).map((item) => ({
-      ...item,
-      title: cleanAnalysisText(item?.title),
-      detail: cleanAnalysisText(item?.detail),
-    })),
-  };
-}
-
-function friendlyAnalysisError(error) {
-  const message = String(error?.message || "");
-
-  if (/invalid ticker|not found/i.test(message)) {
-    return "Ticker not found. Check the symbol and try again.";
-  }
-
-  return "AI analysis is temporarily unavailable. Please try again.";
 }
 
 function finiteNumber(value) {
@@ -435,11 +402,6 @@ export default function Analysis() {
           return;
         }
 
-        if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(normalizedTicker)) {
-          setError("Enter a valid ticker symbol (up to 10 characters).");
-          return;
-        }
-
         const currentRequest =
           requestId.current + 1;
 
@@ -614,7 +576,9 @@ export default function Analysis() {
                 companyName,
             );
 
-            setAnalysis(normalizeAnalysis(result));
+            setAnalysis(
+              result,
+            );
 
             setLoadingInsights(
               false,
@@ -634,7 +598,10 @@ export default function Analysis() {
                 analysisError,
               );
 
-              setError(friendlyAnalysisError(analysisError));
+              setError(
+                analysisError?.message ||
+                  "AI analysis is temporarily unavailable. Please try again.",
+              );
 
               setLoadingInsights(
                 false,

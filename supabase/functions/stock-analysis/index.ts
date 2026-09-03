@@ -407,9 +407,7 @@ Deno.serve(async (request) => {
               "figures with numbers found on the web. Use web search for recent " +
               "company developments, earnings context, catalysts and risks. Prefer " +
               "primary company releases, SEC materials and reputable reporting. " +
-              "Do not promise returns or provide personalized financial advice. " +
-              "Do not include citations, " +
-              "footnotes, reference numbers, or source markers in any field.",
+              "Do not promise returns or provide personalized financial advice.",
           },
           {
             role: "user",

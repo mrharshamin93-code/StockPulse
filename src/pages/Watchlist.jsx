@@ -1294,13 +1294,9 @@ function SwipeAction({
       disabled={
         disabled
       }
-      onClick={(event) => {
-        // Keep the card's link handler from winning when a swipe action is
-        // clicked at the edge of the translated card.
-        event.preventDefault();
-        event.stopPropagation();
-        onClick(event);
-      }}
+      onClick={
+        onClick
+      }
       className={[
         `
           flex
