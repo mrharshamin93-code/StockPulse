@@ -182,10 +182,10 @@ function EmptyStateHero({
         <img
           src={bullImage}
           alt="StockPulse bull"
-          className="h-[118px] w-auto object-contain"
+          className="h-[156px] w-auto object-contain"
         />
 
-        <h1 className="mt-3 text-[26px] font-bold tracking-[-0.65px]">
+        <h1 className="mt-3 text-[32px] font-bold tracking-[-0.8px]">
           AI Stock Analysis
         </h1>
 
@@ -200,11 +200,11 @@ function EmptyStateHero({
       >
         <div className="flex items-stretch gap-2">
           <div className="relative min-w-0 flex-1">
-            <div className="flex h-[50px] items-center rounded-[15px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
+            <div className="flex h-[54px] items-center rounded-[15px] border border-border bg-card shadow-[0_2px_7px_rgba(0,0,0,0.03)]">
               <Search className="ml-3.5 h-4.5 w-4.5 shrink-0 text-muted-foreground" />
 
               <Input
-                placeholder="Ticker or company"
+                placeholder="Enter Ticker"
                 value={query}
                 onChange={onQueryChange}
                 className="h-full min-w-0 flex-1 border-0 bg-transparent px-3 text-[14px] uppercase shadow-none placeholder:normal-case focus-visible:ring-0"
@@ -229,12 +229,12 @@ function EmptyStateHero({
           <Button
             type="submit"
             disabled={isLoading}
-            className="h-[50px] min-w-[86px] shrink-0 rounded-[15px] px-3 text-[12px] font-semibold"
+            className="h-[54px] min-w-[112px] shrink-0 rounded-[15px] bg-black px-4 text-[13px] font-semibold text-white hover:bg-black/90"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              "Analyze"
+              <span className="inline-flex items-center gap-1.5"><Sparkles className="h-4 w-4" />Analyze</span>
             )}
           </Button>
         </div>
@@ -262,7 +262,7 @@ function EmptyStateHero({
                     ticker,
                   )
                 }
-                className="h-[42px] rounded-[13px] border border-border bg-card text-[11px] font-semibold shadow-[0_2px_7px_rgba(0,0,0,0.025)] active:bg-muted"
+                className="h-[48px] rounded-[13px] border border-border bg-card text-[12px] font-semibold shadow-[0_2px_7px_rgba(0,0,0,0.025)] active:bg-muted"
               >
                 {ticker}
               </button>
@@ -599,8 +599,7 @@ export default function Analysis() {
               );
 
               setError(
-                analysisError?.message ||
-                  "AI analysis is temporarily unavailable. Please try again.",
+                "AI analysis is temporarily unavailable. Please try again.",
               );
 
               setLoadingInsights(
@@ -955,7 +954,7 @@ export default function Analysis() {
                     <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
 
                     <Input
-                      placeholder="Ticker or company"
+                      placeholder="Enter Ticker"
                       value={query}
                       onChange={(
                         event,
