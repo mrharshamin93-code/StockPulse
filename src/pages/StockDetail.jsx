@@ -735,11 +735,23 @@ function StockChart({
   });
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState("");
-  const [primaryReturn, setPrimaryReturn] = useState(
-    activePeriod === "1D" && Number.isFinite(initialDailyReturn)
-      ? initialDailyReturn
-      : null
-  );
+  const [primaryReturn, setPrimaryReturn] = useState(() => {
+    if (activePeriod === "1D" && Number.isFinite(initialDailyReturn)) {
+      return initialDailyReturn;
+    }
+
+    const initialPoints = Array.isArray(initialChartData?.points)
+      ? initialChartData.points
+      : [];
+
+    return initialPoints.length > 0
+      ? calculatePeriodReturn(
+          initialPoints,
+          activePeriod,
+          initialDailyReturn
+        )
+      : null;
+  });
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [dualTouchPoints, setDualTouchPoints] = useState([]);
   const tooltipTimerRef = useRef(null);
