@@ -169,7 +169,7 @@ a:has(> .lucide-chevron-left)::before {
 /*
  * Stock Detail gets an intentionally oversized back-button hitbox.
  * The visible 22px arrow stays unchanged; only the invisible touch target
- * grows to roughly 128 × 100px so it is very forgiving on iPhone.
+ * grows to exactly 150 × 150px so it is very forgiving on iPhone.
  */
 header[style*="safe-area-inset-top"] button[aria-label="Go back"] {
   position: relative;
@@ -180,10 +180,11 @@ header[style*="safe-area-inset-top"] button[aria-label="Go back"] {
 header[style*="safe-area-inset-top"] button[aria-label="Go back"]::after {
   content: "";
   position: absolute;
-  top: -21px;
-  right: -32px;
-  bottom: -21px;
-  left: -32px;
+  width: 150px;
+  height: 150px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 2;
 }
 
