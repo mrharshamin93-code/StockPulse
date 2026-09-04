@@ -4,7 +4,11 @@ import { BarChart3, Loader2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
-import { isNativeApp, signInWithGoogle } from "@/lib/mobileAuth";
+import {
+  isNativeApp,
+  signInWithApple,
+  signInWithGoogle,
+} from "@/lib/mobileAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,7 +83,7 @@ export default function Login() {
 
   useEffect(() => {
     if (searchParams.get("error")) {
-      setError("Google sign-in could not be completed. Please try again.");
+      setError("Sign-in could not be completed. Please try again.");
     }
   }, [searchParams]);
 
@@ -101,8 +105,8 @@ export default function Login() {
 
       /*
        * Do not navigate here.
-       * Supabase emits SIGNED_IN, AuthContext commits the session,
-       * and this component redirects only after that state is stable.
+       * AuthContext receives SIGNED_IN and this component redirects
+       * only after the Supabase session is stable.
        */
     } catch (submitError) {
       console.error("Email sign-in failed:", submitError);
@@ -131,20 +135,17 @@ export default function Login() {
   }
 
   async function handleAppleLogin() {
-    if (nativeApp || loading || oauthLoading) return;
+    if (loading || oauthLoading) return;
 
     setError("");
     setOauthLoading("apple");
 
     try {
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: "apple",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
+      await signInWithApple();
 
-      if (oauthError) throw oauthError;
+      if (nativeApp) {
+        setOauthLoading("");
+      }
     } catch (oauthError) {
       console.error("Apple sign-in failed:", oauthError);
       setError("Apple sign-in could not be completed. Please try again.");
@@ -206,22 +207,20 @@ export default function Login() {
             <span>Continue with Google</span>
           </Button>
 
-          {!nativeApp ? (
-            <Button
-              variant="outline"
-              className="flex h-11 w-full items-center justify-center gap-3 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
-              onClick={handleAppleLogin}
-              type="button"
-              disabled={busy}
-            >
-              {oauthLoading === "apple" ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <AppleLogo />
-              )}
-              <span>Continue with Apple</span>
-            </Button>
-          ) : null}
+          <Button
+            variant="outline"
+            className="flex h-11 w-full items-center justify-center gap-3 border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
+            onClick={handleAppleLogin}
+            type="button"
+            disabled={busy}
+          >
+            {oauthLoading === "apple" ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <AppleLogo />
+            )}
+            <span>Continue with Apple</span>
+          </Button>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
