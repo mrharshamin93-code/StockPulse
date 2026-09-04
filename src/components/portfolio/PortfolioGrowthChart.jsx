@@ -48,6 +48,8 @@ const MAX_RENDERED_POINTS = 180;
 const FETCH_BATCH_SIZE = 5;
 const EPSILON = 1e-8;
 const NEW_YORK_TIME_ZONE = "America/New_York";
+const CHART_CACHE_TTL_MS = 5 * 60 * 1000;
+const portfolioChartCache = new Map();
 
 function getValidNumber(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -122,6 +124,23 @@ function normalizeHoldings(stocks) {
     ...holding,
     purchasePrice: holding.totalCost / holding.quantity,
   }));
+}
+
+function getHoldingsSignature(holdings) {
+  return holdings
+    .map((holding) => [
+      holding.ticker,
+      holding.quantity,
+      holding.purchasePrice,
+      holding.createdAt,
+      holding.currentPrice,
+    ].join(":"))
+    .sort()
+    .join("|");
+}
+
+function getChartCacheKey(userId, period) {
+  return `${userId}:${period}`;
 }
 
 function normalizeTransactions(rows) {
@@ -794,6 +813,99 @@ function addRangePerformance(data, period) {
   });
 }
 
+async function loadPortfolioChartData({ userId, holdings, period }) {
+  const rawTransactions = await fetchTransactions(userId);
+  const transactions = reconcileTransactionsWithHoldings(
+    rawTransactions,
+    holdings,
+  );
+
+  if (!transactions.length) {
+    throw new Error("No portfolio transaction history is available yet.");
+  }
+
+  const earliestActivity = Math.min(
+    ...transactions.map((transaction) => transaction.timestamp),
+    ...holdings.map((holding) => holding.createdAt),
+  );
+  const bounds = getRequestBounds(period, earliestActivity);
+  const tickers = Array.from(new Set([
+    ...holdings.map((holding) => holding.ticker),
+    ...transactions.map((transaction) => transaction.ticker),
+  ]));
+  const histories = await fetchHistories({ tickers, period, bounds });
+  const chartStart = getChartStart({
+    period,
+    histories,
+    provisionalChartStart: bounds.provisionalChartStart,
+  });
+  const chartEnd = getChartEnd({
+    period,
+    histories,
+    fallbackChartEnd: bounds.to,
+  });
+  const result = buildPortfolioData({
+    holdings,
+    transactions,
+    histories,
+    chartStart,
+    chartEnd,
+    period,
+  });
+
+  if (result.data.length < 1) {
+    throw new Error("Not enough verified price history is available for this range.");
+  }
+
+  return result.data;
+}
+
+export function getCachedPortfolioGrowthChart(userId, period = "1M") {
+  const entry = portfolioChartCache.get(getChartCacheKey(userId, period));
+  return entry?.data || null;
+}
+
+export function prefetchPortfolioGrowthChart({ userId, stocks, period = "1M" }) {
+  const holdings = normalizeHoldings(stocks);
+  if (!userId || holdings.length === 0) return Promise.resolve([]);
+
+  const key = getChartCacheKey(userId, period);
+  const signature = getHoldingsSignature(holdings);
+  const existing = portfolioChartCache.get(key);
+  const fresh =
+    existing?.data &&
+    existing.signature === signature &&
+    Date.now() - existing.fetchedAt < CHART_CACHE_TTL_MS;
+
+  if (fresh) return Promise.resolve(existing.data);
+  if (existing?.promise && existing.signature === signature) return existing.promise;
+
+  const promise = loadPortfolioChartData({ userId, holdings, period })
+    .then((data) => {
+      portfolioChartCache.set(key, {
+        data,
+        signature,
+        fetchedAt: Date.now(),
+        promise: null,
+      });
+      return data;
+    })
+    .catch((error) => {
+      if (portfolioChartCache.get(key)?.promise === promise) {
+        portfolioChartCache.delete(key);
+      }
+      throw error;
+    });
+
+  portfolioChartCache.set(key, {
+    data: existing?.data || null,
+    signature,
+    fetchedAt: existing?.fetchedAt || 0,
+    promise,
+  });
+  return promise;
+}
+
 function PortfolioTooltip({ active = false, payload = [], label = "" }) {
   if (!active || !payload?.length) return null;
 
@@ -856,11 +968,12 @@ function PeriodButton({ value, currentPeriod, onSelect }) {
 export default function PortfolioGrowthChart({ stocks = [] }) {
   const { user } = useAuth();
   const [period, setPeriod] = useState("1M");
-  const [chartData, setChartData] = useState([]);
+  const holdings = useMemo(() => normalizeHoldings(stocks), [stocks]);
+  const [chartData, setChartData] = useState(
+    () => getCachedPortfolioGrowthChart(user?.id, "1M") || [],
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const holdings = useMemo(() => normalizeHoldings(stocks), [stocks]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -877,95 +990,42 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
       return undefined;
     }
 
-    const controller = new AbortController();
+    let cancelled = false;
+    const cachedData = getCachedPortfolioGrowthChart(user.id, period);
+
+    if (cachedData?.length) {
+      setChartData(cachedData);
+      setLoading(false);
+    }
 
     async function loadChart() {
-      setLoading(true);
+      if (!cachedData?.length) setLoading(true);
       setError("");
 
       try {
-        const rawTransactions = await fetchTransactions(
-          user.id,
-          controller.signal,
-        );
-
-        const transactions = reconcileTransactionsWithHoldings(
-          rawTransactions,
-          holdings,
-        );
-
-        if (!transactions.length) {
-          throw new Error("No portfolio transaction history is available yet.");
-        }
-
-        const earliestActivity = Math.min(
-          ...transactions.map((transaction) => transaction.timestamp),
-          ...holdings.map((holding) => holding.createdAt),
-        );
-
-        const bounds = getRequestBounds(period, earliestActivity);
-
-        const tickers = Array.from(
-          new Set([
-            ...holdings.map((holding) => holding.ticker),
-            ...transactions.map((transaction) => transaction.ticker),
-          ]),
-        );
-
-        const histories = await fetchHistories({
-          tickers,
-          period,
-          bounds,
-          signal: controller.signal,
-        });
-
-        if (controller.signal.aborted) return;
-
-        const chartStart = getChartStart({
-          period,
-          histories,
-          provisionalChartStart: bounds.provisionalChartStart,
-        });
-
-        const chartEnd = getChartEnd({
-          period,
-          histories,
-          fallbackChartEnd: bounds.to,
-        });
-
-        const result = buildPortfolioData({
-          holdings,
-          transactions,
-          histories,
-          chartStart,
-          chartEnd,
+        const data = await prefetchPortfolioGrowthChart({
+          userId: user.id,
+          stocks,
           period,
         });
-
-        if (result.data.length < 1) {
-          throw new Error(
-            "Not enough verified price history is available for this range.",
-          );
-        }
-
-        setChartData(result.data);
+        if (!cancelled) setChartData(data);
       } catch (loadError) {
-        if (loadError?.name === "AbortError") return;
+        if (cancelled) return;
 
         console.error("Portfolio growth load failed:", loadError);
-        setChartData([]);
+        if (!cachedData?.length) setChartData([]);
         setError(loadError?.message || "Unable to load portfolio history.");
       } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
     loadChart();
 
-    return () => controller.abort();
-  }, [holdings, period, user?.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [holdings, period, stocks, user?.id]);
 
   const displayChartData = useMemo(
     () => addRangePerformance(chartData, period),
