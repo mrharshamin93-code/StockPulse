@@ -87,7 +87,6 @@ type ScreenerRow = {
   high_52_week: number | null;
   low_52_week: number | null;
   week_52_change: number | null;
-  average_volume_30d: number | null;
   return_1_week: number | null;
   return_1_month: number | null;
   return_3_month: number | null;
@@ -98,7 +97,6 @@ type ScreenerRow = {
   sma_20_above_sma_50: boolean | null;
   bullish_ma_crossover_at: string | null;
   bullish_ma_crossover_days_ago: number | null;
-  relative_volume: number | null;
 
   fundamentals_updated_at: string | null;
   technicals_updated_at: string | null;
@@ -165,7 +163,6 @@ const selectColumns = [
   "high_52_week",
   "low_52_week",
   "week_52_change",
-  "average_volume_30d",
   "return_1_week",
   "return_1_month",
   "return_3_month",
@@ -176,7 +173,6 @@ const selectColumns = [
   "sma_20_above_sma_50",
   "bullish_ma_crossover_at",
   "bullish_ma_crossover_days_ago",
-  "relative_volume",
   "fundamentals_updated_at",
   "technicals_updated_at",
 ].join(",");
@@ -234,14 +230,6 @@ const filterMap: Record<
   },
   maxReturn3Month: {
     column: "return_3_month",
-    operator: "lte",
-  },
-  minRelativeVolume: {
-    column: "relative_volume",
-    operator: "gte",
-  },
-  maxRelativeVolume: {
-    column: "relative_volume",
     operator: "lte",
   },
   minBullishMaCrossoverDays: {
@@ -581,8 +569,6 @@ const sortMap: Record<string, string> = {
   return_1_month: "return_1_month",
   return3Month: "return_3_month",
   return_3_month: "return_3_month",
-  relativeVolume: "relative_volume",
-  relative_volume: "relative_volume",
   bullishMaCrossoverDays: "bullish_ma_crossover_days_ago",
   bullish_ma_crossover_days_ago:
     "bullish_ma_crossover_days_ago",
@@ -619,9 +605,7 @@ const technicalFilterKeys =
     "minReturn1Month",
     "maxReturn1Month",
     "minReturn3Month",
-    "maxReturn3Month",
-    "minRelativeVolume",
-    "maxRelativeVolume",
+    "maxReturn3Month",
     "minBullishMaCrossoverDays",
     "maxBullishMaCrossoverDays",
   ]);
@@ -948,8 +932,6 @@ function toClientStock(
       row.low_52_week,
     week52Change:
       row.week_52_change,
-    averageVolume30d:
-      row.average_volume_30d,
     return1Week:
       row.return_1_week,
     return1Month:
@@ -970,8 +952,6 @@ function toClientStock(
       row.bullish_ma_crossover_at,
     bullishMaCrossoverDaysAgo:
       row.bullish_ma_crossover_days_ago,
-    relativeVolume:
-      row.relative_volume,
 
     quoteUpdatedAt:
       row.quote_updated_at,
@@ -1172,9 +1152,6 @@ Deno.serve(
       ) !== null ||
       finiteNumber(
         filters.minReturn3Month,
-      ) !== null ||
-      finiteNumber(
-        filters.minRelativeVolume,
       ) !== null ||
       finiteNumber(
         filters.maxBullishMaCrossoverDays,
