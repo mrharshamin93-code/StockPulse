@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Loader2,
   Plus,
-  RefreshCw,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -32,28 +31,6 @@ import {
 } from "@/components/ui/dialog";
 import SubPageHeader from "@/components/SubPageHeader";
 
-function formatTimestamp(value) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  return date.toLocaleString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    },
-  );
-}
-
 export default function PriceAlerts() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,14 +39,8 @@ export default function PriceAlerts() {
   const [alerts, setAlerts] =
     useState([]);
 
-  const [notifications, setNotifications] =
-    useState([]);
-
   const [loading, setLoading] =
     useState(true);
-
-  const [refreshing, setRefreshing] =
-    useState(false);
 
   const [open, setOpen] =
     useState(false);
@@ -90,93 +61,37 @@ export default function PriceAlerts() {
     useState("");
 
   const load = useCallback(
-    async ({
-      silent = false,
-    } = {}) => {
+    async () => {
       if (!user?.id) {
         return;
       }
 
-      if (silent) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
+      setLoading(true);
       setError("");
 
       try {
-        const [
-          alertsResult,
-          notificationsResult,
-        ] =
-          await Promise.all([
-            supabase
-              .from("stock_alerts")
-              .select(
-                "id,user_id,ticker,condition,target_price,enabled,triggered,last_checked_price,last_checked_at,triggered_at,created_at,notification_error",
-              )
-              .eq(
-                "user_id",
-                user.id,
-              )
-              .order(
-                "created_at",
-                {
-                  ascending:
-                    false,
-                },
-              ),
+        const { data, error: alertsError } =
+          await supabase
+            .from("stock_alerts")
+            .select(
+              "id,user_id,ticker,condition,target_price,enabled,triggered,last_checked_price,triggered_at,created_at",
+            )
+            .eq(
+              "user_id",
+              user.id,
+            )
+            .order(
+              "created_at",
+              {
+                ascending: false,
+              },
+            );
 
-            supabase
-              .from(
-                "app_notifications",
-              )
-              .select(
-                "id,type,title,body,ticker,route,read_at,created_at",
-              )
-              .eq(
-                "user_id",
-                user.id,
-              )
-              .eq(
-                "type",
-                "price_alert",
-              )
-              .order(
-                "created_at",
-                {
-                  ascending:
-                    false,
-                },
-              )
-              .limit(20),
-          ]);
-
-        if (
-          alertsResult.error
-        ) {
-          throw alertsResult.error;
+        if (alertsError) {
+          throw alertsError;
         }
 
-        if (
-          notificationsResult.error
-        ) {
-          throw notificationsResult.error;
-        }
-
-        const loadedNotifications =
-          notificationsResult.data ||
-          [];
-
-        setAlerts(
-          alertsResult.data || [],
-        );
-
-        setNotifications(
-          loadedNotifications,
-        );
-
+        setAlerts(data || []);
       } catch (loadError) {
         console.error(
           "Price alerts failed to load:",
@@ -188,7 +103,6 @@ export default function PriceAlerts() {
         );
       } finally {
         setLoading(false);
-        setRefreshing(false);
       }
     },
     [user?.id],
@@ -208,16 +122,13 @@ export default function PriceAlerts() {
         .toUpperCase();
 
     if (
-      !location.state
-        ?.openAddAlert ||
+      !location.state?.openAddAlert ||
       !requestedTicker
     ) {
       return;
     }
 
-    setTicker(
-      requestedTicker,
-    );
+    setTicker(requestedTicker);
     setCondition("above");
     setTargetPrice("");
     setError("");
@@ -275,9 +186,7 @@ export default function PriceAlerts() {
 
     if (
       !ticker.trim() ||
-      !Number.isFinite(
-        parsedTarget,
-      ) ||
+      !Number.isFinite(parsedTarget) ||
       parsedTarget <= 0
     ) {
       setError(
@@ -345,37 +254,19 @@ export default function PriceAlerts() {
         return;
       }
 
-      const {
-        error: insertError,
-      } =
+      const { error: insertError } =
         await supabase
           .from("stock_alerts")
           .insert({
-            user_id:
-              user.id,
-
-            ticker:
-              normalizedTicker,
-
+            user_id: user.id,
+            ticker: normalizedTicker,
             condition,
-
-            target_price:
-              parsedTarget,
-
-            enabled:
-              true,
-
-            triggered:
-              false,
-
-            triggered_at:
-              null,
-
-            notification_sent_at:
-              null,
-
-            notification_error:
-              null,
+            target_price: parsedTarget,
+            enabled: true,
+            triggered: false,
+            triggered_at: null,
+            notification_sent_at: null,
+            notification_error: null,
           });
 
       if (insertError) {
@@ -387,9 +278,7 @@ export default function PriceAlerts() {
       setCondition("above");
       setTargetPrice("");
 
-      await load({
-        silent: true,
-      });
+      await load();
     } catch (saveError) {
       console.error(
         "Price alert creation failed:",
@@ -409,20 +298,12 @@ export default function PriceAlerts() {
       return;
     }
 
-    const {
-      error: deleteError,
-    } =
+    const { error: deleteError } =
       await supabase
         .from("stock_alerts")
         .delete()
-        .eq(
-          "id",
-          id,
-        )
-        .eq(
-          "user_id",
-          user.id,
-        );
+        .eq("id", id)
+        .eq("user_id", user.id);
 
     if (deleteError) {
       console.error(
@@ -439,8 +320,7 @@ export default function PriceAlerts() {
     setAlerts(
       (previous) =>
         previous.filter(
-          (alert) =>
-            alert.id !== id,
+          (alert) => alert.id !== id,
         ),
     );
   }
@@ -453,23 +333,14 @@ export default function PriceAlerts() {
     const nextEnabled =
       !alert.enabled;
 
-    const {
-      error: updateError,
-    } =
+    const { error: updateError } =
       await supabase
         .from("stock_alerts")
         .update({
-          enabled:
-            nextEnabled,
+          enabled: nextEnabled,
         })
-        .eq(
-          "id",
-          alert.id,
-        )
-        .eq(
-          "user_id",
-          user.id,
-        );
+        .eq("id", alert.id)
+        .eq("user_id", user.id);
 
     if (updateError) {
       console.error(
@@ -487,129 +358,21 @@ export default function PriceAlerts() {
       (previous) =>
         previous.map(
           (item) =>
-            item.id ===
-            alert.id
+            item.id === alert.id
               ? {
                   ...item,
-                  enabled:
-                    nextEnabled,
+                  enabled: nextEnabled,
                 }
               : item,
         ),
     );
   }
 
-  async function handleOpenNotification(
-    notification,
-  ) {
-    if (!user?.id) {
-      return;
-    }
-
-    if (!notification.read_at) {
-      const readAt =
-        new Date().toISOString();
-
-      const {
-        error: updateError,
-      } =
-        await supabase
-          .from(
-            "app_notifications",
-          )
-          .update({
-            read_at:
-              readAt,
-          })
-          .eq(
-            "id",
-            notification.id,
-          )
-          .eq(
-            "user_id",
-            user.id,
-          );
-
-      if (updateError) {
-        console.error(
-          "Price alert notification update failed:",
-          updateError,
-        );
-
-        setError(
-          "Unable to open the notification. Please try again.",
-        );
-        return;
-      }
-
-      setNotifications(
-        (previous) =>
-          previous.map(
-            (item) =>
-              item.id ===
-              notification.id
-                ? {
-                    ...item,
-                    read_at:
-                      readAt,
-                  }
-                : item,
-          ),
-      );
-    }
-
-    if (notification.route) {
-      navigate(
-        notification.route,
-      );
-    }
-  }
-
-  async function handleDeleteNotification(
-    notificationId,
-  ) {
-    if (!user?.id) {
-      return;
-    }
-
-    const {
-      error: deleteError,
-    } =
-      await supabase
-        .from(
-          "app_notifications",
-        )
-        .delete()
-        .eq(
-          "id",
-          notificationId,
-        )
-        .eq(
-          "user_id",
-          user.id,
-        );
-
-    if (deleteError) {
-      console.error(
-        "Price alert notification deletion failed:",
-        deleteError,
-      );
-
-      setError(
-        "Unable to delete the notification. Please try again.",
-      );
-      return;
-    }
-
-    setNotifications(
-      (previous) =>
-        previous.filter(
-          (notification) =>
-            notification.id !==
-            notificationId,
-        ),
-    );
-  }
+  const activeCount = alerts.filter(
+    (alert) =>
+      alert.enabled &&
+      !alert.triggered,
+  ).length;
 
   return (
     <div
@@ -624,77 +387,31 @@ export default function PriceAlerts() {
         backPath="/settings"
       />
 
-      <main className="mx-auto max-w-2xl space-y-6 px-4 py-8 sm:px-6">
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">
-                Price monitoring
-              </h2>
-
-              <p className="mt-1 text-xs leading-5 text-gray-500">
-                StockPulse checks enabled alerts and saves a notification here when a target is reached.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                load({
-                  silent: true,
-                })
-              }
-              disabled={
-                loading ||
-                refreshing
-              }
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-gray-100 px-2.5 text-xs font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${
-                  refreshing
-                    ? "animate-spin"
-                    : ""
-                }`}
-              />
-
-              Refresh
-            </button>
-          </div>
-        </section>
-
+      <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
         {error ? (
           <div
             role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
             {error}
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">
-                Active alerts
+                Your alerts
               </h2>
 
               <p className="mt-0.5 text-xs text-gray-400">
-                {
-                  alerts.filter(
-                    (alert) =>
-                      alert.enabled &&
-                      !alert.triggered,
-                  ).length
-                } monitoring
+                {activeCount} active · Push notification when reached
               </p>
             </div>
 
             <button
               type="button"
-              onClick={
-                openBlankAlertDialog
-              }
+              onClick={openBlankAlertDialog}
               className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-xs font-medium text-gray-900 transition-colors hover:bg-gray-200"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -707,272 +424,116 @@ export default function PriceAlerts() {
               <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
             </div>
           ) : alerts.length === 0 ? (
-            <div className="px-5 py-10 text-center">
+            <div className="px-5 py-12 text-center">
               <Bell className="mx-auto h-7 w-7 text-gray-300" />
 
               <p className="mt-2 text-sm font-medium text-gray-600">
-                No alerts set
+                No price alerts
               </p>
 
               <p className="mt-1 text-xs text-gray-400">
-                Add a target price to start monitoring.
+                Add an alert and StockPulse will notify you when the target is reached.
               </p>
+
+              <button
+                type="button"
+                onClick={openBlankAlertDialog}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-gray-800"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Alert
+              </button>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {alerts.map(
-                (alert) => {
-                  const triggered =
-                    Boolean(
-                      alert.triggered,
-                    );
+              {alerts.map((alert) => {
+                const triggered = Boolean(
+                  alert.triggered,
+                );
 
-                  return (
+                return (
+                  <div
+                    key={alert.id}
+                    className="flex min-h-[68px] items-center gap-3 px-5 py-4"
+                  >
                     <div
-                      key={
-                        alert.id
-                      }
-                      className="flex min-h-[68px] items-center gap-3 px-5 py-4"
-                    >
-                      <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-                          triggered
-                            ? "bg-emerald-50"
-                            : alert.enabled
-                              ? "bg-amber-50"
-                              : "bg-gray-100"
-                        }`}
-                      >
-                        {triggered ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        ) : alert.condition ===
-                          "above" ? (
-                          <TrendingUp
-                            className={`h-4 w-4 ${
-                              alert.enabled
-                                ? "text-amber-500"
-                                : "text-gray-400"
-                            }`}
-                          />
-                        ) : (
-                          <TrendingDown
-                            className={`h-4 w-4 ${
-                              alert.enabled
-                                ? "text-amber-500"
-                                : "text-gray-400"
-                            }`}
-                          />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`text-sm font-semibold ${
-                            !alert.enabled &&
-                            !triggered
-                              ? "text-gray-400"
-                              : "text-gray-900"
-                          }`}
-                        >
-                          {
-                            alert.ticker
-                          }{" "}
-
-                          <span className="font-normal text-gray-400">
-                            {
-                              alert.condition
-                            }
-                          </span>{" "}
-
-                          $
-                          {Number(
-                            alert.target_price,
-                          ).toFixed(
-                            2,
-                          )}
-                        </p>
-
-                        {triggered ? (
-                          <p className="mt-0.5 text-xs text-emerald-600">
-                            Triggered
-                            {alert.last_checked_price
-                              ? ` at $${Number(
-                                  alert.last_checked_price,
-                                ).toFixed(
-                                  2,
-                                )}`
-                              : ""}
-                            {alert.triggered_at
-                              ? ` · ${formatTimestamp(
-                                  alert.triggered_at,
-                                )}`
-                              : ""}
-                          </p>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleToggle(
-                                alert,
-                              )
-                            }
-                            className="mt-0.5 text-xs text-gray-400 transition-colors hover:text-gray-900"
-                          >
-                            {alert.enabled
-                              ? "Enabled · tap to disable"
-                              : "Disabled · tap to enable"}
-                          </button>
-                        )}
-
-                        {!triggered &&
-                        alert.last_checked_at ? (
-                          <p className="mt-0.5 text-[10px] text-gray-400">
-                            Last checked
-                            {alert.last_checked_price
-                              ? ` at $${Number(
-                                  alert.last_checked_price,
-                                ).toFixed(
-                                  2,
-                                )}`
-                              : ""}
-                            {" · "}
-                            {formatTimestamp(
-                              alert.last_checked_at,
-                            )}
-                          </p>
-                        ) : null}
-
-                        {alert.notification_error ? (
-                          <p className="mt-1 text-[10px] text-red-500">
-                            Notification delivery encountered an issue.
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDelete(
-                            alert.id,
-                          )
-                        }
-                        className="rounded-lg p-2 transition-colors hover:bg-red-50"
-                        aria-label={`Delete ${alert.ticker} alert`}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-400" />
-                      </button>
-                    </div>
-                  );
-                },
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-4">
-            <h2 className="text-sm font-semibold text-gray-900">
-              Triggered notifications
-            </h2>
-
-            <p className="mt-0.5 text-xs text-gray-400">
-              In-app history for reached targets
-            </p>
-          </div>
-
-          {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-            </div>
-          ) : notifications.length ===
-            0 ? (
-            <div className="px-5 py-10 text-center">
-              <Bell className="mx-auto h-7 w-7 text-gray-300" />
-
-              <p className="mt-2 text-sm font-medium text-gray-600">
-                No triggered alerts yet
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {notifications.map(
-                (
-                  notification,
-                ) => {
-                  const unread =
-                    !notification.read_at;
-
-                  return (
-                    <div
-                      key={
-                        notification.id
-                      }
-                      className={`flex items-start gap-2 px-3 py-2 ${
-                        unread
-                          ? "bg-blue-50/70"
-                          : "bg-white"
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                        triggered
+                          ? "bg-emerald-50"
+                          : alert.enabled
+                            ? "bg-amber-50"
+                            : "bg-gray-100"
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleOpenNotification(
-                            notification,
-                          )
-                        }
-                        className="flex min-w-0 flex-1 items-start gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-gray-50"
-                      >
-                        <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50">
-                          <Bell className="h-4 w-4 text-amber-500" />
-
-                          {unread ? (
-                            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-red-500" />
-                          ) : null}
-                        </span>
-
-                        <span className="min-w-0 flex-1">
-                          <span
-                            className={`block text-sm ${
-                              unread
-                                ? "font-bold text-gray-950"
-                                : "font-semibold text-gray-800"
-                            }`}
-                          >
-                            {
-                              notification.title
-                            }
-                          </span>
-
-                          <span className="mt-1 block text-xs leading-5 text-gray-500">
-                            {
-                              notification.body
-                            }
-                          </span>
-
-                          <span className="mt-1 block text-[10px] text-gray-400">
-                            {formatTimestamp(
-                              notification.created_at,
-                            )}
-                          </span>
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleDeleteNotification(
-                            notification.id,
-                          )
-                        }
-                        aria-label={`Delete ${notification.title}`}
-                        className="mt-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {triggered ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      ) : alert.condition === "above" ? (
+                        <TrendingUp
+                          className={`h-4 w-4 ${
+                            alert.enabled
+                              ? "text-amber-500"
+                              : "text-gray-400"
+                          }`}
+                        />
+                      ) : (
+                        <TrendingDown
+                          className={`h-4 w-4 ${
+                            alert.enabled
+                              ? "text-amber-500"
+                              : "text-gray-400"
+                          }`}
+                        />
+                      )}
                     </div>
-                  );
-                },
-              )}
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`text-sm font-semibold ${
+                          !alert.enabled && !triggered
+                            ? "text-gray-400"
+                            : "text-gray-900"
+                        }`}
+                      >
+                        {alert.ticker}{" "}
+                        <span className="font-normal text-gray-400">
+                          {alert.condition}
+                        </span>{" "}
+                        ${Number(alert.target_price).toFixed(2)}
+                      </p>
+
+                      {triggered ? (
+                        <p className="mt-0.5 text-xs text-emerald-600">
+                          Target reached
+                          {alert.last_checked_price
+                            ? ` at $${Number(
+                                alert.last_checked_price,
+                              ).toFixed(2)}`
+                            : ""}
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleToggle(alert)}
+                          className="mt-0.5 text-xs text-gray-400 transition-colors hover:text-gray-900"
+                        >
+                          {alert.enabled
+                            ? "Enabled · tap to disable"
+                            : "Disabled · tap to enable"}
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(alert.id)}
+                      className="rounded-lg p-2 transition-colors hover:bg-red-50"
+                      aria-label={`Delete ${alert.ticker} alert`}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-400" />
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -980,9 +541,7 @@ export default function PriceAlerts() {
 
       <Dialog
         open={open}
-        onOpenChange={
-          handleAlertDialogOpenChange
-        }
+        onOpenChange={handleAlertDialogOpenChange}
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -992,9 +551,7 @@ export default function PriceAlerts() {
           </DialogHeader>
 
           <form
-            onSubmit={
-              handleAdd
-            }
+            onSubmit={handleAdd}
             className="space-y-4 pt-1"
           >
             <div className="space-y-2">
@@ -1006,16 +563,12 @@ export default function PriceAlerts() {
                 id="alert-ticker"
                 placeholder="AAPL"
                 value={ticker}
-                onChange={(
-                  event,
-                ) =>
-                  {
-                    setTicker(
-                      event.target.value.toUpperCase(),
-                    );
-                    setError("");
-                  }
-                }
+                onChange={(event) => {
+                  setTicker(
+                    event.target.value.toUpperCase(),
+                  );
+                  setError("");
+                }}
                 required
                 className="uppercase"
               />
@@ -1029,14 +582,9 @@ export default function PriceAlerts() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    setCondition(
-                      "above",
-                    )
-                  }
+                  onClick={() => setCondition("above")}
                   className={`rounded-xl border py-2.5 text-sm font-medium transition-colors ${
-                    condition ===
-                    "above"
+                    condition === "above"
                       ? "border-gray-900 bg-gray-900 text-white"
                       : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
                   }`}
@@ -1046,14 +594,9 @@ export default function PriceAlerts() {
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setCondition(
-                      "below",
-                    )
-                  }
+                  onClick={() => setCondition("below")}
                   className={`rounded-xl border py-2.5 text-sm font-medium transition-colors ${
-                    condition ===
-                    "below"
+                    condition === "below"
                       ? "border-gray-900 bg-gray-900 text-white"
                       : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"
                   }`}
@@ -1074,15 +617,9 @@ export default function PriceAlerts() {
                 step="any"
                 min="0.01"
                 placeholder="150.00"
-                value={
-                  targetPrice
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setTargetPrice(
-                    event.target.value,
-                  )
+                value={targetPrice}
+                onChange={(event) =>
+                  setTargetPrice(event.target.value)
                 }
                 required
               />
