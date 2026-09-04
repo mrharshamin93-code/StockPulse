@@ -31,17 +31,17 @@ const PERIODS = [
 ];
 
 const PERIOD_CONFIG = {
-  "1D": { resolution: "30", requestDays: 7, displayDays: 1 },
-  "1W": { resolution: "D", requestDays: 14, displayDays: 7 },
-  "1M": { resolution: "D", requestDays: 45, displayDays: 30 },
-  "3M": { resolution: "D", requestDays: 110, displayDays: 90 },
-  "6M": { resolution: "D", requestDays: 200, displayDays: 180 },
-  YTD: { resolution: "D", requestDays: null, displayDays: null },
-  "1Y": { resolution: "D", requestDays: 390, displayDays: 365 },
-  "2Y": { resolution: "W", requestDays: 780, displayDays: 730 },
-  "5Y": { resolution: "W", requestDays: 1900, displayDays: 1825 },
-  "10Y": { resolution: "M", requestDays: 3720, displayDays: 3650 },
-  All: { resolution: "M", requestDays: null, displayDays: null },
+  "1D": { resolution: "30", days: 1, bufferDays: 7 },
+  "1W": { resolution: "D", days: 7, bufferDays: 7 },
+  "1M": { resolution: "D", months: 1, bufferDays: 15 },
+  "3M": { resolution: "D", months: 3, bufferDays: 20 },
+  "6M": { resolution: "D", months: 6, bufferDays: 20 },
+  YTD: { resolution: "D", bufferDays: 20 },
+  "1Y": { resolution: "D", years: 1, bufferDays: 25 },
+  "2Y": { resolution: "W", years: 2, bufferDays: 50 },
+  "5Y": { resolution: "W", years: 5, bufferDays: 75 },
+  "10Y": { resolution: "M", years: 10, bufferDays: 120 },
+  All: { resolution: "M", bufferDays: 120 },
 };
 
 const MAX_RENDERED_POINTS = 180;
@@ -195,15 +195,29 @@ function reconcileTransactionsWithHoldings(transactions, holdings) {
 function getRequestBounds(period, earliestActivity) {
   const now = Math.floor(Date.now() / 1000);
   const config = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
+  const nowDate = new Date(now * 1000);
+
+  const subtractCalendarPeriod = () => {
+    const start = new Date(nowDate);
+
+    if (config.years) {
+      start.setUTCFullYear(start.getUTCFullYear() - config.years);
+    } else if (config.months) {
+      start.setUTCMonth(start.getUTCMonth() - config.months);
+    } else {
+      start.setUTCDate(start.getUTCDate() - config.days);
+    }
+
+    return Math.floor(start.getTime() / 1000);
+  };
 
   if (period === "YTD") {
-    const currentDate = new Date();
     const yearStart = Math.floor(
-      Date.UTC(currentDate.getUTCFullYear(), 0, 1, 0, 0, 0, 0) / 1000,
+      Date.UTC(nowDate.getUTCFullYear(), 0, 1, 0, 0, 0, 0) / 1000,
     );
 
     return {
-      from: yearStart,
+      from: yearStart - config.bufferDays * 86400,
       to: now,
       resolution: config.resolution,
       provisionalChartStart: yearStart,
@@ -211,7 +225,7 @@ function getRequestBounds(period, earliestActivity) {
   }
 
   if (period === "All") {
-    const from = Math.max(1, earliestActivity - 7 * 86400);
+    const from = Math.max(1, earliestActivity - config.bufferDays * 86400);
     return {
       from,
       to: now,
@@ -220,11 +234,13 @@ function getRequestBounds(period, earliestActivity) {
     };
   }
 
+  const chartStart = subtractCalendarPeriod();
+
   return {
-    from: now - config.requestDays * 86400,
+    from: chartStart - config.bufferDays * 86400,
     to: now,
     resolution: config.resolution,
-    provisionalChartStart: now - config.displayDays * 86400,
+    provisionalChartStart: chartStart,
   };
 }
 
@@ -499,11 +515,21 @@ function formatChartLabel(timestamp, period) {
 
 function buildPriceSeries({ ticker, histories, transactions, holding, chartStart, chartEnd }) {
   const points = [];
+  const history = histories.get(ticker) || [];
+  let boundaryPrice = null;
 
-  for (const point of histories.get(ticker) || []) {
+  for (const point of history) {
+    if (point.timestamp <= chartStart) {
+      boundaryPrice = point.price;
+    }
+
     if (point.timestamp >= chartStart && point.timestamp <= chartEnd) {
       points.push(point);
     }
+  }
+
+  if (boundaryPrice !== null) {
+    points.push({ timestamp: chartStart, price: boundaryPrice });
   }
 
   for (const transaction of transactions) {
@@ -623,7 +649,7 @@ function buildPortfolioData({
     );
   }
 
-  const timestampSet = new Set([chartEnd]);
+  const timestampSet = new Set([chartStart, chartEnd]);
 
   for (const series of priceSeriesByTicker.values()) {
     for (const point of series) {
@@ -690,18 +716,42 @@ function formatCurrency(value) {
   })}`;
 }
 
-function formatYAxisValue(value) {
+function getYAxisFormat(data) {
+  const values = (data || [])
+    .map((point) => Number(point?.value))
+    .filter(Number.isFinite);
+
+  if (!values.length) return { divisor: 1, suffix: "", decimals: 0 };
+
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const largestMagnitude = Math.max(Math.abs(minimum), Math.abs(maximum));
+  const span = maximum - minimum;
+  const divisor = largestMagnitude >= 1_000_000
+    ? 1_000_000
+    : largestMagnitude >= 1000
+      ? 1000
+      : 1;
+  const suffix = divisor === 1_000_000 ? "M" : divisor === 1000 ? "k" : "";
+  const estimatedStep = span > EPSILON
+    ? span / 4 / divisor
+    : largestMagnitude / 4 / divisor;
+  const decimals = estimatedStep > 0 && estimatedStep < 1
+    ? Math.min(2, Math.ceil(-Math.log10(estimatedStep)))
+    : 0;
+
+  return { divisor, suffix, decimals };
+}
+
+function formatYAxisValue(value, format) {
   const numericValue = Number(value);
 
   if (!Number.isFinite(numericValue)) return "—";
-  if (Math.abs(numericValue) >= 1_000_000) {
-    return `$${(numericValue / 1_000_000).toFixed(1)}M`;
-  }
-  if (Math.abs(numericValue) >= 1000) {
-    return `$${(numericValue / 1000).toFixed(0)}k`;
-  }
-
-  return `$${numericValue.toFixed(0)}`;
+  const scaledValue = numericValue / format.divisor;
+  return `$${scaledValue.toLocaleString(undefined, {
+    minimumFractionDigits: format.decimals,
+    maximumFractionDigits: format.decimals,
+  })}${format.suffix}`;
 }
 
 function addRangePerformance(data, period) {
@@ -916,6 +966,10 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
     () => addRangePerformance(chartData, period),
     [chartData, period],
   );
+  const yAxisFormat = useMemo(
+    () => getYAxisFormat(displayChartData),
+    [displayChartData],
+  );
 
   const latestPoint = displayChartData.at(-1) || null;
   const latestValue = latestPoint?.value ?? null;
@@ -1028,7 +1082,8 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
 
               <YAxis
                 domain={["auto", "auto"]}
-                tickFormatter={formatYAxisValue}
+                tickCount={5}
+                tickFormatter={(value) => formatYAxisValue(value, yAxisFormat)}
                 tick={{
                   fontSize: 10,
                   fill: "hsl(var(--muted-foreground))",
