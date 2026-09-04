@@ -1,0 +1,32 @@
+name: One-time starred watchlist state patch
+on:
+  push:
+    branches: [Financial-Datasets-Migration]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Pass starred stock cache state to StockDetail'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Financial-Datasets-Migration
+      - name: Patch Watchlist navigation state
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/pages/Watchlist.jsx')
+          s=p.read_text()
+          old='''        state: {\n          from:\n            "/watchlist",\n        },'''
+          new='''        state: {\n          from:\n            "/watchlist",\n          ticker: String(item.ticker || "").trim().toUpperCase(),\n          companyName,\n          quote,\n          stock: hasStock ? stock : null,\n        },'''
+          assert old in s
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Watchlist.jsx
+          git commit -m "Pass starred stock cache state to StockDetail"
+          git push origin Financial-Datasets-Migration
