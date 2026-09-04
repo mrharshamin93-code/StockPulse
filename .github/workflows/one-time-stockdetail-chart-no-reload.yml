@@ -1,0 +1,59 @@
+name: One-time StockDetail chart reload fix
+
+on:
+  push:
+    branches:
+      - Financial-Datasets-Migration
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Keep prefetched StockDetail chart visible'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Financial-Datasets-Migration
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Patch StockDetail chart refresh behavior
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/pages/StockDetail.jsx')
+          s = p.read_text()
+
+          old = '''        if (activePeriod === "1W") {\n          onExtendedSessionChange?.(\n            calculateExtendedSession(primary, currentPrice)\n          );\n        }\n\n        const nextReturn = calculatePeriodReturn('''
+          new = '''        const nextReturn = calculatePeriodReturn('''
+          assert old in s, 'inline extended-session block not found'
+          s = s.replace(old, new, 1)
+
+          old_dep = '''    primaryTicker,\n    currentPrice,\n    activePeriod,'''
+          new_dep = '''    primaryTicker,\n    activePeriod,'''
+          assert old_dep in s, 'currentPrice dependency block not found'
+          s = s.replace(old_dep, new_dep, 1)
+
+          anchor = '''  const periodStartPrice = useMemo(() => {'''
+          effect = '''  useEffect(() => {\n    if (activePeriod !== "1W" || comparisonsActive || !chartData.length) {\n      return;\n    }\n\n    const primaryPoints = chartData\n      .map((point) => ({\n        timestamp: point.timestamp,\n        value: point.primaryValue,\n      }))\n      .filter(\n        (point) =>\n          Number.isFinite(point.timestamp) &&\n          Number.isFinite(point.value)\n      );\n\n    if (!primaryPoints.length) {\n      return;\n    }\n\n    onExtendedSessionChange?.(\n      calculateExtendedSession(primaryPoints, currentPrice)\n    );\n  }, [\n    activePeriod,\n    comparisonsActive,\n    chartData,\n    currentPrice,\n    onExtendedSessionChange,\n  ]);\n\n'''
+          assert anchor in s, 'periodStartPrice anchor not found'
+          s = s.replace(anchor, effect + anchor, 1)
+
+          old_overlay = '''        {!longRangeUnavailable && chartLoading && ('''
+          new_overlay = '''        {!longRangeUnavailable && chartLoading && chartData.length === 0 && ('''
+          assert old_overlay in s, 'chart loading overlay not found'
+          s = s.replace(old_overlay, new_overlay, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/StockDetail.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Keep prefetched StockDetail chart visible"
+          git push origin Financial-Datasets-Migration
