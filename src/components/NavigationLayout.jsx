@@ -135,7 +135,12 @@ export default function NavigationLayout() {
       >
         <div
           ref={contentScrollRef}
-          className="absolute inset-0 overflow-x-hidden overflow-y-auto overscroll-none touch-pan-y"
+          className={[
+            "absolute inset-0 overflow-x-hidden overflow-y-auto touch-pan-y",
+            activeTab === "/watchlist"
+              ? "stockpulse-watchlist-scroll overscroll-y-auto"
+              : "overscroll-none",
+          ].join(" ")}
           style={{
             WebkitOverflowScrolling: "touch",
           }}

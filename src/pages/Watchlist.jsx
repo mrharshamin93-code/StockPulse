@@ -1872,6 +1872,7 @@ function WatchlistCard({
           ),
       }}
       className="
+        stockpulse-watchlist-card
         relative
         overflow-hidden
         rounded-[20px]
@@ -1976,9 +1977,6 @@ function WatchlistCard({
 
             touchAction:
               "pan-y",
-
-            willChange:
-              "transform",
 
             WebkitBackfaceVisibility:
               "hidden",

@@ -107,6 +107,26 @@
 }
 
 /*
+ * Keep the watchlist on WebKit's native momentum-scrolling path. Isolating
+ * its paint work prevents the card layers from being recomposited together
+ * while a flick is decelerating, which is especially noticeable in WKWebView.
+ */
+.stockpulse-watchlist-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overflow-anchor: none;
+  scrollbar-width: none;
+}
+
+.stockpulse-watchlist-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.stockpulse-watchlist-card {
+  contain: layout paint style;
+}
+
+/*
  * Apple recommends a minimum touch target of 44 × 44 points.
  *
  * This increases the tappable area of every back button that uses
