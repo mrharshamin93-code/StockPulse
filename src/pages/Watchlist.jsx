@@ -1808,6 +1808,10 @@ function WatchlistCard({
         state: {
           from:
             "/watchlist",
+          ticker: String(item.ticker || "").trim().toUpperCase(),
+          companyName,
+          quote,
+          stock: hasStock ? stock : null,
         },
       }
     );
