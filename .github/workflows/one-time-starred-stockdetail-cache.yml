@@ -1,3 +1,4 @@
+# trigger
 name: One-time starred StockDetail cache patch
 on:
   push:
