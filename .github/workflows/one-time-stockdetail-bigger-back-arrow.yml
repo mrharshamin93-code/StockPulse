@@ -1,3 +1,4 @@
+# trigger
 name: One-time StockDetail bigger back arrow
 on:
   push:
