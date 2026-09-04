@@ -166,6 +166,27 @@ a:has(> .lucide-chevron-left)::before {
   z-index: 1;
 }
 
+/*
+ * Stock Detail gets an intentionally oversized back-button hitbox.
+ * The visible 22px arrow stays unchanged; only the invisible touch target
+ * grows to roughly 128 × 100px so it is very forgiving on iPhone.
+ */
+header[style*="safe-area-inset-top"] button[aria-label="Go back"] {
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+
+header[style*="safe-area-inset-top"] button[aria-label="Go back"]::after {
+  content: "";
+  position: absolute;
+  top: -21px;
+  right: -32px;
+  bottom: -21px;
+  left: -32px;
+  z-index: 2;
+}
+
 /* Hide scrollbars on horizontal scroll areas */
 .overflow-x-auto::-webkit-scrollbar,
 [class*="overflow-x"]::-webkit-scrollbar {
