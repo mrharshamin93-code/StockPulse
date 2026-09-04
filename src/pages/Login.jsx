@@ -9,6 +9,45 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+function GoogleLogo() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5 shrink-0"
+    >
+      <path
+        fill="#4285F4"
+        d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.87h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.35Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 22c2.7 0 4.97-.9 6.63-2.42l-3.24-2.51c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.59A10 10 0 0 0 12 22Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M6.39 13.9A6.02 6.02 0 0 1 6.08 12c0-.66.11-1.3.31-1.9V7.51H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.49l3.35-2.59Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.97c1.47 0 2.79.51 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.96 5.51l3.35 2.59C7.18 7.73 9.39 5.97 12 5.97Z"
+      />
+    </svg>
+  );
+}
+
+function AppleLogo() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5 shrink-0 fill-current"
+    >
+      <path d="M17.05 12.54c-.03-3.05 2.49-4.53 2.6-4.6a5.57 5.57 0 0 0-4.38-2.37c-1.84-.19-3.62 1.1-4.56 1.1-.96 0-2.4-1.08-3.96-1.05a5.8 5.8 0 0 0-4.88 2.98c-2.12 3.67-.54 9.06 1.49 12.03 1.01 1.45 2.19 3.08 3.75 3.02 1.53-.06 2.1-.97 3.95-.97 1.83 0 2.37.97 3.96.93 1.64-.03 2.68-1.46 3.65-2.92a12.02 12.02 0 0 0 1.67-3.4 5.25 5.25 0 0 1-3.29-4.75ZM14.07 3.62A5.3 5.3 0 0 0 15.29 0a5.4 5.4 0 0 0-3.49 1.72 5.04 5.04 0 0 0-1.25 3.48 4.46 4.46 0 0 0 3.52-1.58Z" />
+    </svg>
+  );
+}
+
 function friendlyLoginError(error) {
   const message = String(error?.message || error || "").toLowerCase();
 
@@ -160,9 +199,11 @@ export default function Login() {
             disabled={busy}
           >
             {oauthLoading === "google" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
-            Continue with Google
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <GoogleLogo />
+            )}
+            <span>Continue with Google</span>
           </Button>
 
           {!nativeApp ? (
@@ -174,9 +215,11 @@ export default function Login() {
               disabled={busy}
             >
               {oauthLoading === "apple" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Continue with Apple
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <AppleLogo />
+              )}
+              <span>Continue with Apple</span>
             </Button>
           ) : null}
 
