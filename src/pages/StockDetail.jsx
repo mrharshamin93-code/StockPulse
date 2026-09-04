@@ -201,10 +201,6 @@ function timestampToDate(timestamp) {
     return new Date(NaN);
   }
 
-  // Financial data sources can return Unix timestamps in either
-  // seconds or milliseconds. Detect the unit instead of always
-  // multiplying by 1000, which can make every intraday tick resolve
-  // to the wrong hour.
   return new Date(value > 10_000_000_000 ? value : value * 1000);
 }
 
@@ -226,6 +222,80 @@ function getNewYorkTimeParts(timestamp) {
     hour: Number(parts.find((part) => part.type === "hour")?.value),
     minute: Number(parts.find((part) => part.type === "minute")?.value),
   };
+}
+
+function getNewYorkDateKey(timestamp) {
+  const date = timestampToDate(timestamp);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const value = (type) =>
+    parts.find((part) => part.type === type)?.value || "";
+
+  const year = value("year");
+  const month = value("month");
+  const day = value("day");
+
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
+function getCurrentExtendedSession() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const value = (type) =>
+    parts.find((part) => part.type === type)?.value || "";
+
+  const weekday = value("weekday");
+
+  if (weekday === "Sat" || weekday === "Sun") {
+    return null;
+  }
+
+  const hour = Number(value("hour"));
+  const minute = Number(value("minute"));
+  const minuteOfDay = hour * 60 + minute;
+  const year = value("year");
+  const month = value("month");
+  const day = value("day");
+  const dateKey = year && month && day ? `${year}-${month}-${day}` : "";
+
+  if (!Number.isFinite(minuteOfDay) || !dateKey) {
+    return null;
+  }
+
+  if (minuteOfDay >= 240 && minuteOfDay < 570) {
+    return {
+      type: "pre",
+      label: "Pre-Market",
+      dateKey,
+    };
+  }
+
+  if (minuteOfDay >= 960 && minuteOfDay < 1200) {
+    return {
+      type: "after",
+      label: "After Hours",
+      dateKey,
+    };
+  }
+
+  return null;
 }
 
 function formatXAxisTick(timestamp, period) {
@@ -602,6 +672,7 @@ function StockChart({
   onPeriodChange,
   onPeriodReturnChange,
   onDailyReturnChange,
+  onExtendedSessionChange,
   initialDailyReturn,
 }) {
   const [compareTickers, setCompareTickers] = useState([]);
@@ -631,7 +702,8 @@ function StockChart({
     setCompareInput("");
     setCompareError("");
     setShowInput(false);
-  }, [primaryTicker]);
+    onExtendedSessionChange?.(null);
+  }, [primaryTicker, onExtendedSessionChange]);
 
   function clearTooltipTimer() {
     if (tooltipTimerRef.current) {
@@ -765,6 +837,44 @@ function StockChart({
         const tickerSeries = Object.fromEntries(seriesResults);
         const primary = tickerSeries[primaryTicker];
 
+        if (activePeriod === "1W") {
+          const session = getCurrentExtendedSession();
+          const displayedCurrentPrice = roundPrice(currentPrice);
+
+          if (session && Number.isFinite(displayedCurrentPrice) && displayedCurrentPrice > 0) {
+            const datedPoints = primary
+              .map((point) => ({
+                ...point,
+                dateKey: getNewYorkDateKey(point.timestamp),
+              }))
+              .filter((point) => point.dateKey && Number.isFinite(point.value));
+
+            const baselinePoint = session.type === "after"
+              ? [...datedPoints]
+                  .reverse()
+                  .find((point) => point.dateKey === session.dateKey)
+              : [...datedPoints]
+                  .reverse()
+                  .find((point) => point.dateKey < session.dateKey);
+
+            const baselinePrice = roundPrice(baselinePoint?.value);
+
+            if (Number.isFinite(baselinePrice) && baselinePrice > 0) {
+              const percent =
+                ((displayedCurrentPrice - baselinePrice) / baselinePrice) * 100;
+
+              onExtendedSessionChange?.({
+                label: session.label,
+                percent,
+              });
+            } else {
+              onExtendedSessionChange?.(null);
+            }
+          } else {
+            onExtendedSessionChange?.(null);
+          }
+        }
+
         const nextReturn = calculatePeriodReturn(
           primary,
           activePeriod,
@@ -825,12 +935,14 @@ function StockChart({
     return () => controller.abort();
   }, [
     primaryTicker,
+    currentPrice,
     activePeriod,
     compareTickers,
     comparisonsActive,
     longRangeUnavailable,
     onPeriodReturnChange,
     onDailyReturnChange,
+    onExtendedSessionChange,
     initialDailyReturn,
   ]);
 
@@ -1596,6 +1708,7 @@ export default function StockDetail() {
   const [activePeriod, setActivePeriod] = useState("1W");
   const [, setPeriodReturn] = useState(null);
   const [dailyReturn, setDailyReturn] = useState(null);
+  const [extendedSession, setExtendedSession] = useState(null);
 
   const isTickerRoute = routeValue?.startsWith("ticker-");
 
@@ -1660,6 +1773,7 @@ export default function StockDetail() {
       setPageError("");
       setActivePeriod("1W");
       setPeriodReturn(null);
+      setExtendedSession(null);
 
       const cachedTicker = tickerFromRoute || routeStateTicker;
 
@@ -2282,11 +2396,21 @@ export default function StockDetail() {
           </div>
 
           <div className="mt-5">
-            <p className="text-[34px] font-bold leading-none tracking-[-1px]">
-              {currentPrice > 0
-                ? `$${currentPrice.toFixed(2)}`
-                : "—"}
-            </p>
+            <div className="flex items-end justify-between gap-3">
+              <p className="text-[34px] font-bold leading-none tracking-[-1px]">
+                {currentPrice > 0
+                  ? `$${currentPrice.toFixed(2)}`
+                  : "—"}
+              </p>
+
+              {extendedSession && Number.isFinite(extendedSession.percent) && (
+                <p className="shrink-0 pb-0.5 text-right text-[11px] font-medium text-muted-foreground/65">
+                  {extendedSession.label}{" "}
+                  {extendedSession.percent >= 0 ? "+" : ""}
+                  {extendedSession.percent.toFixed(2)}%
+                </p>
+              )}
+            </div>
 
             <div className="mt-2 flex items-center gap-2">
               <div
@@ -2376,6 +2500,7 @@ export default function StockDetail() {
           onPeriodChange={setActivePeriod}
           onPeriodReturnChange={setPeriodReturn}
           onDailyReturnChange={setDailyReturn}
+          onExtendedSessionChange={setExtendedSession}
           initialDailyReturn={dailyReturn}
         />
 
