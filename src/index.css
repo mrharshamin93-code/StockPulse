@@ -107,6 +107,22 @@
 }
 
 /*
+ * Prevent iOS/WKWebView from auto-zooming the page when a form field is
+ * focused. Safari zooms focused inputs whose computed font size is below
+ * 16px; some compact StockPulse controls intentionally use smaller utility
+ * classes, including the chart Compare ticker field.
+ */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/*
  * Keep the watchlist on WebKit's native momentum-scrolling path. Isolating
  * its paint work prevents the card layers from being recomposited together
  * while a flick is decelerating, which is especially noticeable in WKWebView.
