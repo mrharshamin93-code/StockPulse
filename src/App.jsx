@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { App as CapacitorApp } from "@capacitor/app";
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -15,6 +16,7 @@ import {
   useAuth,
 } from "@/lib/AuthContext";
 import { MarketDataProvider } from "@/lib/MarketDataContext";
+import { recordReviewSession } from "@/lib/reviewPrompt";
 
 import { applyTheme } from "@/components/settings/ThemeSection.jsx";
 
@@ -74,6 +76,50 @@ function ThemeSync() {
       preferences?.theme || "default",
     );
   }, [preferences?.theme]);
+
+  return null;
+}
+
+function ReviewPromptTracker() {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    let disposed = false;
+    let listenerHandle = null;
+    let reviewTimer = null;
+
+    const scheduleSessionCheck = () => {
+      if (reviewTimer) clearTimeout(reviewTimer);
+
+      reviewTimer = window.setTimeout(() => {
+        if (!disposed) {
+          recordReviewSession();
+        }
+      }, 4000);
+    };
+
+    scheduleSessionCheck();
+
+    CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) scheduleSessionCheck();
+    }).then((handle) => {
+      if (disposed) {
+        handle.remove();
+        return;
+      }
+      listenerHandle = handle;
+    }).catch(() => {
+      // Web builds and unsupported environments should continue normally.
+    });
+
+    return () => {
+      disposed = true;
+      if (reviewTimer) clearTimeout(reviewTimer);
+      listenerHandle?.remove();
+    };
+  }, [user?.id]);
 
   return null;
 }
@@ -295,6 +341,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ThemeSync />
+      <ReviewPromptTracker />
 
       <QueryClientProvider
         client={

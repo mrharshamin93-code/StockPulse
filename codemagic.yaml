@@ -25,6 +25,10 @@ workflows:
         script: |
           npm ci
 
+      - name: Install native review plugin
+        script: |
+          npm install @capacitor-community/in-app-review@8.0.0 --save-exact
+
       - name: Build StockPulse web app
         script: |
           npm run build
@@ -88,6 +92,10 @@ workflows:
       - name: Install JavaScript dependencies
         script: |
           npm ci
+
+      - name: Install native review plugin
+        script: |
+          npm install @capacitor-community/in-app-review@8.0.0 --save-exact
 
       - name: Build and sync Capacitor iOS
         script: |
