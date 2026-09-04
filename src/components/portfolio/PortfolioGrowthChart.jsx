@@ -670,6 +670,9 @@ function buildPortfolioData({
 
   const timestamps = Array.from(timestampSet).sort((a, b) => a - b);
   const data = [];
+  const portfolioInception = transactions[0]?.timestamp ?? null;
+  const rangeIncludesInception =
+    portfolioInception !== null && chartStart <= portfolioInception;
 
   for (const timestamp of timestamps) {
     const state = getStateAtTimestamp({
@@ -689,6 +692,7 @@ function buildPortfolioData({
       gainPct: state.gainPct,
       contributed: Math.round(state.cumulativeBuys * 100) / 100,
       withdrawn: Math.round(state.cumulativeSells * 100) / 100,
+      rangeIncludesInception,
     });
   }
 
@@ -757,7 +761,7 @@ function formatYAxisValue(value, format) {
 function addRangePerformance(data, period) {
   if (!Array.isArray(data) || data.length === 0) return [];
 
-  if (period === "All") {
+  if (period === "All" || data[0]?.rangeIncludesInception) {
     return data.map((point) => ({
       ...point,
       rangeGain: point.gain,
