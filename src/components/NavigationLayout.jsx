@@ -72,9 +72,72 @@ export default function NavigationLayout() {
   const showTabs =
     !pathname.startsWith("/stock/");
 
+  const layoutRef = useRef(null);
   const scrollPositions = useRef({});
   const previousTab = useRef(activeTab);
   const contentScrollRef = useRef(null);
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      const viewportHeight =
+        window.visualViewport?.height ||
+        window.innerHeight;
+
+      if (
+        layoutRef.current &&
+        Number.isFinite(viewportHeight) &&
+        viewportHeight > 0
+      ) {
+        layoutRef.current.style.setProperty(
+          "--stockpulse-viewport-height",
+          `${Math.round(viewportHeight)}px`
+        );
+      }
+    };
+
+    updateViewportHeight();
+
+    const visualViewport =
+      window.visualViewport;
+
+    window.addEventListener(
+      "resize",
+      updateViewportHeight
+    );
+    window.addEventListener(
+      "orientationchange",
+      updateViewportHeight
+    );
+
+    visualViewport?.addEventListener(
+      "resize",
+      updateViewportHeight
+    );
+    visualViewport?.addEventListener(
+      "scroll",
+      updateViewportHeight
+    );
+
+    return () => {
+      window.removeEventListener(
+        "resize",
+        updateViewportHeight
+      );
+      window.removeEventListener(
+        "orientationchange",
+        updateViewportHeight
+      );
+
+      visualViewport?.removeEventListener(
+        "resize",
+        updateViewportHeight
+      );
+      visualViewport?.removeEventListener(
+        "scroll",
+        updateViewportHeight
+      );
+    };
+  }, []);
 
   useEffect(() => {
     const previous = previousTab.current;
@@ -125,7 +188,14 @@ export default function NavigationLayout() {
   );
 
   return (
-    <div className="relative h-[100dvh] w-full max-w-full overflow-hidden overscroll-none bg-background">
+    <div
+      ref={layoutRef}
+      className="relative w-full max-w-full overflow-hidden overscroll-none bg-background"
+      style={{
+        height:
+          "var(--stockpulse-viewport-height, 100dvh)",
+      }}
+    >
       <PortfolioChartPreloader />
 
       <div
@@ -154,7 +224,7 @@ export default function NavigationLayout() {
 
       {pathname === "/home" && (
         <div
-          className="fixed left-1/2 z-50 -translate-x-1/2"
+          className="absolute left-1/2 z-50 -translate-x-1/2"
           style={{
             bottom:
               "calc(env(safe-area-inset-bottom) + 68px)",
@@ -166,7 +236,7 @@ export default function NavigationLayout() {
 
       {showTabs && (
         <nav
-          className="fixed inset-x-0 bottom-0 z-50 w-full shrink-0 overflow-hidden overscroll-none border-t border-gray-100 bg-[hsl(var(--card))]"
+          className="absolute inset-x-0 bottom-0 z-50 w-full shrink-0 overflow-hidden overscroll-none border-t border-gray-100 bg-[hsl(var(--card))]"
           style={{
             paddingBottom:
               "env(safe-area-inset-bottom)",
