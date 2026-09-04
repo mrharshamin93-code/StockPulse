@@ -19,6 +19,10 @@ import {
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
 import { supabase } from "@/lib/supabase";
+import {
+  cachePortfolioStocks,
+  readCachedPortfolioStocks,
+} from "@/lib/portfolioCache";
 
 import StockCard from "@/components/portfolio/StockCard";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
@@ -198,6 +202,10 @@ function SectionHeading({
 
 export default function Home() {
   const { user } = useAuth();
+  const initialCachedStocks = useMemo(
+    () => readCachedPortfolioStocks(user?.id),
+    [user?.id],
+  );
 
   const {
     quotes,
@@ -205,10 +213,10 @@ export default function Home() {
   } = useMarketData();
 
   const [stocks, setStocks] =
-    useState([]);
+    useState(() => initialCachedStocks || []);
 
   const [loading, setLoading] =
-    useState(true);
+    useState(() => initialCachedStocks === null);
 
   const [
     showPortfolioOnboarding,
@@ -325,6 +333,7 @@ export default function Home() {
           );
 
         setStocks(nextStocks);
+        cachePortfolioStocks(user.id, nextStocks);
 
         if (
           !onboardingDecisionMade.current
