@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import AddStockDialog from "@/components/portfolio/AddStockDialog";
+import PortfolioChartPreloader from "@/components/portfolio/PortfolioChartPreloader";
 
 const tabs = [
   {
@@ -125,6 +126,8 @@ export default function NavigationLayout() {
 
   return (
     <div className="relative h-[100dvh] w-full max-w-full overflow-hidden overscroll-none bg-background">
+      <PortfolioChartPreloader />
+
       <div
         className="absolute inset-x-0 top-0 min-h-0 overflow-hidden"
         style={{
