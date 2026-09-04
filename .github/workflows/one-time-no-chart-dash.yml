@@ -1,3 +1,4 @@
+# trigger
 name: One-time no chart dash
 on:
   push:
@@ -23,10 +24,6 @@ jobs:
           new = '''    const fallbackReturn =\n      activePeriod === "1D" && Number.isFinite(initialDailyReturn)\n        ? initialDailyReturn\n        : null;\n\n    if (longRangeUnavailable) {\n      setPrimaryReturn(fallbackReturn);\n      onPeriodReturnChange(fallbackReturn);'''
           assert old in s, 'fallback reset block not found'
           s = s.replace(old, new, 1)
-
-          old2 = '''    if (canUseInitialChart) {\n      initialChartUsedRef.current = true;'''
-          new2 = '''    if (canUseInitialChart) {\n      initialChartUsedRef.current = true;'''
-          assert old2 in s
 
           anchor = '''    const controller = new AbortController();'''
           repl = '''    setPrimaryReturn(fallbackReturn);\n    onPeriodReturnChange(fallbackReturn);\n\n    const controller = new AbortController();'''
