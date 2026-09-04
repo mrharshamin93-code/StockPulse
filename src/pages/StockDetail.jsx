@@ -2430,17 +2430,20 @@ export default function StockDetail() {
               </div>
 
               {extendedSession && Number.isFinite(extendedSession.percent) && (
-                <p
-                  className={[
-                    "shrink-0 text-right text-[11px] font-medium",
-                    extendedSession.percent >= 0
-                      ? "text-emerald-600"
-                      : "text-red-600",
-                  ].join(" ")}
-                >
-                  {extendedSession.label}{" "}
-                  {extendedSession.percent >= 0 ? "+" : ""}
-                  {extendedSession.percent.toFixed(2)}%
+                <p className="shrink-0 text-right text-[11px] font-medium">
+                  <span className="text-muted-foreground/65">
+                    {extendedSession.label}{" "}
+                  </span>
+                  <span
+                    className={
+                      extendedSession.percent >= 0
+                        ? "text-emerald-600"
+                        : "text-red-600"
+                    }
+                  >
+                    {extendedSession.percent >= 0 ? "+" : ""}
+                    {extendedSession.percent.toFixed(2)}%
+                  </span>
                 </p>
               )}
             </div>
