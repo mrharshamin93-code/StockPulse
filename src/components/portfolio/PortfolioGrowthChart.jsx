@@ -49,6 +49,7 @@ const FETCH_BATCH_SIZE = 5;
 const EPSILON = 1e-8;
 const NEW_YORK_TIME_ZONE = "America/New_York";
 const CHART_CACHE_TTL_MS = 5 * 60 * 1000;
+const CHART_STORAGE_PREFIX = "stockpulse:portfolio-chart:v1:";
 const portfolioChartCache = new Map();
 
 function getValidNumber(value) {
@@ -141,6 +142,50 @@ function getHoldingsSignature(holdings) {
 
 function getChartCacheKey(userId, period) {
   return `${userId}:${period}`;
+}
+
+function hydrateChartCache(userId, period) {
+  const key = getChartCacheKey(userId, period);
+  if (portfolioChartCache.has(key) || !userId || typeof window === "undefined") {
+    return portfolioChartCache.get(key) || null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(`${CHART_STORAGE_PREFIX}${key}`);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    if (Array.isArray(parsed?.data) && parsed.data.length) {
+      const entry = {
+        data: parsed.data,
+        signature: parsed.signature || "",
+        fetchedAt: Number(parsed.fetchedAt) || 0,
+        promise: null,
+      };
+      portfolioChartCache.set(key, entry);
+      return entry;
+    }
+  } catch {
+    // Continue without the persistent chart cache.
+  }
+
+  return null;
+}
+
+function persistChartCache(key, entry) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      `${CHART_STORAGE_PREFIX}${key}`,
+      JSON.stringify({
+        data: entry.data,
+        signature: entry.signature,
+        fetchedAt: entry.fetchedAt,
+      }),
+    );
+  } catch {
+    // The in-memory chart cache remains available for this app session.
+  }
 }
 
 function normalizeTransactions(rows) {
@@ -861,7 +906,7 @@ async function loadPortfolioChartData({ userId, holdings, period }) {
 }
 
 export function getCachedPortfolioGrowthChart(userId, period = "1M") {
-  const entry = portfolioChartCache.get(getChartCacheKey(userId, period));
+  const entry = hydrateChartCache(userId, period);
   return entry?.data || null;
 }
 
@@ -871,7 +916,7 @@ export function prefetchPortfolioGrowthChart({ userId, stocks, period = "1M" }) 
 
   const key = getChartCacheKey(userId, period);
   const signature = getHoldingsSignature(holdings);
-  const existing = portfolioChartCache.get(key);
+  const existing = hydrateChartCache(userId, period);
   const fresh =
     existing?.data &&
     existing.signature === signature &&
@@ -882,12 +927,14 @@ export function prefetchPortfolioGrowthChart({ userId, stocks, period = "1M" }) 
 
   const promise = loadPortfolioChartData({ userId, holdings, period })
     .then((data) => {
-      portfolioChartCache.set(key, {
+      const entry = {
         data,
         signature,
         fetchedAt: Date.now(),
         promise: null,
-      });
+      };
+      portfolioChartCache.set(key, entry);
+      persistChartCache(key, entry);
       return data;
     })
     .catch((error) => {
