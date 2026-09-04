@@ -1,0 +1,78 @@
+name: One-time watchlist detail prefetch patch
+
+on:
+  push:
+    branches:
+      - Financial-Datasets-Migration
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Prefetch watchlist stock details on app load'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Financial-Datasets-Migration
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Patch watchlist and stock detail
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Watchlist
+          p = Path('src/pages/Watchlist.jsx')
+          s = p.read_text()
+          import_anchor = '''import {\n  financialDatasetsRequest,\n} from "@/lib/financialDatasets";'''
+          import_repl = import_anchor + '''\nimport { prefetchStockDetails } from "@/lib/stockDetailPrefetch";'''
+          assert import_anchor in s
+          s = s.replace(import_anchor, import_repl, 1)
+
+          effect_anchor = '''  useEffect(() => {\n    if (\n      !items.length\n    ) {\n      return undefined;\n    }\n\n    const timer =\n      window.setInterval('''
+          prefetch_effect = '''  useEffect(() => {\n    if (!items.length) {\n      return;\n    }\n\n    void prefetchStockDetails(items, { quotes });\n  }, [items, quotes]);\n\n'''
+          assert effect_anchor in s
+          s = s.replace(effect_anchor, prefetch_effect + effect_anchor, 1)
+          p.write_text(s)
+
+          # StockDetail
+          p = Path('src/pages/StockDetail.jsx')
+          s = p.read_text()
+          import_anchor = '''import { financialDatasetsRequest } from "@/lib/financialDatasets";'''
+          import_repl = import_anchor + '''\nimport { readStockDetailPrefetch } from "@/lib/stockDetailPrefetch";'''
+          assert import_anchor in s
+          s = s.replace(import_anchor, import_repl, 1)
+
+          cached_anchor = '''      const cachedTicker = tickerFromRoute || routeStateTicker;\n\n      const cachedQuote =\n        routeStateQuote ||\n        normalizePrefetchedQuote(quotes[cachedTicker]);'''
+          cached_repl = '''      const cachedTicker = tickerFromRoute || routeStateTicker;\n      const detailPrefetch = readStockDetailPrefetch(cachedTicker);\n\n      const cachedQuote =\n        routeStateQuote ||\n        normalizePrefetchedQuote(detailPrefetch?.quote) ||\n        normalizePrefetchedQuote(quotes[cachedTicker]);'''
+          assert cached_anchor in s
+          s = s.replace(cached_anchor, cached_repl, 1)
+
+          initial_anchor = '''        setStock({\n          ticker: tickerFromRoute,\n          company_name: routeStateCompanyName || tickerFromRoute,\n          sector: "",\n          logo_url: "",\n          current_price: cachedPrice,\n          purchase_price: Number.isFinite(cachedQuote?.pc)\n            ? cachedQuote.pc\n            : cachedPrice,\n          quantity: 0,\n          _watchlistOnly: true,\n        });\n\n      }'''
+          initial_repl = '''        if (Array.isArray(detailPrefetch?.points) && detailPrefetch.points.length > 0) {\n          setInitialChartData({\n            ticker: tickerFromRoute,\n            points: detailPrefetch.points,\n          });\n          setExtendedSession(\n            calculateExtendedSession(detailPrefetch.points, cachedPrice)\n          );\n        }\n\n        setStock({\n          ticker: tickerFromRoute,\n          company_name:\n            detailPrefetch?.profile?.name ||\n            routeStateCompanyName ||\n            tickerFromRoute,\n          sector: detailPrefetch?.profile?.sector || "",\n          logo_url: detailPrefetch?.profile?.logo || "",\n          current_price: cachedPrice,\n          purchase_price: Number.isFinite(cachedQuote?.pc)\n            ? cachedQuote.pc\n            : cachedPrice,\n          quantity: 0,\n          _watchlistOnly: true,\n        });\n\n        if (detailPrefetch) {\n          setLoading(false);\n        }\n\n      }'''
+          assert initial_anchor in s
+          s = s.replace(initial_anchor, initial_repl, 1)
+
+          promise_anchor = '''          const [quoteResult, profileResult, chartResult] = await Promise.allSettled([\n            marketDataProxy(\n              { action: "quote", ticker: tickerFromRoute },\n              controller.signal\n            ),\n            marketDataProxy(\n              { action: "profile", ticker: tickerFromRoute },\n              controller.signal\n            ),\n            fetchChartData(\n              tickerFromRoute,\n              "1W",\n              controller.signal\n            ),\n          ]);'''
+          promise_repl = '''          const [quoteResult, profileResult, chartResult] = await Promise.allSettled([\n            detailPrefetch?.quote\n              ? Promise.resolve(detailPrefetch.quote)\n              : marketDataProxy(\n                  { action: "quote", ticker: tickerFromRoute },\n                  controller.signal\n                ),\n            detailPrefetch?.profile\n              ? Promise.resolve(detailPrefetch.profile)\n              : marketDataProxy(\n                  { action: "profile", ticker: tickerFromRoute },\n                  controller.signal\n                ),\n            Array.isArray(detailPrefetch?.points) && detailPrefetch.points.length > 0\n              ? Promise.resolve(detailPrefetch.points)\n              : fetchChartData(\n                  tickerFromRoute,\n                  "1W",\n                  controller.signal\n                ),\n          ]);'''
+          assert promise_anchor in s
+          s = s.replace(promise_anchor, promise_repl, 1)
+
+          profile_anchor = '''              profile?.name ||\n              routeStateCompanyName ||\n              tickerFromRoute,'''
+          profile_repl = '''              profile?.name ||\n              detailPrefetch?.profile?.name ||\n              routeStateCompanyName ||\n              tickerFromRoute,'''
+          assert profile_anchor in s
+          s = s.replace(profile_anchor, profile_repl, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/Watchlist.jsx src/pages/StockDetail.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Prefetch watchlist stock details on app load"
+          git push origin Financial-Datasets-Migration
