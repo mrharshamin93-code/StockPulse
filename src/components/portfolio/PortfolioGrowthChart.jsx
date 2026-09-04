@@ -544,12 +544,13 @@ function buildPriceSeries({ ticker, histories, transactions, holding, chartStart
 
   if (
     holding?.currentPrice &&
-    holding.currentPrice > 0 &&
-    holding.updatedAt &&
-    holding.updatedAt >= chartStart &&
-    holding.updatedAt <= chartEnd
+    holding.currentPrice > 0
   ) {
-    points.push({ timestamp: holding.updatedAt, price: holding.currentPrice });
+    // Every period must finish at the same live portfolio value. Using the
+    // holding's database updated_at here made weekly and monthly ranges end on
+    // different stale historical closes when that timestamp was unavailable
+    // or outside the selected range.
+    points.push({ timestamp: chartEnd, price: holding.currentPrice });
   }
 
   const byTimestamp = new Map();
