@@ -143,15 +143,27 @@
 }
 
 /*
- * Apple recommends a minimum touch target of 44 × 44 points.
- *
- * This increases the tappable area of every back button that uses
- * Lucide's ArrowLeft icon without increasing the visible icon size.
+ * Make every app back control very easy to hit on touch screens without
+ * changing the visible icon/button size. The pseudo-element expands the
+ * interactive area roughly 16px in every direction.
  */
 button:has(> .lucide-arrow-left),
-a:has(> .lucide-arrow-left) {
+a:has(> .lucide-arrow-left),
+button:has(> .lucide-chevron-left),
+a:has(> .lucide-chevron-left) {
+  position: relative;
   min-width: 44px;
   min-height: 44px;
+}
+
+button:has(> .lucide-arrow-left)::before,
+a:has(> .lucide-arrow-left)::before,
+button:has(> .lucide-chevron-left)::before,
+a:has(> .lucide-chevron-left)::before {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  z-index: 1;
 }
 
 /* Hide scrollbars on horizontal scroll areas */
