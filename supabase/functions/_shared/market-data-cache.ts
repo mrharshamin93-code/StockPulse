@@ -506,9 +506,9 @@ export function quoteFreshMs(now = new Date()): number {
   const weekday = value("weekday");
   const minutes = Number(value("hour")) * 60 + Number(value("minute"));
   const isWeekday = weekday !== "Sat" && weekday !== "Sun";
-  const isMarketHours = isWeekday && minutes >= 570 && minutes < 960;
+  const isExtendedTradingHours = isWeekday && minutes >= 240 && minutes < 1200;
 
-  return isMarketHours ? QUOTE_MARKET_TTL_MS : QUOTE_OFF_HOURS_TTL_MS;
+  return isExtendedTradingHours ? QUOTE_MARKET_TTL_MS : QUOTE_OFF_HOURS_TTL_MS;
 }
 
 export async function getCachedFinancialDatasetsQuote(
