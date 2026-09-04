@@ -1749,8 +1749,43 @@ export default function StockDetail() {
   const { user } = useAuth();
   const { quotes = {}, fetchQuotes } = useMarketData();
 
-  const [stock, setStock] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const isTickerRoute = routeValue?.startsWith("ticker-");
+
+  const tickerFromRoute = isTickerRoute
+    ? routeValue.replace("ticker-", "").toUpperCase()
+    : null;
+
+  const stockId = isTickerRoute ? null : routeValue;
+  const synchronousPrefetch = isTickerRoute
+    ? readStockDetailPrefetch(tickerFromRoute)
+    : null;
+  const synchronousQuote = normalizePrefetchedQuote(synchronousPrefetch?.quote);
+  const synchronousPrice =
+    Number.isFinite(synchronousQuote?.c) && synchronousQuote.c > 0
+      ? synchronousQuote.c
+      : 0;
+  const synchronousPoints = Array.isArray(synchronousPrefetch?.points)
+    ? synchronousPrefetch.points
+    : [];
+
+  const [stock, setStock] = useState(() =>
+    synchronousPrefetch
+      ? {
+          ticker: tickerFromRoute,
+          company_name:
+            synchronousPrefetch?.profile?.name || tickerFromRoute,
+          sector: synchronousPrefetch?.profile?.sector || "",
+          logo_url: synchronousPrefetch?.profile?.logo || "",
+          current_price: synchronousPrice,
+          purchase_price: Number.isFinite(synchronousQuote?.pc)
+            ? synchronousQuote.pc
+            : synchronousPrice,
+          quantity: 0,
+          _watchlistOnly: true,
+        }
+      : null
+  );
+  const [loading, setLoading] = useState(() => !synchronousPrefetch);
   const [pageError, setPageError] = useState("");
   const [fundamentals, setFundamentals] = useState(null);
   const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
@@ -1761,17 +1796,19 @@ export default function StockDetail() {
   const [sellOpen, setSellOpen] = useState(false);
   const [activePeriod, setActivePeriod] = useState("1W");
   const [, setPeriodReturn] = useState(null);
-  const [dailyReturn, setDailyReturn] = useState(null);
-  const [extendedSession, setExtendedSession] = useState(null);
-  const [initialChartData, setInitialChartData] = useState(null);
-
-  const isTickerRoute = routeValue?.startsWith("ticker-");
-
-  const tickerFromRoute = isTickerRoute
-    ? routeValue.replace("ticker-", "").toUpperCase()
-    : null;
-
-  const stockId = isTickerRoute ? null : routeValue;
+  const [dailyReturn, setDailyReturn] = useState(() =>
+    Number.isFinite(synchronousQuote?.dp) ? synchronousQuote.dp : null
+  );
+  const [extendedSession, setExtendedSession] = useState(() =>
+    synchronousPoints.length > 0
+      ? calculateExtendedSession(synchronousPoints, synchronousPrice)
+      : null
+  );
+  const [initialChartData, setInitialChartData] = useState(() =>
+    synchronousPoints.length > 0
+      ? { ticker: tickerFromRoute, points: synchronousPoints }
+      : null
+  );
 
   const routeStateQuote = useMemo(
     () =>
@@ -1824,15 +1861,20 @@ export default function StockDetail() {
     const controller = new AbortController();
 
     async function loadStock() {
-      setLoading(true);
       setPageError("");
       setActivePeriod("1W");
       setPeriodReturn(null);
-      setExtendedSession(null);
-      setInitialChartData(null);
 
       const cachedTicker = tickerFromRoute || routeStateTicker;
       const detailPrefetch = readStockDetailPrefetch(cachedTicker);
+
+      if (!detailPrefetch) {
+        setLoading(true);
+        setExtendedSession(null);
+        setInitialChartData(null);
+      } else {
+        setLoading(false);
+      }
 
       const cachedQuote =
         routeStateQuote ||
