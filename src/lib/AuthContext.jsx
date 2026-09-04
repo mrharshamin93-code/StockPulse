@@ -24,17 +24,9 @@ import {
 
 const AuthContext = createContext(null);
 
-function areUsersEqual(
-  currentUser,
-  nextUser,
-) {
-  if (!currentUser && !nextUser) {
-    return true;
-  }
-
-  if (!currentUser || !nextUser) {
-    return false;
-  }
+function areUsersEqual(currentUser, nextUser) {
+  if (!currentUser && !nextUser) return true;
+  if (!currentUser || !nextUser) return false;
 
   return (
     currentUser.id === nextUser.id &&
@@ -42,105 +34,101 @@ function areUsersEqual(
   );
 }
 
-function normalizePreferenceValue(
-  preference,
-  value,
-) {
+function normalizePreferenceValue(preference, value) {
   switch (preference) {
     case "theme":
       return normalizeTheme(value);
-
     case "currency":
       return normalizeCurrency(value);
-
     case "watchlist_sort":
-      return normalizeWatchlistSort(
-        value,
-      );
-
+      return normalizeWatchlistSort(value);
     default:
       return value;
   }
 }
 
-export function AuthProvider({
-  children,
-}) {
-  const [user, setUser] =
-    useState(null);
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
-  const [
-    isLoadingAuth,
-    setIsLoadingAuth,
-  ] = useState(true);
-
-  const [
-    authError,
-    setAuthError,
-  ] = useState(null);
-
-  const [
-    preferences,
-    setPreferences,
-  ] = useState(
+  const [preferences, setPreferences] = useState(
     DEFAULT_USER_PREFERENCES,
   );
+  const [isLoadingPreferences, setIsLoadingPreferences] =
+    useState(true);
+  const [preferencesError, setPreferencesError] = useState(null);
 
-  const [
-    isLoadingPreferences,
-    setIsLoadingPreferences,
-  ] = useState(true);
-
-  const [
-    preferencesError,
-    setPreferencesError,
-  ] = useState(null);
-
-  const currentUserIdRef =
-    useRef(null);
+  const currentUserIdRef = useRef(null);
+  const currentUserRef = useRef(null);
+  const preferenceRequestRef = useRef(0);
 
   /*
-   * Load the signed-in user's settings from
-   * public.profiles.
-   *
-   * Supabase is the cross-device source of truth.
-   * User-scoped localStorage is only used as a fast cache.
+   * This callback is intentionally stable.
+   * The previous implementation depended on `user`, which caused the
+   * auth subscription effect to unsubscribe/re-subscribe whenever the
+   * signed-in user changed. On iOS that could create a rapid route/auth
+   * transition loop immediately after sign-in or sign-out.
    */
-  const loadUserPreferences =
-    useCallback(async (userId) => {
-      if (!userId) {
-        setPreferences(
-          DEFAULT_USER_PREFERENCES,
-        );
+  const loadUserPreferences = useCallback(async (userId) => {
+    const requestId = ++preferenceRequestRef.current;
 
-        setPreferencesError(null);
-        setIsLoadingPreferences(false);
-
-        return DEFAULT_USER_PREFERENCES;
-      }
-
-      setIsLoadingPreferences(true);
+    if (!userId) {
+      setPreferences(DEFAULT_USER_PREFERENCES);
       setPreferencesError(null);
+      setIsLoadingPreferences(false);
+      return DEFAULT_USER_PREFERENCES;
+    }
 
-      /*
-       * Apply the account-specific cached values immediately
-       * while Supabase loads.
-       */
-      const cached =
-        getCachedUserPreferences(
-          userId,
-        );
+    setIsLoadingPreferences(true);
+    setPreferencesError(null);
 
-      setPreferences(cached);
+    const cached = getCachedUserPreferences(userId);
+    setPreferences(cached);
 
-      try {
-        const {
-          data,
-          error,
-        } = await supabase
-          .from("profiles")
-          .select(
-            `
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          theme,
+          currency,
+          watchlist_sort,
+          monthly_report_opt_in,
+          report_timezone,
+          report_currency
+        `)
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      let profile = data;
+
+      if (!profile) {
+        const activeUser = currentUserRef.current;
+
+        const { data: createdProfile, error: createError } =
+          await supabase
+            .from("profiles")
+            .upsert(
+              {
+                id: userId,
+                email: activeUser?.email || null,
+                full_name:
+                  activeUser?.user_metadata?.full_name ||
+                  activeUser?.user_metadata?.name ||
+                  "",
+                theme: DEFAULT_USER_PREFERENCES.theme,
+                currency: DEFAULT_USER_PREFERENCES.currency,
+                watchlist_sort:
+                  DEFAULT_USER_PREFERENCES.watchlist_sort,
+              },
+              {
+                onConflict: "id",
+              },
+            )
+            .select(`
               id,
               theme,
               currency,
@@ -148,456 +136,272 @@ export function AuthProvider({
               monthly_report_opt_in,
               report_timezone,
               report_currency
-            `,
-          )
-          .eq("id", userId)
-          .maybeSingle();
-
-        if (error) {
-          throw error;
-        }
-
-        /*
-         * Existing legacy users may not have a profiles row.
-         * Create one safely using the defaults.
-         */
-        if (!data) {
-          const {
-            data: createdProfile,
-            error: createError,
-          } = await supabase
-            .from("profiles")
-            .upsert(
-              {
-                id: userId,
-
-                email:
-                  user?.email || null,
-
-                full_name:
-                  user?.user_metadata
-                    ?.full_name ||
-                  user?.user_metadata
-                    ?.name ||
-                  "",
-
-                theme:
-                  DEFAULT_USER_PREFERENCES
-                    .theme,
-
-                currency:
-                  DEFAULT_USER_PREFERENCES
-                    .currency,
-
-                watchlist_sort:
-                  DEFAULT_USER_PREFERENCES
-                    .watchlist_sort,
-              },
-              {
-                onConflict: "id",
-              },
-            )
-            .select(
-              `
-                id,
-                theme,
-                currency,
-                watchlist_sort,
-                monthly_report_opt_in,
-                report_timezone,
-                report_currency
-              `,
-            )
+            `)
             .single();
 
-          if (createError) {
-            throw createError;
-          }
+        if (createError) throw createError;
+        profile = createdProfile;
+      }
 
-          const normalized =
-            normalizeUserPreferences(
-              createdProfile,
-            );
+      const normalized = normalizeUserPreferences(profile);
 
-          if (
-            currentUserIdRef.current ===
-            userId
-          ) {
-            setPreferences(
-              normalized,
-            );
+      if (
+        currentUserIdRef.current === userId &&
+        preferenceRequestRef.current === requestId
+      ) {
+        setPreferences(normalized);
+        cacheUserPreferences(userId, normalized);
+      }
 
-            cacheUserPreferences(
-              userId,
-              normalized,
-            );
-          }
+      return normalized;
+    } catch (error) {
+      console.error("Unable to load user preferences:", error);
 
-          return normalized;
-        }
+      if (
+        currentUserIdRef.current === userId &&
+        preferenceRequestRef.current === requestId
+      ) {
+        setPreferencesError(error);
+        setPreferences(cached);
+      }
 
-        const normalized =
-          normalizeUserPreferences(
-            data,
-          );
+      return cached;
+    } finally {
+      if (
+        currentUserIdRef.current === userId &&
+        preferenceRequestRef.current === requestId
+      ) {
+        setIsLoadingPreferences(false);
+      }
+    }
+  }, []);
 
-        if (
-          currentUserIdRef.current ===
-          userId
-        ) {
-          setPreferences(
-            normalized,
-          );
+  const updatePreference = useCallback(
+    async (preference, value) => {
+      if (!user?.id) {
+        throw new Error(
+          "You must be signed in to update settings.",
+        );
+      }
 
-          cacheUserPreferences(
-            userId,
-            normalized,
-          );
-        }
+      const normalizedValue = normalizePreferenceValue(
+        preference,
+        value,
+      );
+      const previousValue = preferences[preference];
 
-        return normalized;
+      setPreferences((current) => ({
+        ...current,
+        [preference]: normalizedValue,
+      }));
+
+      setCachedUserPreference(
+        user.id,
+        preference,
+        normalizedValue,
+      );
+
+      try {
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            [preference]: normalizedValue,
+          })
+          .eq("id", user.id);
+
+        if (error) throw error;
+
+        setPreferencesError(null);
+        return normalizedValue;
       } catch (error) {
         console.error(
-          "Unable to load user preferences:",
+          `Unable to update ${preference}:`,
           error,
         );
 
-        if (
-          currentUserIdRef.current ===
-          userId
-        ) {
-          setPreferencesError(error);
-
-          /*
-           * Keep using the account-specific cache rather
-           * than another user's shared preference.
-           */
-          setPreferences(cached);
-        }
-
-        return cached;
-      } finally {
-        if (
-          currentUserIdRef.current ===
-          userId
-        ) {
-          setIsLoadingPreferences(
-            false,
-          );
-        }
-      }
-    }, [
-      user?.email,
-      user?.user_metadata,
-    ]);
-
-  /*
-   * Update one account-specific preference.
-   *
-   * The UI updates immediately, then Supabase is updated.
-   * If Supabase fails, the previous value is restored.
-   */
-  const updatePreference =
-    useCallback(
-      async (
-        preference,
-        value,
-      ) => {
-        if (!user?.id) {
-          throw new Error(
-            "You must be signed in to update settings.",
-          );
-        }
-
-        const normalizedValue =
-          normalizePreferenceValue(
-            preference,
-            value,
-          );
-
-        const previousValue =
-          preferences[
-            preference
-          ];
-
-        setPreferences(
-          (current) => ({
-            ...current,
-            [preference]:
-              normalizedValue,
-          }),
-        );
+        setPreferences((current) => ({
+          ...current,
+          [preference]: previousValue,
+        }));
 
         setCachedUserPreference(
           user.id,
           preference,
-          normalizedValue,
+          previousValue,
         );
 
-        try {
-          const { error } =
-            await supabase
-              .from("profiles")
-              .update({
-                [preference]:
-                  normalizedValue,
-              })
-              .eq(
-                "id",
-                user.id,
-              );
-
-          if (error) {
-            throw error;
-          }
-
-          setPreferencesError(null);
-
-          return normalizedValue;
-        } catch (error) {
-          console.error(
-            `Unable to update ${preference}:`,
-            error,
-          );
-
-          setPreferences(
-            (current) => ({
-              ...current,
-              [preference]:
-                previousValue,
-            }),
-          );
-
-          setCachedUserPreference(
-            user.id,
-            preference,
-            previousValue,
-          );
-
-          setPreferencesError(error);
-
-          throw error;
-        }
-      },
-      [
-        user?.id,
-        preferences,
-      ],
-    );
-
-  const refreshPreferences =
-    useCallback(async () => {
-      if (!user?.id) {
-        return DEFAULT_USER_PREFERENCES;
+        setPreferencesError(error);
+        throw error;
       }
+    },
+    [user?.id, preferences],
+  );
 
-      return loadUserPreferences(
-        user.id,
-      );
-    }, [
-      user?.id,
-      loadUserPreferences,
-    ]);
+  const refreshPreferences = useCallback(async () => {
+    if (!user?.id) {
+      return DEFAULT_USER_PREFERENCES;
+    }
+
+    return loadUserPreferences(user.id);
+  }, [user?.id, loadUserPreferences]);
 
   useEffect(() => {
     let mounted = true;
-
-    let initializationComplete =
-      false;
+    let initializationComplete = false;
 
     function finishInitialization() {
-      if (
-        initializationComplete
-      ) {
-        return;
-      }
-
-      initializationComplete =
-        true;
-
+      if (initializationComplete) return;
+      initializationComplete = true;
       setIsLoadingAuth(false);
     }
 
     function applySession(session) {
-      const nextUser =
-        session?.user ?? null;
+      const nextUser = session?.user ?? null;
 
-      currentUserIdRef.current =
-        nextUser?.id || null;
+      currentUserRef.current = nextUser;
+      currentUserIdRef.current = nextUser?.id || null;
 
       setUser((currentUser) => {
-        if (
-          areUsersEqual(
-            currentUser,
-            nextUser,
-          )
-        ) {
+        if (areUsersEqual(currentUser, nextUser)) {
           return currentUser;
         }
-
         return nextUser;
       });
 
       setAuthError(null);
 
       if (nextUser?.id) {
-        /*
-         * Remove old device-wide preference keys so they
-         * can no longer affect another account.
-         */
         removeLegacySharedPreferences();
-
-        void loadUserPreferences(
-          nextUser.id,
-        );
+        void loadUserPreferences(nextUser.id);
       } else {
-        setPreferences(
-          DEFAULT_USER_PREFERENCES,
-        );
+        /*
+         * Invalidate any in-flight preference request from the user
+         * who just signed out so it cannot update the next screen.
+         */
+        preferenceRequestRef.current += 1;
 
+        setPreferences(DEFAULT_USER_PREFERENCES);
         setPreferencesError(null);
-        setIsLoadingPreferences(
-          false,
-        );
+        setIsLoadingPreferences(false);
       }
     }
 
     const {
-      data: {
-        subscription,
-      },
-    } =
-      supabase.auth
-        .onAuthStateChange(
-          (event, session) => {
-            if (!mounted) {
-              return;
-            }
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
 
-            switch (event) {
-              case "INITIAL_SESSION":
-              case "SIGNED_IN":
-              case "TOKEN_REFRESHED":
-              case "USER_UPDATED":
-              case "PASSWORD_RECOVERY":
-                applySession(
-                  session,
-                );
+      switch (event) {
+        case "INITIAL_SESSION":
+        case "SIGNED_IN":
+        case "TOKEN_REFRESHED":
+        case "USER_UPDATED":
+        case "PASSWORD_RECOVERY":
+          applySession(session);
+          finishInitialization();
+          break;
 
-                finishInitialization();
-                break;
+        case "SIGNED_OUT":
+          applySession(null);
+          finishInitialization();
+          break;
 
-              case "SIGNED_OUT":
-                applySession(null);
-                finishInitialization();
-                break;
-
-              default:
-                break;
-            }
-          },
-        );
+        default:
+          break;
+      }
+    });
 
     /*
-     * Never leave the application on an infinite loading
-     * screen if authentication initialization fails.
+     * getSession gives the native shell a deterministic initial state
+     * even if INITIAL_SESSION is delayed.
      */
-    const timeoutId =
-      window.setTimeout(() => {
-        if (
-          !mounted ||
-          initializationComplete
-        ) {
-          return;
+    void supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (!mounted || initializationComplete) return;
+
+        if (error) {
+          throw error;
         }
 
-        const timeoutError =
-          new Error(
-            "Authentication initialization timed out.",
-          );
+        applySession(data?.session ?? null);
+        finishInitialization();
+      })
+      .catch((error) => {
+        if (!mounted || initializationComplete) return;
 
         console.error(
-          "Supabase auth initialization timed out:",
-          timeoutError,
+          "Unable to initialize Supabase auth:",
+          error,
         );
 
-        initializationComplete =
-          true;
+        setAuthError(error);
+        setIsLoadingPreferences(false);
+        finishInitialization();
+      });
 
-        setAuthError(
-          timeoutError,
-        );
+    const timeoutId = window.setTimeout(() => {
+      if (!mounted || initializationComplete) return;
 
-        setIsLoadingAuth(
-          false,
-        );
+      const timeoutError = new Error(
+        "Authentication initialization timed out.",
+      );
 
-        setIsLoadingPreferences(
-          false,
-        );
-      }, 15000);
+      console.error(
+        "Supabase auth initialization timed out:",
+        timeoutError,
+      );
+
+      setAuthError(timeoutError);
+      setIsLoadingPreferences(false);
+      finishInitialization();
+    }, 15000);
 
     return () => {
       mounted = false;
-
-      window.clearTimeout(
-        timeoutId,
-      );
-
+      window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [loadUserPreferences]);
 
-  const logout = useCallback(
-    async () => {
-      const { error } =
-        await supabase.auth
-          .signOut();
+  const logout = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
 
-      if (error) {
-        throw error;
-      }
+    if (error) throw error;
 
-      currentUserIdRef.current =
-        null;
+    /*
+     * SIGNED_OUT normally performs this immediately. These assignments
+     * also make logout deterministic if the event is delayed by the
+     * native WebView.
+     */
+    currentUserRef.current = null;
+    currentUserIdRef.current = null;
+    preferenceRequestRef.current += 1;
 
-      setPreferences(
-        DEFAULT_USER_PREFERENCES,
-      );
-
-      setPreferencesError(null);
-    },
-    [],
-  );
+    setUser(null);
+    setAuthError(null);
+    setPreferences(DEFAULT_USER_PREFERENCES);
+    setPreferencesError(null);
+    setIsLoadingPreferences(false);
+  }, []);
 
   const value = useMemo(
     () => ({
       user,
-
-      isAuthenticated:
-        Boolean(user),
-
+      isAuthenticated: Boolean(user),
       isLoadingAuth,
-
       authError,
-
       logout,
-
       preferences,
-
       isLoadingPreferences,
-
       preferencesError,
-
       updatePreference,
-
       refreshPreferences,
 
       /*
        * Kept because App.jsx currently expects it.
        */
-      isLoadingPublicSettings:
-        false,
+      isLoadingPublicSettings: false,
     }),
     [
       user,
@@ -613,19 +417,14 @@ export function AuthProvider({
   );
 
   return (
-    <AuthContext.Provider
-      value={value}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context =
-    useContext(
-      AuthContext,
-    );
+  const context = useContext(AuthContext);
 
   if (!context) {
     throw new Error(
