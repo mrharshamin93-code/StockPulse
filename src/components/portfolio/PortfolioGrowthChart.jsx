@@ -1074,9 +1074,37 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
     };
   }, [holdings, period, stocks, user?.id]);
 
+  const chartDataWithCurrentValue = useMemo(() => {
+    if (!chartData.length || !holdings.length) return chartData;
+
+    const hasEveryCurrentPrice = holdings.every(
+      (holding) => Number.isFinite(holding.currentPrice) && holding.currentPrice > 0,
+    );
+    if (!hasEveryCurrentPrice) return chartData;
+
+    const currentValue = holdings.reduce(
+      (total, holding) => total + holding.quantity * holding.currentPrice,
+      0,
+    );
+    const latest = chartData.at(-1);
+    const contributed = Number(latest?.contributed) || 0;
+    const withdrawn = Number(latest?.withdrawn) || 0;
+    const gain = currentValue + withdrawn - contributed;
+
+    return [
+      ...chartData.slice(0, -1),
+      {
+        ...latest,
+        value: Math.round(currentValue * 100) / 100,
+        gain: Math.round(gain * 100) / 100,
+        gainPct: contributed > EPSILON ? (gain / contributed) * 100 : null,
+      },
+    ];
+  }, [chartData, holdings]);
+
   const displayChartData = useMemo(
-    () => addRangePerformance(chartData, period),
-    [chartData, period],
+    () => addRangePerformance(chartDataWithCurrentValue, period),
+    [chartDataWithCurrentValue, period],
   );
   const yAxisFormat = useMemo(
     () => getYAxisFormat(displayChartData),
