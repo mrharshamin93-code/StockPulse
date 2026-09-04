@@ -704,13 +704,51 @@ function formatYAxisValue(value) {
   return `$${numericValue.toFixed(0)}`;
 }
 
+function addRangePerformance(data, period) {
+  if (!Array.isArray(data) || data.length === 0) return [];
+
+  if (period === "All") {
+    return data.map((point) => ({
+      ...point,
+      rangeGain: point.gain,
+      rangeGainPct: point.gainPct,
+    }));
+  }
+
+  const baseline = data[0];
+  const baselineGain = Number(baseline?.gain) || 0;
+  const baselineValue = Number(baseline?.value) || 0;
+  const baselineContributed = Number(baseline?.contributed) || 0;
+
+  return data.map((point) => {
+    const rangeGain = (Number(point?.gain) || 0) - baselineGain;
+    const contributedDuringRange = Math.max(
+      0,
+      (Number(point?.contributed) || 0) - baselineContributed,
+    );
+    const capitalForRange = baselineValue + contributedDuringRange;
+
+    return {
+      ...point,
+      rangeGain: Math.round(rangeGain * 100) / 100,
+      rangeGainPct:
+        capitalForRange > EPSILON
+          ? (rangeGain / capitalForRange) * 100
+          : null,
+    };
+  });
+}
+
 function PortfolioTooltip({ active = false, payload = [], label = "" }) {
   if (!active || !payload?.length) return null;
 
   const point = payload[0]?.payload;
   const value = Number(point?.value);
-  const gain = Number(point?.gain);
-  const gainPct = Number(point?.gainPct);
+  const gain = Number(point?.rangeGain);
+  const gainPct =
+    point?.rangeGainPct === null || point?.rangeGainPct === undefined
+      ? null
+      : Number(point.rangeGainPct);
 
   if (!Number.isFinite(value)) return null;
 
@@ -874,12 +912,20 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
     return () => controller.abort();
   }, [holdings, period, user?.id]);
 
-  const latestPoint = chartData.at(-1) || null;
+  const displayChartData = useMemo(
+    () => addRangePerformance(chartData, period),
+    [chartData, period],
+  );
+
+  const latestPoint = displayChartData.at(-1) || null;
   const latestValue = latestPoint?.value ?? null;
-  const periodGain = latestPoint?.gain ?? null;
-  const periodGainPct = Number.isFinite(Number(latestPoint?.gainPct))
-    ? Number(latestPoint.gainPct)
-    : null;
+  const periodGain = latestPoint?.rangeGain ?? null;
+  const periodGainPct =
+    latestPoint?.rangeGainPct !== null &&
+    latestPoint?.rangeGainPct !== undefined &&
+    Number.isFinite(Number(latestPoint.rangeGainPct))
+      ? Number(latestPoint.rangeGainPct)
+      : null;
 
   const isPositive = periodGain === null || periodGain >= 0;
   const chartColor = isPositive ? "#10b981" : "#ef4444";
@@ -938,7 +984,7 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={chartData}
+              data={displayChartData}
               margin={{ top: 8, right: 4, left: 0, bottom: 2 }}
             >
               <defs>
@@ -1000,7 +1046,7 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
                 stroke={chartColor}
                 strokeWidth={2}
                 fill={`url(#${gradientId})`}
-                dot={chartData.length === 1 ? { r: 3 } : false}
+                dot={displayChartData.length === 1 ? { r: 3 } : false}
                 activeDot={{
                   r: 4,
                   fill: chartColor,
