@@ -63,13 +63,6 @@ export function AuthProvider({ children }) {
   const currentUserRef = useRef(null);
   const preferenceRequestRef = useRef(0);
 
-  /*
-   * This callback is intentionally stable.
-   * The previous implementation depended on `user`, which caused the
-   * auth subscription effect to unsubscribe/re-subscribe whenever the
-   * signed-in user changed. On iOS that could create a rapid route/auth
-   * transition loop immediately after sign-in or sign-out.
-   */
   const loadUserPreferences = useCallback(async (userId) => {
     const requestId = ++preferenceRequestRef.current;
 
@@ -248,6 +241,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
     let initializationComplete = false;
+    let confirmationTimer = null;
 
     function finishInitialization() {
       if (initializationComplete) return;
@@ -265,6 +259,7 @@ export function AuthProvider({ children }) {
         if (areUsersEqual(currentUser, nextUser)) {
           return currentUser;
         }
+
         return nextUser;
       });
 
@@ -274,16 +269,107 @@ export function AuthProvider({ children }) {
         removeLegacySharedPreferences();
         void loadUserPreferences(nextUser.id);
       } else {
-        /*
-         * Invalidate any in-flight preference request from the user
-         * who just signed out so it cannot update the next screen.
-         */
         preferenceRequestRef.current += 1;
 
         setPreferences(DEFAULT_USER_PREFERENCES);
         setPreferencesError(null);
         setIsLoadingPreferences(false);
       }
+    }
+
+    /*
+     * iOS/Capacitor fix:
+     *
+     * A Supabase SIGNED_IN/INITIAL_SESSION event can arrive while the native
+     * WebView is still finishing restoration of the persisted session.
+     *
+     * Previously we set isLoadingAuth=false immediately from that event.
+     * ProtectedRoute could therefore mount Watchlist before getSession()
+     * returned the same authenticated session. The first RLS-backed watchlist
+     * request could then behave like an unauthenticated request and return no
+     * rows. Relaunching the app worked because the session was fully restored.
+     *
+     * Keep the protected app behind the auth loading screen until getSession()
+     * confirms the exact same user. This removes that first-launch race.
+     */
+    async function confirmAndApplySession(candidateSession) {
+      if (!mounted || initializationComplete) return;
+
+      const expectedUserId = candidateSession?.user?.id || null;
+
+      if (!expectedUserId) {
+        applySession(null);
+        finishInitialization();
+        return;
+      }
+
+      let lastError = null;
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        if (!mounted || initializationComplete) return;
+
+        try {
+          const { data, error } = await supabase.auth.getSession();
+
+          if (error) {
+            throw error;
+          }
+
+          const confirmedSession = data?.session ?? null;
+          const confirmedUserId =
+            confirmedSession?.user?.id || null;
+
+          if (confirmedUserId === expectedUserId) {
+            applySession(confirmedSession);
+
+            /*
+             * Yield one browser task before mounting protected routes.
+             * This gives Supabase's auth client/native storage bridge time to
+             * finish applying the restored access token used by RLS queries.
+             */
+            await new Promise((resolve) => {
+              window.setTimeout(resolve, 0);
+            });
+
+            if (!mounted || initializationComplete) return;
+
+            finishInitialization();
+            return;
+          }
+        } catch (error) {
+          lastError = error;
+        }
+
+        await new Promise((resolve) => {
+          window.setTimeout(
+            resolve,
+            75 * (attempt + 1),
+          );
+        });
+      }
+
+      if (!mounted || initializationComplete) return;
+
+      const error =
+        lastError ||
+        new Error(
+          "Supabase session was not ready after authentication.",
+        );
+
+      console.error(
+        "Unable to confirm Supabase session:",
+        error,
+      );
+
+      setAuthError(error);
+
+      /*
+       * Do not expose an authenticated user to protected pages when the
+       * persisted session cannot be confirmed. That is safer than rendering
+       * an apparently empty watchlist from an unauthenticated RLS query.
+       */
+      applySession(null);
+      finishInitialization();
     }
 
     const {
@@ -297,8 +383,17 @@ export function AuthProvider({ children }) {
         case "TOKEN_REFRESHED":
         case "USER_UPDATED":
         case "PASSWORD_RECOVERY":
-          applySession(session);
-          finishInitialization();
+          /*
+           * Supabase recommends keeping auth-state callbacks lightweight.
+           * Schedule session confirmation outside the callback itself.
+           */
+          if (confirmationTimer) {
+            window.clearTimeout(confirmationTimer);
+          }
+
+          confirmationTimer = window.setTimeout(() => {
+            void confirmAndApplySession(session);
+          }, 0);
           break;
 
         case "SIGNED_OUT":
@@ -312,8 +407,8 @@ export function AuthProvider({ children }) {
     });
 
     /*
-     * getSession gives the native shell a deterministic initial state
-     * even if INITIAL_SESSION is delayed.
+     * Deterministic native-shell initialization. If the initial auth event is
+     * delayed, getSession() still restores and confirms the persisted session.
      */
     void supabase.auth
       .getSession()
@@ -324,8 +419,9 @@ export function AuthProvider({ children }) {
           throw error;
         }
 
-        applySession(data?.session ?? null);
-        finishInitialization();
+        return confirmAndApplySession(
+          data?.session ?? null,
+        );
       })
       .catch((error) => {
         if (!mounted || initializationComplete) return;
@@ -337,6 +433,7 @@ export function AuthProvider({ children }) {
 
         setAuthError(error);
         setIsLoadingPreferences(false);
+        applySession(null);
         finishInitialization();
       });
 
@@ -354,11 +451,17 @@ export function AuthProvider({ children }) {
 
       setAuthError(timeoutError);
       setIsLoadingPreferences(false);
+      applySession(null);
       finishInitialization();
     }, 15000);
 
     return () => {
       mounted = false;
+
+      if (confirmationTimer) {
+        window.clearTimeout(confirmationTimer);
+      }
+
       window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
@@ -369,11 +472,6 @@ export function AuthProvider({ children }) {
 
     if (error) throw error;
 
-    /*
-     * SIGNED_OUT normally performs this immediately. These assignments
-     * also make logout deterministic if the event is delayed by the
-     * native WebView.
-     */
     currentUserRef.current = null;
     currentUserIdRef.current = null;
     preferenceRequestRef.current += 1;
