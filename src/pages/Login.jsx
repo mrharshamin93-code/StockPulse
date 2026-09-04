@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { BarChart3, Loader2 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
 import { isNativeApp, signInWithGoogle } from "@/lib/mobileAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ function friendlyLoginError(error) {
 }
 
 export default function Login() {
-  const navigate = useNavigate();
+  const { isAuthenticated, isLoadingAuth } = useAuth();
   const [searchParams] = useSearchParams();
   const nativeApp = isNativeApp();
 
@@ -59,11 +60,14 @@ export default function Login() {
 
       if (signInError) throw signInError;
 
-      navigate("/", { replace: true });
+      /*
+       * Do not navigate here.
+       * Supabase emits SIGNED_IN, AuthContext commits the session,
+       * and this component redirects only after that state is stable.
+       */
     } catch (submitError) {
       console.error("Email sign-in failed:", submitError);
       setError(friendlyLoginError(submitError));
-    } finally {
       setLoading(false);
     }
   }
@@ -107,6 +111,10 @@ export default function Login() {
       setError("Apple sign-in could not be completed. Please try again.");
       setOauthLoading("");
     }
+  }
+
+  if (!isLoadingAuth && isAuthenticated) {
+    return <Navigate to="/watchlist" replace />;
   }
 
   const busy = loading || oauthLoading !== "";
