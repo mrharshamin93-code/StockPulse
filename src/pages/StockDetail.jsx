@@ -2581,8 +2581,9 @@ export default function StockDetail() {
               "
             >
               <ArrowLeft
-                size={22}
-                strokeWidth={2.2}
+                width={30}
+                height={26}
+                strokeWidth={2.35}
               />
             </button>
 
