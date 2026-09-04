@@ -2396,46 +2396,53 @@ export default function StockDetail() {
           </div>
 
           <div className="mt-5">
-            <div className="flex items-end justify-between gap-3">
-              <p className="text-[34px] font-bold leading-none tracking-[-1px]">
-                {currentPrice > 0
-                  ? `$${currentPrice.toFixed(2)}`
-                  : "—"}
-              </p>
+            <p className="text-[34px] font-bold leading-none tracking-[-1px]">
+              {currentPrice > 0
+                ? `$${currentPrice.toFixed(2)}`
+                : "—"}
+            </p>
+
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div
+                  className={[
+                    "inline-flex h-[30px] items-center gap-1 rounded-[9px] px-2.5 text-[13px] font-semibold",
+                    displayPositive
+                      ? "bg-emerald-500/10 text-emerald-600"
+                      : "bg-red-500/10 text-red-600",
+                  ].join(" ")}
+                >
+                  {hasDailyReturn &&
+                    (displayPositive ? (
+                      <TrendingUp className="h-4 w-4" />
+                    ) : (
+                      <TrendingDown className="h-4 w-4" />
+                    ))}
+
+                  {hasDailyReturn
+                    ? `${displayPositive ? "+" : ""}${dailyReturn.toFixed(2)}%`
+                    : "—"}
+                </div>
+
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  Today
+                </span>
+              </div>
 
               {extendedSession && Number.isFinite(extendedSession.percent) && (
-                <p className="shrink-0 pb-0.5 text-right text-[11px] font-medium text-muted-foreground/65">
+                <p
+                  className={[
+                    "shrink-0 text-right text-[11px] font-medium",
+                    extendedSession.percent >= 0
+                      ? "text-emerald-600"
+                      : "text-red-600",
+                  ].join(" ")}
+                >
                   {extendedSession.label}{" "}
                   {extendedSession.percent >= 0 ? "+" : ""}
                   {extendedSession.percent.toFixed(2)}%
                 </p>
               )}
-            </div>
-
-            <div className="mt-2 flex items-center gap-2">
-              <div
-                className={[
-                  "inline-flex h-[30px] items-center gap-1 rounded-[9px] px-2.5 text-[13px] font-semibold",
-                  displayPositive
-                    ? "bg-emerald-500/10 text-emerald-600"
-                    : "bg-red-500/10 text-red-600",
-                ].join(" ")}
-              >
-                {hasDailyReturn &&
-                  (displayPositive ? (
-                    <TrendingUp className="h-4 w-4" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4" />
-                  ))}
-
-                {hasDailyReturn
-                  ? `${displayPositive ? "+" : ""}${dailyReturn.toFixed(2)}%`
-                  : "—"}
-              </div>
-
-              <span className="text-[11px] font-medium text-muted-foreground">
-                Today
-              </span>
             </div>
           </div>
 
