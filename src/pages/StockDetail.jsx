@@ -298,6 +298,47 @@ function getCurrentExtendedSession() {
   return null;
 }
 
+function calculateExtendedSession(points, currentPrice) {
+  const session = getCurrentExtendedSession();
+  const displayedCurrentPrice = roundPrice(currentPrice);
+
+  if (
+    !session ||
+    !Number.isFinite(displayedCurrentPrice) ||
+    displayedCurrentPrice <= 0 ||
+    !Array.isArray(points) ||
+    points.length < 1
+  ) {
+    return null;
+  }
+
+  const datedPoints = points
+    .map((point) => ({
+      ...point,
+      dateKey: getNewYorkDateKey(point.timestamp),
+    }))
+    .filter((point) => point.dateKey && Number.isFinite(point.value));
+
+  const baselinePoint = session.type === "after"
+    ? [...datedPoints]
+        .reverse()
+        .find((point) => point.dateKey === session.dateKey)
+    : [...datedPoints]
+        .reverse()
+        .find((point) => point.dateKey < session.dateKey);
+
+  const baselinePrice = roundPrice(baselinePoint?.value);
+
+  if (!Number.isFinite(baselinePrice) || baselinePrice <= 0) {
+    return null;
+  }
+
+  return {
+    label: session.label,
+    percent: ((displayedCurrentPrice - baselinePrice) / baselinePrice) * 100,
+  };
+}
+
 function formatXAxisTick(timestamp, period) {
   const date = timestampToDate(timestamp);
 
@@ -674,12 +715,23 @@ function StockChart({
   onDailyReturnChange,
   onExtendedSessionChange,
   initialDailyReturn,
+  initialChartData,
 }) {
   const [compareTickers, setCompareTickers] = useState([]);
   const [compareInput, setCompareInput] = useState("");
   const [compareError, setCompareError] = useState("");
   const [showInput, setShowInput] = useState(false);
-  const [chartData, setChartData] = useState([]);
+  const [chartData, setChartData] = useState(() => {
+    const points = Array.isArray(initialChartData?.points)
+      ? initialChartData.points
+      : [];
+
+    return points.map((point) => ({
+      timestamp: point.timestamp,
+      label: point.label,
+      primaryValue: point.value,
+    }));
+  });
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState("");
   const [primaryReturn, setPrimaryReturn] = useState(
@@ -691,6 +743,7 @@ function StockChart({
   const [dualTouchPoints, setDualTouchPoints] = useState([]);
   const tooltipTimerRef = useRef(null);
   const chartContainerRef = useRef(null);
+  const initialChartUsedRef = useRef(false);
 
   const primaryTicker = normalizeTickerInput(ticker);
   const comparisonsActive = compareTickers.length > 0;
@@ -702,8 +755,7 @@ function StockChart({
     setCompareInput("");
     setCompareError("");
     setShowInput(false);
-    onExtendedSessionChange?.(null);
-  }, [primaryTicker, onExtendedSessionChange]);
+  }, [primaryTicker]);
 
   function clearTooltipTimer() {
     if (tooltipTimerRef.current) {
@@ -814,6 +866,38 @@ function StockChart({
       return undefined;
     }
 
+    const canUseInitialChart =
+      !initialChartUsedRef.current &&
+      !comparisonsActive &&
+      activePeriod === "1W" &&
+      initialChartData?.ticker === primaryTicker &&
+      Array.isArray(initialChartData?.points) &&
+      initialChartData.points.length > 0;
+
+    if (canUseInitialChart) {
+      initialChartUsedRef.current = true;
+
+      const primary = initialChartData.points;
+      const nextReturn = calculatePeriodReturn(
+        primary,
+        activePeriod,
+        initialDailyReturn
+      );
+
+      setChartData(
+        primary.map((point) => ({
+          timestamp: point.timestamp,
+          label: point.label,
+          primaryValue: point.value,
+        }))
+      );
+      setPrimaryReturn(nextReturn);
+      onPeriodReturnChange(nextReturn);
+      setChartError("");
+      setChartLoading(false);
+      return undefined;
+    }
+
     const controller = new AbortController();
 
     async function loadChart() {
@@ -838,41 +922,9 @@ function StockChart({
         const primary = tickerSeries[primaryTicker];
 
         if (activePeriod === "1W") {
-          const session = getCurrentExtendedSession();
-          const displayedCurrentPrice = roundPrice(currentPrice);
-
-          if (session && Number.isFinite(displayedCurrentPrice) && displayedCurrentPrice > 0) {
-            const datedPoints = primary
-              .map((point) => ({
-                ...point,
-                dateKey: getNewYorkDateKey(point.timestamp),
-              }))
-              .filter((point) => point.dateKey && Number.isFinite(point.value));
-
-            const baselinePoint = session.type === "after"
-              ? [...datedPoints]
-                  .reverse()
-                  .find((point) => point.dateKey === session.dateKey)
-              : [...datedPoints]
-                  .reverse()
-                  .find((point) => point.dateKey < session.dateKey);
-
-            const baselinePrice = roundPrice(baselinePoint?.value);
-
-            if (Number.isFinite(baselinePrice) && baselinePrice > 0) {
-              const percent =
-                ((displayedCurrentPrice - baselinePrice) / baselinePrice) * 100;
-
-              onExtendedSessionChange?.({
-                label: session.label,
-                percent,
-              });
-            } else {
-              onExtendedSessionChange?.(null);
-            }
-          } else {
-            onExtendedSessionChange?.(null);
-          }
+          onExtendedSessionChange?.(
+            calculateExtendedSession(primary, currentPrice)
+          );
         }
 
         const nextReturn = calculatePeriodReturn(
@@ -944,6 +996,7 @@ function StockChart({
     onDailyReturnChange,
     onExtendedSessionChange,
     initialDailyReturn,
+    initialChartData,
   ]);
 
   const periodStartPrice = useMemo(() => {
@@ -1709,6 +1762,7 @@ export default function StockDetail() {
   const [, setPeriodReturn] = useState(null);
   const [dailyReturn, setDailyReturn] = useState(null);
   const [extendedSession, setExtendedSession] = useState(null);
+  const [initialChartData, setInitialChartData] = useState(null);
 
   const isTickerRoute = routeValue?.startsWith("ticker-");
 
@@ -1774,6 +1828,7 @@ export default function StockDetail() {
       setActivePeriod("1W");
       setPeriodReturn(null);
       setExtendedSession(null);
+      setInitialChartData(null);
 
       const cachedTicker = tickerFromRoute || routeStateTicker;
 
@@ -1806,18 +1861,22 @@ export default function StockDetail() {
           _watchlistOnly: true,
         });
 
-        setLoading(false);
       }
 
       try {
         if (isTickerRoute) {
-          const [quoteResult, profileResult] = await Promise.allSettled([
+          const [quoteResult, profileResult, chartResult] = await Promise.allSettled([
             marketDataProxy(
               { action: "quote", ticker: tickerFromRoute },
               controller.signal
             ),
             marketDataProxy(
               { action: "profile", ticker: tickerFromRoute },
+              controller.signal
+            ),
+            fetchChartData(
+              tickerFromRoute,
+              "1W",
               controller.signal
             ),
           ]);
@@ -1840,6 +1899,24 @@ export default function StockDetail() {
 
           if (Number.isFinite(resolvedQuote?.dp)) {
             setDailyReturn(resolvedQuote.dp);
+          }
+
+          const initialPoints =
+            chartResult.status === "fulfilled"
+              ? chartResult.value
+              : [];
+
+          if (initialPoints.length > 0) {
+            setInitialChartData({
+              ticker: tickerFromRoute,
+              points: initialPoints,
+            });
+            setExtendedSession(
+              calculateExtendedSession(
+                initialPoints,
+                Number(resolvedQuote?.c) || cachedPrice
+              )
+            );
           }
 
           setStock({
@@ -1883,6 +1960,30 @@ export default function StockDetail() {
 
           if (Number.isFinite(cachedPortfolioQuote?.dp)) {
             setDailyReturn(cachedPortfolioQuote.dp);
+          }
+
+          try {
+            const initialPoints = await fetchChartData(
+              normalizedTicker,
+              "1W",
+              controller.signal
+            );
+            const displayedPrice =
+              Number.isFinite(cachedPortfolioQuote?.c) &&
+              cachedPortfolioQuote.c > 0
+                ? cachedPortfolioQuote.c
+                : Number(data.current_price) || 0;
+
+            setInitialChartData({
+              ticker: normalizedTicker,
+              points: initialPoints,
+            });
+            setExtendedSession(
+              calculateExtendedSession(initialPoints, displayedPrice)
+            );
+          } catch (chartError) {
+            if (chartError?.name === "AbortError") return;
+            console.warn("Initial stock chart prefetch failed:", chartError);
           }
 
           setStock({
@@ -2512,6 +2613,7 @@ export default function StockDetail() {
           onDailyReturnChange={setDailyReturn}
           onExtendedSessionChange={setExtendedSession}
           initialDailyReturn={dailyReturn}
+          initialChartData={initialChartData}
         />
 
         <section>
