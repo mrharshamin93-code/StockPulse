@@ -922,12 +922,6 @@ function StockChart({
         const tickerSeries = Object.fromEntries(seriesResults);
         const primary = tickerSeries[primaryTicker];
 
-        if (activePeriod === "1W") {
-          onExtendedSessionChange?.(
-            calculateExtendedSession(primary, currentPrice)
-          );
-        }
-
         const nextReturn = calculatePeriodReturn(
           primary,
           activePeriod,
@@ -988,7 +982,6 @@ function StockChart({
     return () => controller.abort();
   }, [
     primaryTicker,
-    currentPrice,
     activePeriod,
     compareTickers,
     comparisonsActive,
@@ -998,6 +991,37 @@ function StockChart({
     onExtendedSessionChange,
     initialDailyReturn,
     initialChartData,
+  ]);
+
+  useEffect(() => {
+    if (activePeriod !== "1W" || comparisonsActive || !chartData.length) {
+      return;
+    }
+
+    const primaryPoints = chartData
+      .map((point) => ({
+        timestamp: point.timestamp,
+        value: point.primaryValue,
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.timestamp) &&
+          Number.isFinite(point.value)
+      );
+
+    if (!primaryPoints.length) {
+      return;
+    }
+
+    onExtendedSessionChange?.(
+      calculateExtendedSession(primaryPoints, currentPrice)
+    );
+  }, [
+    activePeriod,
+    comparisonsActive,
+    chartData,
+    currentPrice,
+    onExtendedSessionChange,
   ]);
 
   const periodStartPrice = useMemo(() => {
@@ -1341,7 +1365,7 @@ function StockChart({
         onTouchEndCapture={finishChartTouch}
         onTouchCancelCapture={finishChartTouch}
       >
-        {!longRangeUnavailable && chartLoading && (
+        {!longRangeUnavailable && chartLoading && chartData.length === 0 && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[16px] bg-card/75 backdrop-blur-[1px]">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
