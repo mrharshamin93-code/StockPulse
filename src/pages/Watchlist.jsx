@@ -36,6 +36,7 @@ import { recordStockTransaction } from "@/lib/stockTransactions";
 import {
   financialDatasetsRequest,
 } from "@/lib/financialDatasets";
+import { prefetchStockDetails } from "@/lib/stockDetailPrefetch";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2843,6 +2844,14 @@ export default function Watchlist() {
     load,
     refreshWatchlistQuotes,
   ]);
+
+  useEffect(() => {
+    if (!items.length) {
+      return;
+    }
+
+    void prefetchStockDetails(items, { quotes });
+  }, [items, quotes]);
 
   useEffect(() => {
     if (

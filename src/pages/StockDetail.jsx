@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 
 import { financialDatasetsRequest } from "@/lib/financialDatasets";
+import { readStockDetailPrefetch } from "@/lib/stockDetailPrefetch";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useMarketData } from "@/lib/MarketDataContext";
@@ -1831,9 +1832,11 @@ export default function StockDetail() {
       setInitialChartData(null);
 
       const cachedTicker = tickerFromRoute || routeStateTicker;
+      const detailPrefetch = readStockDetailPrefetch(cachedTicker);
 
       const cachedQuote =
         routeStateQuote ||
+        normalizePrefetchedQuote(detailPrefetch?.quote) ||
         normalizePrefetchedQuote(quotes[cachedTicker]);
 
       if (Number.isFinite(cachedQuote?.dp)) {
@@ -1848,11 +1851,24 @@ export default function StockDetail() {
             ? cachedQuote.c
             : 0;
 
+        if (Array.isArray(detailPrefetch?.points) && detailPrefetch.points.length > 0) {
+          setInitialChartData({
+            ticker: tickerFromRoute,
+            points: detailPrefetch.points,
+          });
+          setExtendedSession(
+            calculateExtendedSession(detailPrefetch.points, cachedPrice)
+          );
+        }
+
         setStock({
           ticker: tickerFromRoute,
-          company_name: routeStateCompanyName || tickerFromRoute,
-          sector: "",
-          logo_url: "",
+          company_name:
+            detailPrefetch?.profile?.name ||
+            routeStateCompanyName ||
+            tickerFromRoute,
+          sector: detailPrefetch?.profile?.sector || "",
+          logo_url: detailPrefetch?.profile?.logo || "",
           current_price: cachedPrice,
           purchase_price: Number.isFinite(cachedQuote?.pc)
             ? cachedQuote.pc
@@ -1861,24 +1877,34 @@ export default function StockDetail() {
           _watchlistOnly: true,
         });
 
+        if (detailPrefetch) {
+          setLoading(false);
+        }
+
       }
 
       try {
         if (isTickerRoute) {
           const [quoteResult, profileResult, chartResult] = await Promise.allSettled([
-            marketDataProxy(
-              { action: "quote", ticker: tickerFromRoute },
-              controller.signal
-            ),
-            marketDataProxy(
-              { action: "profile", ticker: tickerFromRoute },
-              controller.signal
-            ),
-            fetchChartData(
-              tickerFromRoute,
-              "1W",
-              controller.signal
-            ),
+            detailPrefetch?.quote
+              ? Promise.resolve(detailPrefetch.quote)
+              : marketDataProxy(
+                  { action: "quote", ticker: tickerFromRoute },
+                  controller.signal
+                ),
+            detailPrefetch?.profile
+              ? Promise.resolve(detailPrefetch.profile)
+              : marketDataProxy(
+                  { action: "profile", ticker: tickerFromRoute },
+                  controller.signal
+                ),
+            Array.isArray(detailPrefetch?.points) && detailPrefetch.points.length > 0
+              ? Promise.resolve(detailPrefetch.points)
+              : fetchChartData(
+                  tickerFromRoute,
+                  "1W",
+                  controller.signal
+                ),
           ]);
 
           if (controller.signal.aborted) return;
@@ -1923,6 +1949,7 @@ export default function StockDetail() {
             ticker: tickerFromRoute,
             company_name:
               profile?.name ||
+              detailPrefetch?.profile?.name ||
               routeStateCompanyName ||
               tickerFromRoute,
             sector:
