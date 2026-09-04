@@ -869,10 +869,9 @@ function StockChart({
         ? initialDailyReturn
         : null;
 
-    setPrimaryReturn(fallbackReturn);
-    onPeriodReturnChange(fallbackReturn);
-
     if (longRangeUnavailable) {
+      setPrimaryReturn(fallbackReturn);
+      onPeriodReturnChange(fallbackReturn);
       setChartData([]);
       setChartError("");
       setChartLoading(false);
@@ -910,6 +909,9 @@ function StockChart({
       setChartLoading(false);
       return undefined;
     }
+
+    setPrimaryReturn(fallbackReturn);
+    onPeriodReturnChange(fallbackReturn);
 
     const controller = new AbortController();
 
@@ -1160,6 +1162,33 @@ function StockChart({
     return monthlyTicks.length > 1 ? monthlyTicks.slice(1) : monthlyTicks;
   }, [chartData, displayChartData, activePeriod]);
 
+  const displayedPrimaryReturn = useMemo(() => {
+    if (Number.isFinite(primaryReturn)) {
+      return primaryReturn;
+    }
+
+    if (
+      !comparisonsActive &&
+      activePeriod === "1W" &&
+      Array.isArray(initialChartData?.points) &&
+      initialChartData.points.length > 0
+    ) {
+      return calculatePeriodReturn(
+        initialChartData.points,
+        activePeriod,
+        initialDailyReturn
+      );
+    }
+
+    return null;
+  }, [
+    primaryReturn,
+    comparisonsActive,
+    activePeriod,
+    initialChartData,
+    initialDailyReturn,
+  ]);
+
   const comparisonLegendItems = [
     {
       ticker: primaryTicker,
@@ -1229,15 +1258,15 @@ function StockChart({
           <p
             className={[
               "mt-1 text-[14px] font-semibold",
-              Number.isFinite(primaryReturn)
-                ? primaryReturn >= 0
+              Number.isFinite(displayedPrimaryReturn)
+                ? displayedPrimaryReturn >= 0
                   ? "text-emerald-600"
                   : "text-red-600"
                 : "text-muted-foreground",
             ].join(" ")}
           >
-            {Number.isFinite(primaryReturn)
-              ? `${primaryReturn >= 0 ? "+" : ""}${primaryReturn.toFixed(2)}%`
+            {Number.isFinite(displayedPrimaryReturn)
+              ? `${displayedPrimaryReturn >= 0 ? "+" : ""}${displayedPrimaryReturn.toFixed(2)}%`
               : "—"}
           </p>
         </div>
