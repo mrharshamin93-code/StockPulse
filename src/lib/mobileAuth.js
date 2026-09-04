@@ -22,19 +22,15 @@ export function getAuthCallbackUrl() {
   return `${window.location.origin}/auth/callback`;
 }
 
-export async function signInWithGoogle() {
+async function signInWithOAuthProvider(provider, scopes) {
   const native = isNativeApp();
 
   const { data, error } =
     await supabase.auth.signInWithOAuth({
-      provider: "google",
-
+      provider,
       options: {
         redirectTo: getAuthCallbackUrl(),
-
-        scopes:
-          "openid email profile https://www.googleapis.com/auth/userinfo.email",
-
+        scopes,
         skipBrowserRedirect: native,
       },
     });
@@ -49,13 +45,27 @@ export async function signInWithGoogle() {
 
   if (!data?.url) {
     throw new Error(
-      "Google sign-in could not be started.",
+      `${provider} sign-in could not be started.`,
     );
   }
 
   await Browser.open({
     url: data.url,
   });
+}
+
+export async function signInWithGoogle() {
+  return signInWithOAuthProvider(
+    "google",
+    "openid email profile https://www.googleapis.com/auth/userinfo.email",
+  );
+}
+
+export async function signInWithApple() {
+  return signInWithOAuthProvider(
+    "apple",
+    "name email",
+  );
 }
 
 function decodeError(rawValue) {
@@ -170,9 +180,9 @@ async function handleNativeUrl(url) {
     }
 
     /*
-     * If the callback is delivered again after the first exchange
-     * already succeeded, use the persisted session instead of trying
-     * to consume the one-time PKCE code a second time.
+     * The same custom-scheme callback can occasionally be delivered
+     * more than once on iOS. If the first delivery already created
+     * the session, do not consume the one-time PKCE code again.
      */
     const {
       data: existingSessionData,
@@ -211,9 +221,9 @@ async function handleNativeUrl(url) {
 
     if (error) {
       /*
-       * A duplicate callback can race with the successful first
-       * exchange. Before showing an error, check whether that first
-       * exchange already persisted a valid session.
+       * If another callback raced with this one, the first may have
+       * already persisted a valid session. Recover that instead of
+       * showing a false sign-in failure.
        */
       const {
         data: recoveredSessionData,
@@ -240,20 +250,12 @@ async function handleNativeUrl(url) {
     }
 
     /*
-     * IMPORTANT:
-     *
-     * Do not call window.location.replace("/") here.
-     *
-     * Reloading the Capacitor WebView destroys this module state.
-     * On iOS, App.getLaunchUrl() can then surface the same custom
-     * scheme callback again. Because the PKCE code is one-time use,
-     * the second exchange fails and sends the app back to login even
-     * though the first exchange already created and persisted a valid
-     * session. That is what causes the flashing/login-error loop.
+     * Do not reload the Capacitor WebView here.
      *
      * exchangeCodeForSession() emits SIGNED_IN. AuthContext receives
-     * the session and Login.jsx redirects to /watchlist without a
-     * WebView reload.
+     * the session, and Login.jsx moves to /watchlist after the auth
+     * state is stable. This avoids duplicate deep-link processing and
+     * the flashing/login-error loop.
      */
   } catch (error) {
     console.error(
@@ -264,7 +266,7 @@ async function handleNativeUrl(url) {
     const message =
       error instanceof Error
         ? error.message
-        : "Google sign-in failed.";
+        : "Social sign-in failed.";
 
     navigateWithoutReload(
       `/login?error=${encodeURIComponent(
