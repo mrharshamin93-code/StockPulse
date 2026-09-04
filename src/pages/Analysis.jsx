@@ -964,7 +964,7 @@ export default function Analysis() {
             >
               <div className="flex w-full max-w-full items-stretch gap-2 overflow-x-hidden">
                 <div className="relative min-w-0 flex-1">
-                  <div className="flex h-[48px] w-full min-w-0 items-center rounded-[14px] border border-border bg-card">
+                  <div className="flex h-[48px] w-full min-w-0 items-center rounded-[10px] border border-border bg-card">
                     <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
 
                     <Input
@@ -1007,9 +1007,12 @@ export default function Analysis() {
                   disabled={
                     isLoading
                   }
-                  className="h-[48px] min-w-[92px] shrink-0 rounded-[14px] bg-black px-3 text-[11px] font-semibold text-white hover:bg-black/90"
+                  className="h-[48px] min-w-[92px] shrink-0 rounded-[10px] bg-black px-3 text-[11px] font-semibold text-white hover:bg-black/90"
                 >
-                  Analyze
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Analyze
+                  </span>
                 </Button>
               </div>
 
