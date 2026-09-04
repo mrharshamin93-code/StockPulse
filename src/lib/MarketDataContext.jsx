@@ -11,6 +11,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { financialDatasetsRequest } from "@/lib/financialDatasets";
 
 const QUOTE_TTL_MS = 5 * 60 * 1000;
+const PERSISTED_QUOTE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const PERSISTED_QUOTE_CACHE_KEY = "stockpulse:quote-cache:v1";
 
 const MarketDataContext = createContext({
   quotes: {},
@@ -58,11 +60,111 @@ function normalizeQuote(quote, fallbackTicker = "") {
   };
 }
 
+function readPersistedQuoteCache() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PERSISTED_QUOTE_CACHE_KEY);
+
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    const entries = parsed && typeof parsed === "object" ? parsed : {};
+    const now = Date.now();
+    const cache = {};
+
+    for (const [rawTicker, entry] of Object.entries(entries)) {
+      const ticker = normalizeTicker(rawTicker);
+      const fetchedAt = Number(entry?.fetchedAt);
+      const quote = normalizeQuote(entry?.data, ticker);
+
+      if (
+        !ticker ||
+        !quote ||
+        !Number.isFinite(fetchedAt) ||
+        now - fetchedAt > PERSISTED_QUOTE_MAX_AGE_MS ||
+        !Number.isFinite(quote.c)
+      ) {
+        continue;
+      }
+
+      cache[ticker] = {
+        data: quote,
+        fetchedAt,
+      };
+    }
+
+    return cache;
+  } catch (error) {
+    console.warn("Unable to read persisted quote cache:", error);
+    return {};
+  }
+}
+
+function quoteMapFromCache(cache) {
+  return Object.fromEntries(
+    Object.entries(cache || {})
+      .filter(([, entry]) => entry?.data)
+      .map(([ticker, entry]) => [ticker, entry.data]),
+  );
+}
+
+function persistQuoteCache(cache) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const now = Date.now();
+    const persisted = {};
+
+    for (const [rawTicker, entry] of Object.entries(cache || {})) {
+      const ticker = normalizeTicker(rawTicker);
+      const fetchedAt = Number(entry?.fetchedAt);
+      const quote = normalizeQuote(entry?.data, ticker);
+
+      if (
+        !ticker ||
+        !quote ||
+        !Number.isFinite(fetchedAt) ||
+        now - fetchedAt > PERSISTED_QUOTE_MAX_AGE_MS ||
+        !Number.isFinite(quote.c)
+      ) {
+        continue;
+      }
+
+      persisted[ticker] = {
+        data: quote,
+        fetchedAt,
+      };
+    }
+
+    window.localStorage.setItem(
+      PERSISTED_QUOTE_CACHE_KEY,
+      JSON.stringify(persisted),
+    );
+  } catch (error) {
+    console.warn("Unable to persist quote cache:", error);
+  }
+}
+
 export function MarketDataProvider({ children }) {
   const { user } = useAuth();
-  const [quotes, setQuotes] = useState({});
+  const initialQuoteCacheRef = useRef(null);
+
+  if (initialQuoteCacheRef.current === null) {
+    initialQuoteCacheRef.current = readPersistedQuoteCache();
+  }
+
+  const [quotes, setQuotes] = useState(() =>
+    quoteMapFromCache(initialQuoteCacheRef.current),
+  );
   const tickersRef = useRef([]);
-  const quoteCacheRef = useRef({});
+  const quoteCacheRef = useRef(initialQuoteCacheRef.current);
 
   const loadQuotes = useCallback(
     async (tickers, { force = false } = {}) => {
@@ -93,11 +195,20 @@ export function MarketDataProvider({ children }) {
           Number.isFinite(cached?.fetchedAt) &&
           now - cached.fetchedAt < QUOTE_TTL_MS;
 
-        if (fresh) {
+        if (cached?.data) {
           resolved[ticker] = cached.data;
-        } else {
+        }
+
+        if (!fresh) {
           needsFetch.push(ticker);
         }
+      }
+
+      if (Object.keys(resolved).length) {
+        setQuotes((previous) => ({
+          ...previous,
+          ...resolved,
+        }));
       }
 
       if (needsFetch.length) {
@@ -120,30 +231,43 @@ export function MarketDataProvider({ children }) {
         );
 
         for (const ticker of needsFetch) {
-          const quote =
-            byTicker.get(ticker) ||
-            normalizeQuote(
-              {
-                ticker,
-                c: null,
-                d: null,
-                dp: null,
-                h: null,
-                l: null,
-                o: null,
-                pc: null,
-                t: null,
-              },
+          const returnedQuote = byTicker.get(ticker);
+          const previousCached = quoteCacheRef.current[ticker];
+
+          if (returnedQuote && Number.isFinite(returnedQuote.c)) {
+            quoteCacheRef.current[ticker] = {
+              data: returnedQuote,
+              fetchedAt: Date.now(),
+            };
+
+            resolved[ticker] = returnedQuote;
+            continue;
+          }
+
+          if (previousCached?.data) {
+            resolved[ticker] = previousCached.data;
+            continue;
+          }
+
+          const emptyQuote = normalizeQuote(
+            {
               ticker,
-            );
+              c: null,
+              d: null,
+              dp: null,
+              h: null,
+              l: null,
+              o: null,
+              pc: null,
+              t: null,
+            },
+            ticker,
+          );
 
-          quoteCacheRef.current[ticker] = {
-            data: quote,
-            fetchedAt: Date.now(),
-          };
-
-          resolved[ticker] = quote;
+          resolved[ticker] = emptyQuote;
         }
+
+        persistQuoteCache(quoteCacheRef.current);
       }
 
       setQuotes((previous) => ({
@@ -164,10 +288,10 @@ export function MarketDataProvider({ children }) {
           : tickersRef.current;
 
       /*
-       * Force only bypasses the browser-memory cache.
-       * The Financial Datasets Edge Function still goes through StockPulse's
-       * shared persistent market_data_cache, so a page refresh does not
-       * necessarily consume a provider request.
+       * Persisted last-known prices stay visible while this refresh runs.
+       * Force only bypasses the browser cache freshness check. The Financial
+       * Datasets Edge Function can still satisfy the request from StockPulse's
+       * shared persistent market_data_cache before calling the provider.
        */
       return loadQuotes(requestedTickers, { force: true });
     },
