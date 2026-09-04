@@ -21,7 +21,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
         if let scrollView = view as? UIScrollView {
             scrollView.decelerationRate = .normal
-            scrollView.directionalLockEnabled = true
+            scrollView.isDirectionalLockEnabled = true
         }
 
         view.subviews.forEach { configureScrollViews(in: $0) }
