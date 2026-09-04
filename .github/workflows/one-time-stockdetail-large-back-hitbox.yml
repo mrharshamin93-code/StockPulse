@@ -1,0 +1,52 @@
+name: One-time StockDetail large back hitbox
+on:
+  push:
+    branches: [Financial-Datasets-Migration]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Greatly enlarge StockDetail back touch area'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Financial-Datasets-Migration
+      - name: Enlarge StockDetail back hitbox
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/StockDetail.jsx')
+          s = p.read_text()
+          old = '''                flex
+                h-[58px]
+                w-16
+                items-center
+                justify-center
+                self-stretch
+                rounded-r-[18px]
+                text-foreground'''
+          new = '''                relative
+                z-20
+                flex
+                h-[92px]
+                w-[112px]
+                -translate-y-[1px]
+                items-center
+                justify-start
+                self-center
+                pl-[21px]
+                rounded-r-[24px]
+                text-foreground'''
+          assert old in s, 'StockDetail back button class block not found'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/StockDetail.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Greatly enlarge StockDetail back touch area"
+          git push origin Financial-Datasets-Migration
