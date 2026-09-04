@@ -1,4 +1,4 @@
-# trigger
+# trigger2
 name: One-time StockDetail large back hitbox
 on:
   push:
