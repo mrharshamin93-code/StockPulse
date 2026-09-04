@@ -104,6 +104,20 @@ function formatMetric(
   )}${suffix}`;
 }
 
+function formatMarketCap(value) {
+  const parsed = finiteNumber(value);
+
+  if (parsed === null) {
+    return "—";
+  }
+
+  if (Math.abs(parsed) >= 1000) {
+    return `$${(parsed / 1000).toFixed(1)}T`;
+  }
+
+  return `$${parsed.toFixed(1)}B`;
+}
+
 function MetricCard({
   label,
   value,
@@ -946,7 +960,7 @@ export default function Analysis() {
               onSubmit={
                 handleSubmit
               }
-              className="w-full max-w-full"
+              className="mx-auto w-full max-w-[360px]"
             >
               <div className="flex w-full max-w-full items-stretch gap-2 overflow-x-hidden">
                 <div className="relative min-w-0 flex-1">
@@ -993,7 +1007,7 @@ export default function Analysis() {
                   disabled={
                     isLoading
                   }
-                  className="h-[48px] shrink-0 rounded-[14px] px-4 text-[11px]"
+                  className="h-[48px] min-w-[92px] shrink-0 rounded-[14px] bg-black px-3 text-[11px] font-semibold text-white hover:bg-black/90"
                 >
                   Analyze
                 </Button>
@@ -1089,12 +1103,8 @@ export default function Analysis() {
                 <div className="grid min-w-0 grid-cols-2 gap-2">
                   <MetricCard
                     label="Market Cap"
-                    value={formatMetric(
+                    value={formatMarketCap(
                       metrics.marketCapB,
-                      {
-                        prefix: "$",
-                        suffix: "B",
-                      },
                     )}
                   />
 
