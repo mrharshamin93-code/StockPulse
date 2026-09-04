@@ -1780,20 +1780,43 @@ export default function StockDetail() {
     : null;
 
   const stockId = isTickerRoute ? null : routeValue;
-  const synchronousPrefetch = isTickerRoute
-    ? readStockDetailPrefetch(tickerFromRoute)
+  const synchronousTicker =
+    tickerFromRoute ||
+    String(location.state?.ticker || location.state?.symbol || "")
+      .trim()
+      .toUpperCase();
+  const synchronousRouteStock =
+    location.state?.stock && typeof location.state.stock === "object"
+      ? location.state.stock
+      : null;
+  const synchronousPrefetch = synchronousTicker
+    ? readStockDetailPrefetch(synchronousTicker)
     : null;
-  const synchronousQuote = normalizePrefetchedQuote(synchronousPrefetch?.quote);
+  const synchronousQuote =
+    normalizePrefetchedQuote(location.state?.quote) ||
+    normalizePrefetchedQuote(synchronousPrefetch?.quote);
   const synchronousPrice =
     Number.isFinite(synchronousQuote?.c) && synchronousQuote.c > 0
       ? synchronousQuote.c
-      : 0;
+      : Number(synchronousRouteStock?.current_price) || 0;
   const synchronousPoints = Array.isArray(synchronousPrefetch?.points)
     ? synchronousPrefetch.points
     : [];
 
-  const [stock, setStock] = useState(() =>
-    synchronousPrefetch
+  const [stock, setStock] = useState(() => {
+    if (synchronousRouteStock) {
+      return {
+        ...synchronousRouteStock,
+        ticker: synchronousTicker || synchronousRouteStock.ticker,
+        current_price:
+          synchronousPrice > 0
+            ? synchronousPrice
+            : synchronousRouteStock.current_price,
+        _watchlistOnly: false,
+      };
+    }
+
+    return synchronousPrefetch && isTickerRoute
       ? {
           ticker: tickerFromRoute,
           company_name:
@@ -1807,9 +1830,11 @@ export default function StockDetail() {
           quantity: 0,
           _watchlistOnly: true,
         }
-      : null
+      : null;
+  });
+  const [loading, setLoading] = useState(
+    () => !(synchronousPrefetch && (isTickerRoute || synchronousRouteStock))
   );
-  const [loading, setLoading] = useState(() => !synchronousPrefetch);
   const [pageError, setPageError] = useState("");
   const [fundamentals, setFundamentals] = useState(null);
   const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
@@ -1830,7 +1855,7 @@ export default function StockDetail() {
   );
   const [initialChartData, setInitialChartData] = useState(() =>
     synchronousPoints.length > 0
-      ? { ticker: tickerFromRoute, points: synchronousPoints }
+      ? { ticker: synchronousTicker, points: synchronousPoints }
       : null
   );
 
