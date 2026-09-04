@@ -209,7 +209,7 @@ export default function Home() {
 
   const {
     quotes,
-    fetchQuotes,
+    refreshQuotes,
   } = useMarketData();
 
   const [stocks, setStocks] =
@@ -449,14 +449,16 @@ export default function Home() {
       return;
     }
 
-    void fetchQuotes(
+    // Cached prices make the page appear instantly; force a silent refresh so
+    // the restored chart endpoint never waits for a manual pull-to-refresh.
+    void refreshQuotes(
       stocks.map(
         (stock) =>
           stock.ticker
       )
     );
   }, [
-    fetchQuotes,
+    refreshQuotes,
     stocks,
   ]);
 
