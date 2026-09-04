@@ -32,21 +32,9 @@ export async function signInWithGoogle() {
       options: {
         redirectTo: getAuthCallbackUrl(),
 
-        /*
-         * Explicitly request the Google identity/email scopes.
-         * This improves compatibility with new Google accounts
-         * and Google Workspace accounts where the email may not
-         * otherwise be returned as expected.
-         */
         scopes:
           "openid email profile https://www.googleapis.com/auth/userinfo.email",
 
-        /*
-         * On iOS/Capacitor we open the OAuth URL ourselves
-         * using Capacitor Browser.
-         *
-         * On the web, Supabase performs the redirect normally.
-         */
         skipBrowserRedirect: native,
       },
     });
@@ -55,19 +43,10 @@ export async function signInWithGoogle() {
     throw error;
   }
 
-  /*
-   * Web:
-   * Supabase redirects the browser to Google automatically.
-   */
   if (!native) {
     return;
   }
 
-  /*
-   * Native:
-   * Supabase returns the Google OAuth URL and we open it
-   * in the system browser.
-   */
   if (!data?.url) {
     throw new Error(
       "Google sign-in could not be started.",
@@ -106,6 +85,24 @@ function getUrlParts(incomingUrl) {
   };
 }
 
+function navigateWithoutReload(path) {
+  if (
+    typeof window === "undefined"
+  ) {
+    return;
+  }
+
+  window.history.replaceState(
+    {},
+    "",
+    path,
+  );
+
+  window.dispatchEvent(
+    new PopStateEvent("popstate"),
+  );
+}
+
 let nativeAuthListener = null;
 let handlingOAuth = false;
 let lastHandledUrl = "";
@@ -115,18 +112,12 @@ async function handleNativeUrl(url) {
     return;
   }
 
-  /*
-   * Prevent the same deep link from being processed twice.
-   */
   if (url === lastHandledUrl) {
     return;
   }
 
   lastHandledUrl = url;
 
-  /*
-   * Password-reset deep link.
-   */
   if (
     url.startsWith(
       IOS_RESET_PASSWORD_URL,
@@ -135,16 +126,13 @@ async function handleNativeUrl(url) {
     const { search, hash } =
       getUrlParts(url);
 
-    window.location.replace(
+    navigateWithoutReload(
       `/reset-password${search}${hash}`,
     );
 
     return;
   }
 
-  /*
-   * Ignore unrelated deep links.
-   */
   if (
     !url.startsWith(
       IOS_AUTH_CALLBACK,
@@ -153,10 +141,6 @@ async function handleNativeUrl(url) {
     return;
   }
 
-  /*
-   * Prevent multiple OAuth exchanges from running
-   * simultaneously.
-   */
   if (handlingOAuth) {
     return;
   }
@@ -164,10 +148,6 @@ async function handleNativeUrl(url) {
   handlingOAuth = true;
 
   try {
-    /*
-     * Close the system OAuth browser after StockPulse
-     * receives the callback.
-     */
     await Browser.close().catch(
       () => {},
     );
@@ -175,9 +155,6 @@ async function handleNativeUrl(url) {
     const callbackUrl =
       new URL(url);
 
-    /*
-     * Surface any error returned by Google/Supabase.
-     */
     const rawError =
       callbackUrl.searchParams.get(
         "error_description",
@@ -193,8 +170,28 @@ async function handleNativeUrl(url) {
     }
 
     /*
-     * Supabase PKCE OAuth returns a one-time code.
+     * If the callback is delivered again after the first exchange
+     * already succeeded, use the persisted session instead of trying
+     * to consume the one-time PKCE code a second time.
      */
+    const {
+      data: existingSessionData,
+      error: existingSessionError,
+    } = await supabase.auth.getSession();
+
+    if (existingSessionError) {
+      console.warn(
+        "Unable to check existing native session:",
+        existingSessionError,
+      );
+    }
+
+    if (
+      existingSessionData?.session?.user
+    ) {
+      return;
+    }
+
     const code =
       callbackUrl.searchParams.get(
         "code",
@@ -206,10 +203,6 @@ async function handleNativeUrl(url) {
       );
     }
 
-    /*
-     * Exchange the one-time OAuth code for the user's
-     * persistent Supabase session.
-     */
     const { data, error } =
       await supabase.auth
         .exchangeCodeForSession(
@@ -217,6 +210,26 @@ async function handleNativeUrl(url) {
         );
 
     if (error) {
+      /*
+       * A duplicate callback can race with the successful first
+       * exchange. Before showing an error, check whether that first
+       * exchange already persisted a valid session.
+       */
+      const {
+        data: recoveredSessionData,
+      } = await supabase.auth
+        .getSession()
+        .catch(() => ({
+          data: null,
+        }));
+
+      if (
+        recoveredSessionData?.session
+          ?.user
+      ) {
+        return;
+      }
+
       throw error;
     }
 
@@ -227,9 +240,21 @@ async function handleNativeUrl(url) {
     }
 
     /*
-     * Authentication succeeded.
+     * IMPORTANT:
+     *
+     * Do not call window.location.replace("/") here.
+     *
+     * Reloading the Capacitor WebView destroys this module state.
+     * On iOS, App.getLaunchUrl() can then surface the same custom
+     * scheme callback again. Because the PKCE code is one-time use,
+     * the second exchange fails and sends the app back to login even
+     * though the first exchange already created and persisted a valid
+     * session. That is what causes the flashing/login-error loop.
+     *
+     * exchangeCodeForSession() emits SIGNED_IN. AuthContext receives
+     * the session and Login.jsx redirects to /watchlist without a
+     * WebView reload.
      */
-    window.location.replace("/");
   } catch (error) {
     console.error(
       "Native OAuth callback failed:",
@@ -241,7 +266,7 @@ async function handleNativeUrl(url) {
         ? error.message
         : "Google sign-in failed.";
 
-    window.location.replace(
+    navigateWithoutReload(
       `/login?error=${encodeURIComponent(
         message,
       )}`,
@@ -252,16 +277,10 @@ async function handleNativeUrl(url) {
 }
 
 export async function initializeNativeAuth() {
-  /*
-   * Web OAuth is handled by /auth/callback.
-   */
   if (!isNativeApp()) {
     return;
   }
 
-  /*
-   * Only register one native deep-link listener.
-   */
   if (nativeAuthListener) {
     return;
   }
@@ -274,10 +293,6 @@ export async function initializeNativeAuth() {
       },
     );
 
-  /*
-   * Also handle the case where StockPulse was completely
-   * closed when the OAuth/reset-password deep link opened it.
-   */
   const launchData =
     await App.getLaunchUrl();
 
