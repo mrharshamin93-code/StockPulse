@@ -606,14 +606,7 @@ function buildPriceSeries({ ticker, histories, transactions, holding, chartStart
     }
   }
 
-  if (
-    holding?.currentPrice &&
-    holding.currentPrice > 0
-  ) {
-    // Every period must finish at the same live portfolio value. Using the
-    // holding's database updated_at here made weekly and monthly ranges end on
-    // different stale historical closes when that timestamp was unavailable
-    // or outside the selected range.
+  if (holding?.currentPrice && holding.currentPrice > 0) {
     points.push({ timestamp: chartEnd, price: holding.currentPrice });
   }
 
@@ -654,10 +647,7 @@ function getStateAtTimestamp({ timestamp, transactions, priceSeriesByTicker }) {
 
     hasOpenPosition = true;
 
-    const price = findPriceAtOrBefore(
-      priceSeriesByTicker.get(ticker) || [],
-      timestamp,
-    );
+    const price = findPriceAtOrBefore(priceSeriesByTicker.get(ticker) || [], timestamp);
 
     if (price === null) {
       incomplete = true;
@@ -689,9 +679,7 @@ function buildPortfolioData({
   chartEnd,
   period,
 }) {
-  const holdingMap = new Map(
-    holdings.map((holding) => [holding.ticker, holding]),
-  );
+  const holdingMap = new Map(holdings.map((holding) => [holding.ticker, holding]));
 
   const tickerSet = new Set([
     ...holdings.map((holding) => holding.ticker),
@@ -725,10 +713,7 @@ function buildPortfolioData({
   }
 
   for (const transaction of transactions) {
-    if (
-      transaction.timestamp >= chartStart &&
-      transaction.timestamp <= chartEnd
-    ) {
+    if (transaction.timestamp >= chartStart && transaction.timestamp <= chartEnd) {
       timestampSet.add(transaction.timestamp);
     }
   }
@@ -736,8 +721,7 @@ function buildPortfolioData({
   const timestamps = Array.from(timestampSet).sort((a, b) => a - b);
   const data = [];
   const portfolioInception = transactions[0]?.timestamp ?? null;
-  const rangeIncludesInception =
-    portfolioInception !== null && chartStart <= portfolioInception;
+  const rangeIncludesInception = portfolioInception !== null && chartStart <= portfolioInception;
 
   for (const timestamp of timestamps) {
     const state = getStateAtTimestamp({
@@ -850,20 +834,14 @@ function addRangePerformance(data, period) {
     return {
       ...point,
       rangeGain: Math.round(rangeGain * 100) / 100,
-      rangeGainPct:
-        capitalForRange > EPSILON
-          ? (rangeGain / capitalForRange) * 100
-          : null,
+      rangeGainPct: capitalForRange > EPSILON ? (rangeGain / capitalForRange) * 100 : null,
     };
   });
 }
 
 async function loadPortfolioChartData({ userId, holdings, period }) {
   const rawTransactions = await fetchTransactions(userId);
-  const transactions = reconcileTransactionsWithHoldings(
-    rawTransactions,
-    holdings,
-  );
+  const transactions = reconcileTransactionsWithHoldings(rawTransactions, holdings);
 
   if (!transactions.length) {
     throw new Error("No portfolio transaction history is available yet.");
@@ -1002,9 +980,7 @@ function PeriodButton({ value, currentPeriod, onSelect }) {
       onClick={() => onSelect(value)}
       className={[
         "flex h-[27px] min-w-0 flex-1 items-center justify-center rounded-[7px] px-0.5 text-[9.5px] font-semibold tracking-[-0.15px] transition-[transform,background-color,color] duration-150 active:scale-[0.96]",
-        active
-          ? "bg-foreground text-background"
-          : "text-foreground hover:bg-muted",
+        active ? "bg-foreground text-background" : "text-foreground hover:bg-muted",
       ].join(" ")}
     >
       {value}
@@ -1150,11 +1126,6 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
         )}
       </div>
 
-      <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
-        Portfolio value uses your actual buy and sell history. Performance
-        excludes new capital added from being counted as investment gains.
-      </p>
-
       <div className="mt-4 flex w-full items-center gap-[2px]">
         {PERIODS.map((periodOption) => (
           <PeriodButton
@@ -1182,23 +1153,9 @@ export default function PortfolioGrowthChart({ stocks = [] }) {
               margin={{ top: 8, right: 4, left: 0, bottom: 2 }}
             >
               <defs>
-                <linearGradient
-                  id={gradientId}
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop
-                    offset="5%"
-                    stopColor={chartColor}
-                    stopOpacity={0.16}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor={chartColor}
-                    stopOpacity={0}
-                  />
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={chartColor} stopOpacity={0.16} />
+                  <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
 
