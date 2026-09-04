@@ -5,6 +5,11 @@ import {
 import {
   getCachedFinancialDatasetsQuote,
 } from "../_shared/market-data-cache.ts";
+import {
+  type ApnsDevice,
+  isApnsConfigured,
+  sendApnsNotification,
+} from "../_shared/apns.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -349,6 +354,8 @@ Deno.serve(
           alertsTriggered: 0,
           quoteErrors: 0,
           notificationErrors: 0,
+          pushesSent: 0,
+          pushErrors: 0,
           triggerUpdateErrors: 0,
         });
       }
@@ -407,6 +414,8 @@ Deno.serve(
       let alertsTriggered = 0;
       let quoteErrors = 0;
       let notificationErrors = 0;
+      let pushesSent = 0;
+      let pushErrors = 0;
       let triggerUpdateErrors = 0;
 
       for (
@@ -661,6 +670,52 @@ Deno.serve(
           continue;
         }
 
+        let pushSentAt: string | null = null;
+        let pushError: string | null = null;
+        const { data: devices, error: devicesError } = await admin
+          .from("push_devices")
+          .select("id,token,environment")
+          .eq("user_id", alert.user_id)
+          .eq("enabled", true);
+
+        if (devicesError) {
+          pushErrors += 1;
+          pushError = getErrorMessage(devicesError);
+        } else if ((devices || []).length && !isApnsConfigured()) {
+          pushErrors += 1;
+          pushError = "APNs credentials are not configured.";
+        } else if ((devices || []).length) {
+          const results = await Promise.all(
+            (devices as ApnsDevice[]).map((device) =>
+              sendApnsNotification(device, {
+                title: copy.title,
+                body: copy.body,
+                route: notificationPayload.route,
+                ticker,
+                alertId: alert.id,
+              })
+            ),
+          );
+
+          const successful = results.filter((result) => result.ok);
+          const failed = results.filter((result) => !result.ok);
+          pushesSent += successful.length;
+          pushErrors += failed.length;
+          if (successful.length) pushSentAt = checkedAt;
+          if (failed.length) {
+            pushError = [...new Set(failed.map((result) => result.reason || "APNs delivery failed"))].join("; ");
+          }
+
+          for (const result of results) {
+            await admin.from("push_devices").update({
+              last_error: result.reason,
+              enabled: result.shouldInvalidate ? false : true,
+              invalidated_at: result.shouldInvalidate ? checkedAt : null,
+              updated_at: checkedAt,
+            }).eq("id", result.device.id);
+          }
+        }
+
         const {
           error: triggerError,
         } =
@@ -684,6 +739,12 @@ Deno.serve(
 
               notification_error:
                 null,
+
+              push_sent_at:
+                pushSentAt,
+
+              push_error:
+                pushError,
             })
             .eq(
               "id",
@@ -717,6 +778,8 @@ Deno.serve(
         alertsTriggered,
         quoteErrors,
         notificationErrors,
+        pushesSent,
+        pushErrors,
         triggerUpdateErrors,
       });
     } catch (error) {

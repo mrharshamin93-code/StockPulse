@@ -11,6 +11,7 @@ import {
 import {
   initializeNativeAuth,
 } from "@/lib/mobileAuth";
+import { initializePushNotifications } from "@/lib/pushNotifications";
 
 initTheme();
 
@@ -27,6 +28,10 @@ initializeNativeAuth().catch(
     );
   },
 );
+
+initializePushNotifications().catch((error) => {
+  console.error("Failed to initialize push notifications:", error);
+});
 
 ReactDOM.createRoot(
   document.getElementById("root"),

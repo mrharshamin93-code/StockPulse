@@ -9,6 +9,7 @@ import React, {
 } from "react";
 
 import { supabase } from "./supabase";
+import { unregisterPushDevice } from "./pushNotifications";
 
 import {
   DEFAULT_USER_PREFERENCES,
@@ -360,6 +361,12 @@ export function AuthProvider({ children }) {
   }, [loadUserPreferences]);
 
   const logout = useCallback(async () => {
+    try {
+      await unregisterPushDevice();
+    } catch (error) {
+      console.error("Could not unregister this device before sign out:", error);
+    }
+
     const { error } = await supabase.auth.signOut();
 
     if (error) throw error;

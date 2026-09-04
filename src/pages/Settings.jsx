@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Settings() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -33,11 +35,7 @@ export default function Settings() {
     try {
       setIsSigningOut(true);
 
-      const { error } = await supabase.auth.signOut();
-
-      if (error) {
-        throw error;
-      }
+      await logout();
 
       navigate("/login", {
         replace: true,
