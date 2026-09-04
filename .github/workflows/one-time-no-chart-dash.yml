@@ -1,0 +1,60 @@
+name: One-time no chart dash
+on:
+  push:
+    branches: [Financial-Datasets-Migration]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Keep StockDetail chart return on first frame'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: Financial-Datasets-Migration
+      - name: Patch StockDetail chart first frame
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/StockDetail.jsx')
+          s = p.read_text()
+
+          old = '''    const fallbackReturn =\n      activePeriod === "1D" && Number.isFinite(initialDailyReturn)\n        ? initialDailyReturn\n        : null;\n\n    setPrimaryReturn(fallbackReturn);\n    onPeriodReturnChange(fallbackReturn);\n\n    if (longRangeUnavailable) {'''
+          new = '''    const fallbackReturn =\n      activePeriod === "1D" && Number.isFinite(initialDailyReturn)\n        ? initialDailyReturn\n        : null;\n\n    if (longRangeUnavailable) {\n      setPrimaryReturn(fallbackReturn);\n      onPeriodReturnChange(fallbackReturn);'''
+          assert old in s, 'fallback reset block not found'
+          s = s.replace(old, new, 1)
+
+          old2 = '''    if (canUseInitialChart) {\n      initialChartUsedRef.current = true;'''
+          new2 = '''    if (canUseInitialChart) {\n      initialChartUsedRef.current = true;'''
+          assert old2 in s
+
+          anchor = '''    const controller = new AbortController();'''
+          repl = '''    setPrimaryReturn(fallbackReturn);\n    onPeriodReturnChange(fallbackReturn);\n\n    const controller = new AbortController();'''
+          assert anchor in s, 'controller anchor not found'
+          s = s.replace(anchor, repl, 1)
+
+          old3 = '''  const comparisonLegendItems = ['''
+          derived = '''  const displayedPrimaryReturn = useMemo(() => {\n    if (Number.isFinite(primaryReturn)) {\n      return primaryReturn;\n    }\n\n    if (\n      !comparisonsActive &&\n      activePeriod === "1W" &&\n      Array.isArray(initialChartData?.points) &&\n      initialChartData.points.length > 0\n    ) {\n      return calculatePeriodReturn(\n        initialChartData.points,\n        activePeriod,\n        initialDailyReturn\n      );\n    }\n\n    return null;\n  }, [\n    primaryReturn,\n    comparisonsActive,\n    activePeriod,\n    initialChartData,\n    initialDailyReturn,\n  ]);\n\n  const comparisonLegendItems = ['''
+          assert old3 in s, 'legend anchor not found'
+          s = s.replace(old3, derived, 1)
+
+          old4 = '''              Number.isFinite(primaryReturn)\n                ? primaryReturn >= 0\n                  ? "text-emerald-600"\n                  : "text-red-600"\n                : "text-muted-foreground",'''
+          new4 = '''              Number.isFinite(displayedPrimaryReturn)\n                ? displayedPrimaryReturn >= 0\n                  ? "text-emerald-600"\n                  : "text-red-600"\n                : "text-muted-foreground",'''
+          assert old4 in s, 'return color render not found'
+          s = s.replace(old4, new4, 1)
+
+          old5 = '''            {Number.isFinite(primaryReturn)\n              ? `${primaryReturn >= 0 ? "+" : ""}${primaryReturn.toFixed(2)}%`\n              : "—"}'''
+          new5 = '''            {Number.isFinite(displayedPrimaryReturn)\n              ? `${displayedPrimaryReturn >= 0 ? "+" : ""}${displayedPrimaryReturn.toFixed(2)}%`\n              : "—"}'''
+          assert old5 in s, 'return text render not found'
+          s = s.replace(old5, new5, 1)
+
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/pages/StockDetail.jsx
+          git diff --cached --quiet && exit 0
+          git commit -m "Keep StockDetail chart return on first frame"
+          git push origin Financial-Datasets-Migration
