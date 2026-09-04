@@ -1,3 +1,4 @@
+# trigger
 name: One-time StockDetail chart reload fix
 
 on:
