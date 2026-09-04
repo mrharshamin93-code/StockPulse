@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { cachePortfolioStocks } from "@/lib/portfolioCache";
 import { prefetchPortfolioGrowthChart } from "@/components/portfolio/PortfolioGrowthChart";
 
 export default function PortfolioChartPreloader() {
@@ -42,6 +43,8 @@ export default function PortfolioChartPreloader() {
               String(stock?.ticker || "").trim().toUpperCase(),
             ),
           );
+
+        cachePortfolioStocks(user.id, stocks);
 
         if (stocks.length) {
           await prefetchPortfolioGrowthChart({
