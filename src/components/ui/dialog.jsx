@@ -114,6 +114,15 @@ const DialogContent = React.forwardRef(({
       animationFrame = requestAnimationFrame(() => {
         animationFrame = null
 
+        const contentRect = content.getBoundingClientRect()
+        const scrollerRectBeforeSizing = scroller.getBoundingClientRect()
+        const availableResultsHeight = Math.max(
+          120,
+          Math.floor(contentRect.bottom - scrollerRectBeforeSizing.top - 16)
+        )
+
+        scroller.style.maxHeight = `${availableResultsHeight}px`
+
         const clientHeight = scroller.clientHeight
         const scrollHeight = scroller.scrollHeight
         const maxScrollTop = Math.max(0, scrollHeight - clientHeight)
@@ -123,7 +132,6 @@ const DialogContent = React.forwardRef(({
           return
         }
 
-        const contentRect = content.getBoundingClientRect()
         const scrollerRect = scroller.getBoundingClientRect()
         const inset = 6
         const trackHeight = Math.max(0, clientHeight - inset * 2)
@@ -183,6 +191,7 @@ const DialogContent = React.forwardRef(({
         cancelAnimationFrame(animationFrame)
       }
 
+      scroller.style.maxHeight = ""
       scroller.classList.remove("stockpulse-search-results-scroller")
       scroller.removeEventListener("scroll", updateThumb)
       window.removeEventListener("resize", updateThumb)
@@ -199,8 +208,7 @@ const DialogContent = React.forwardRef(({
           top: `${visualViewport.offsetTop + 10}px`,
           transform: "none",
           maxHeight: `${Math.max(180, visualViewport.height - 20)}px`,
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch",
+          overflowY: "hidden",
         }
       : {
           maxHeight: "calc(100dvh - 24px)",
@@ -214,6 +222,10 @@ const DialogContent = React.forwardRef(({
         .stockpulse-search-results-scroller {
           scrollbar-width: none !important;
           -ms-overflow-style: none !important;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: contain;
+          padding-bottom: 10px;
+          scroll-padding-bottom: 10px;
         }
 
         .stockpulse-search-results-scroller::-webkit-scrollbar {
