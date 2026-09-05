@@ -201,49 +201,43 @@ header[style*="safe-area-inset-top"] button[aria-label="Go back"]::after {
 }
 
 /*
- * Add to Watchlist search results: keep a visible slim scroll cue on the
- * right edge so users can immediately tell that more matches are available.
- * Desktop/WebKit browsers use the real scrollbar. iOS often overlays and
- * hides native scrollbars, so the inset indicator remains visible there too.
+ * Add to Watchlist search results: use the browser's real vertical scrollbar.
+ * It only exists when the results actually overflow, so short result sets stay
+ * clean while longer ticker/company searches clearly show that the list can be
+ * scrolled. The thumb is the real scroll thumb, not a decorative indicator.
  */
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto {
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--muted-foreground) / 0.5)
-    hsl(var(--border) / 0.45);
-  background-image:
-    linear-gradient(
-      to bottom,
-      hsl(var(--muted-foreground) / 0.5),
-      hsl(var(--muted-foreground) / 0.5)
-    ),
-    linear-gradient(
-      to bottom,
-      hsl(var(--border) / 0.5),
-      hsl(var(--border) / 0.5)
-    );
-  background-repeat: no-repeat;
-  background-size: 3px 42px, 3px calc(100% - 16px);
-  background-position:
-    calc(100% - 5px) 8px,
-    calc(100% - 5px) 8px;
+  scrollbar-width: auto;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.7)
+    hsl(var(--border) / 0.35);
+  scrollbar-gutter: stable;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar {
-  width: 5px;
+  width: 8px;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar-track {
-  background: hsl(var(--border) / 0.45);
+  background: hsl(var(--border) / 0.35);
   border-radius: 9999px;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.5);
+  min-height: 34px;
+  background: hsl(var(--muted-foreground) / 0.7);
+  border: 2px solid transparent;
+  background-clip: content-box;
   border-radius: 9999px;
+}
+
+[role="dialog"]:has(input[placeholder="Search ticker or company"])
+  .overflow-y-auto::-webkit-scrollbar-thumb:active {
+  background: hsl(var(--foreground) / 0.65);
+  background-clip: content-box;
 }
 
 /*
