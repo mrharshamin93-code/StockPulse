@@ -45,6 +45,8 @@ const tabs = [
 ];
 
 const TAB_BAR_HEIGHT = 56;
+const CHART_LONG_PRESS_DELAY = 325;
+const CHART_SCROLL_CANCEL_DISTANCE = 8;
 
 export default function NavigationLayout() {
   const location = useLocation();
@@ -138,6 +140,250 @@ export default function NavigationLayout() {
       );
     };
   }, []);
+
+  useEffect(() => {
+    if (!pathname.startsWith("/stock/")) {
+      return undefined;
+    }
+
+    let gesture = null;
+
+    const getChartSurface = (target) => {
+      if (!(target instanceof Element)) {
+        return null;
+      }
+
+      const responsiveContainer = target.closest(
+        ".recharts-responsive-container"
+      );
+
+      if (!responsiveContainer) {
+        return null;
+      }
+
+      return responsiveContainer.parentElement;
+    };
+
+    const enableChartScrolling = () => {
+      const scrollRoot = contentScrollRef.current;
+
+      if (!scrollRoot) return;
+
+      scrollRoot
+        .querySelectorAll(".recharts-responsive-container")
+        .forEach((responsiveContainer) => {
+          const chartSurface = responsiveContainer.parentElement;
+
+          if (!chartSurface) return;
+
+          const currentValue = chartSurface.style.getPropertyValue(
+            "touch-action"
+          );
+          const currentPriority = chartSurface.style.getPropertyPriority(
+            "touch-action"
+          );
+
+          if (
+            currentValue !== "pan-y" ||
+            currentPriority !== "important"
+          ) {
+            chartSurface.style.setProperty(
+              "touch-action",
+              "pan-y",
+              "important"
+            );
+          }
+        });
+    };
+
+    const dispatchChartMouseMove = (
+      chartSurface,
+      clientX,
+      clientY
+    ) => {
+      const target =
+        document.elementFromPoint(clientX, clientY) ||
+        chartSurface.querySelector(".recharts-wrapper") ||
+        chartSurface;
+
+      target.dispatchEvent(
+        new MouseEvent("mousemove", {
+          bubbles: true,
+          cancelable: true,
+          clientX,
+          clientY,
+          view: window,
+        })
+      );
+    };
+
+    const clearLongPressTimer = () => {
+      if (gesture?.timer) {
+        window.clearTimeout(gesture.timer);
+        gesture.timer = null;
+      }
+    };
+
+    const handleTouchStart = (event) => {
+      if (event.touches.length !== 1) {
+        return;
+      }
+
+      const chartSurface = getChartSurface(event.target);
+
+      if (!chartSurface) {
+        return;
+      }
+
+      chartSurface.style.setProperty(
+        "touch-action",
+        "pan-y",
+        "important"
+      );
+
+      const touch = event.touches[0];
+
+      clearLongPressTimer();
+
+      gesture = {
+        chartSurface,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        active: false,
+        moved: false,
+        timer: null,
+      };
+
+      gesture.timer = window.setTimeout(() => {
+        if (!gesture || gesture.moved) {
+          return;
+        }
+
+        gesture.active = true;
+        gesture.timer = null;
+
+        dispatchChartMouseMove(
+          gesture.chartSurface,
+          gesture.clientX,
+          gesture.clientY
+        );
+      }, CHART_LONG_PRESS_DELAY);
+
+      // Keep StockDetail's immediate touch tooltip handler from firing.
+      // The browser still receives the default touch behavior, so a
+      // vertical swipe can scroll the page normally.
+      event.stopPropagation();
+    };
+
+    const handleTouchMove = (event) => {
+      if (!gesture || event.touches.length !== 1) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = touch.clientY - gesture.startY;
+      const distance = Math.hypot(deltaX, deltaY);
+
+      gesture.clientX = touch.clientX;
+      gesture.clientY = touch.clientY;
+
+      if (!gesture.active) {
+        if (distance > CHART_SCROLL_CANCEL_DISTANCE) {
+          gesture.moved = true;
+          clearLongPressTimer();
+        }
+
+        event.stopPropagation();
+        return;
+      }
+
+      // Once the user deliberately long-presses, the chart owns the
+      // gesture so they can move across data points without page scroll.
+      event.preventDefault();
+      event.stopPropagation();
+
+      dispatchChartMouseMove(
+        gesture.chartSurface,
+        touch.clientX,
+        touch.clientY
+      );
+    };
+
+    const finishTouch = (event) => {
+      if (!gesture) {
+        return;
+      }
+
+      clearLongPressTimer();
+      event.stopPropagation();
+      gesture = null;
+    };
+
+    enableChartScrolling();
+
+    const observer = new MutationObserver(
+      enableChartScrolling
+    );
+
+    if (contentScrollRef.current) {
+      observer.observe(contentScrollRef.current, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["style"],
+      });
+    }
+
+    document.addEventListener(
+      "touchstart",
+      handleTouchStart,
+      { capture: true, passive: true }
+    );
+    document.addEventListener(
+      "touchmove",
+      handleTouchMove,
+      { capture: true, passive: false }
+    );
+    document.addEventListener(
+      "touchend",
+      finishTouch,
+      { capture: true, passive: true }
+    );
+    document.addEventListener(
+      "touchcancel",
+      finishTouch,
+      { capture: true, passive: true }
+    );
+
+    return () => {
+      clearLongPressTimer();
+      observer.disconnect();
+
+      document.removeEventListener(
+        "touchstart",
+        handleTouchStart,
+        true
+      );
+      document.removeEventListener(
+        "touchmove",
+        handleTouchMove,
+        true
+      );
+      document.removeEventListener(
+        "touchend",
+        finishTouch,
+        true
+      );
+      document.removeEventListener(
+        "touchcancel",
+        finishTouch,
+        true
+      );
+    };
+  }, [pathname]);
 
   useEffect(() => {
     const previous = previousTab.current;
