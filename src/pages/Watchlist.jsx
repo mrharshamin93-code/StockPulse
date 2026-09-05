@@ -250,10 +250,6 @@ function normalizeSearchResults(
     );
 }
 
-/* -------------------------------------------------------------------------- */
-/* TOAST                                                                       */
-/* -------------------------------------------------------------------------- */
-
 function Toast({
   message,
   onDone,
@@ -309,10 +305,6 @@ function Toast({
     </motion.div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* ADD TO PORTFOLIO                                                            */
-/* -------------------------------------------------------------------------- */
 
 function AddToPortfolioDialog({
   open,
@@ -594,10 +586,6 @@ function AddToPortfolioDialog({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* ADD TICKER                                                                  */
-/* -------------------------------------------------------------------------- */
-
 function AddTickerDialog({
   open,
   onOpenChange,
@@ -860,21 +848,6 @@ function AddTickerDialog({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* SPARKLINE                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/*
- * Watchlist sparklines now use StockPulse's persisted daily-price cache
- * directly instead of calling Financial Datasets/candles_range from the page.
- *
- * stock_daily_prices only contains completed daily bars, so the final point is
- * automatically the last completed trading day. Weekends and market holidays
- * are handled naturally because they have no trading_date row.
- *
- * This means refreshing the Watchlist does not consume Financial Datasets
- * /prices calls for these 30-day sparklines.
- */
 async function fetchSparkline(
   ticker,
   signal
@@ -1127,10 +1100,6 @@ function Sparkline({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* PRICE                                                                       */
-/* -------------------------------------------------------------------------- */
-
 function AnimatedPrice({
   value,
 }) {
@@ -1224,16 +1193,13 @@ function AnimatedPrice({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* SWIPE ACTION                                                                */
-/* -------------------------------------------------------------------------- */
-
 function SwipeAction({
   type,
   label,
   icon: Icon,
   progress,
   start,
+  peak,
   end,
   disabled,
   onClick,
@@ -1243,10 +1209,12 @@ function SwipeAction({
       progress,
       [
         start,
+        peak,
         end,
       ],
       [
         0,
+        1,
         1,
       ]
     );
@@ -1256,10 +1224,12 @@ function SwipeAction({
       progress,
       [
         start,
+        peak,
         end,
       ],
       [
-        0.76,
+        0.58,
+        1.08,
         1,
       ]
     );
@@ -1269,11 +1239,58 @@ function SwipeAction({
       progress,
       [
         start,
+        peak,
         end,
       ],
       [
-        16,
+        26,
+        -2,
         0,
+      ]
+    );
+
+  const rotate =
+    useTransform(
+      progress,
+      [
+        start,
+        peak,
+        end,
+      ],
+      [
+        8,
+        -1,
+        0,
+      ]
+    );
+
+  const iconScale =
+    useTransform(
+      progress,
+      [
+        start,
+        peak,
+        end,
+      ],
+      [
+        0.72,
+        1.1,
+        1,
+      ]
+    );
+
+  const labelOpacity =
+    useTransform(
+      progress,
+      [
+        start,
+        peak,
+        end,
+      ],
+      [
+        0,
+        0.9,
+        1,
       ]
     );
 
@@ -1301,16 +1318,17 @@ function SwipeAction({
       className={[
         `
           flex
-          h-[46px]
-          w-[46px]
+          h-[50px]
+          w-[50px]
           shrink-0
           flex-col
           items-center
           justify-center
-          gap-0.5
+          gap-[2px]
           rounded-full
           text-white
           outline-none
+          shadow-[0_3px_10px_rgba(0,0,0,0.14)]
           will-change-transform
         `,
         backgroundClass,
@@ -1320,27 +1338,48 @@ function SwipeAction({
         scale,
         x:
           translateX,
+        rotate,
+        transformOrigin:
+          "50% 50%",
       }}
       whileTap={{
         scale:
-          0.9,
+          0.88,
+      }}
+      transition={{
+        type:
+          "spring",
+        stiffness:
+          500,
+        damping:
+          34,
       }}
     >
-      <Icon
-        size={16}
-        strokeWidth={2.1}
-      />
+      <motion.span
+        className="flex items-center justify-center"
+        style={{
+          scale:
+            iconScale,
+        }}
+      >
+        <Icon
+          size={17}
+          strokeWidth={2.25}
+        />
+      </motion.span>
 
-      <span className="text-[8px] font-bold leading-none">
+      <motion.span
+        className="text-[8px] font-bold leading-none tracking-[-0.08px]"
+        style={{
+          opacity:
+            labelOpacity,
+        }}
+      >
         {label}
-      </span>
+      </motion.span>
     </motion.button>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* WATCHLIST CARD                                                              */
-/* -------------------------------------------------------------------------- */
 
 function WatchlistCard({
   item,
@@ -1378,7 +1417,7 @@ function WatchlistCard({
     useMotionValue(0);
 
   const revealWidth =
-    172;
+    180;
 
   const revealProgress =
     useTransform(
@@ -1411,6 +1450,15 @@ function WatchlistCard({
 
   const suppressClick =
     useRef(false);
+
+  const lastTouchX =
+    useRef(null);
+
+  const lastTouchTime =
+    useRef(0);
+
+  const swipeVelocity =
+    useRef(0);
 
   const livePrice =
     typeof quote?.c ===
@@ -1464,13 +1512,19 @@ function WatchlistCard({
           "spring",
 
         stiffness:
-          520,
+          430,
 
         damping:
-          46,
+          38,
 
         mass:
-          0.55,
+          0.68,
+
+        restDelta:
+          0.35,
+
+        restSpeed:
+          2,
       }
     );
   }
@@ -1484,16 +1538,29 @@ function WatchlistCard({
       return;
     }
 
+    const touch =
+      event.touches[0];
+
+    const now =
+      performance.now();
+
     touchX.current =
-      event.touches[0]
-        .clientX;
+      touch.clientX;
 
     touchY.current =
-      event.touches[0]
-        .clientY;
+      touch.clientY;
 
     startingX.current =
       cardX.get();
+
+    lastTouchX.current =
+      touch.clientX;
+
+    lastTouchTime.current =
+      now;
+
+    swipeVelocity.current =
+      0;
 
     dragging.current =
       false;
@@ -1515,20 +1582,22 @@ function WatchlistCard({
       return;
     }
 
+    const touch =
+      event.touches[0];
+
     const dx =
-      event.touches[0]
-        .clientX -
+      touch.clientX -
       touchX.current;
 
     const dy =
-      event.touches[0]
-        .clientY -
+      touch.clientY -
       touchY.current;
 
     if (
       !dragging.current &&
       Math.abs(dy) >
-        Math.abs(dx)
+        Math.abs(dx) *
+          1.08
     ) {
       return;
     }
@@ -1550,13 +1619,69 @@ function WatchlistCard({
       return;
     }
 
+    const now =
+      performance.now();
+
+    const elapsed =
+      Math.max(
+        1,
+        now -
+          lastTouchTime.current
+      );
+
+    const instantaneousVelocity =
+      (touch.clientX -
+        lastTouchX.current) /
+      elapsed;
+
+    swipeVelocity.current =
+      swipeVelocity.current *
+        0.72 +
+      instantaneousVelocity *
+        0.28;
+
+    lastTouchX.current =
+      touch.clientX;
+
+    lastTouchTime.current =
+      now;
+
+    let nextX =
+      startingX.current +
+      dx;
+
+    if (
+      nextX <
+      -revealWidth
+    ) {
+      const excess =
+        Math.abs(
+          nextX +
+            revealWidth
+        );
+
+      nextX =
+        -revealWidth -
+        Math.min(
+          22,
+          excess *
+            0.22
+        );
+    }
+
+    if (
+      nextX > 0
+    ) {
+      nextX =
+        Math.min(
+          12,
+          nextX *
+            0.16
+        );
+    }
+
     cardX.set(
-      clamp(
-        startingX.current +
-          dx,
-        -190,
-        0
-      )
+      nextX
     );
   }
 
@@ -1570,17 +1695,28 @@ function WatchlistCard({
     const currentX =
       cardX.get();
 
-    const threshold =
+    const projectedX =
+      currentX +
+      swipeVelocity.current *
+        95;
+
+    const openingThreshold =
+      -revealWidth *
+      0.32;
+
+    const closingThreshold =
+      -revealWidth *
+      0.7;
+
+    const shouldOpen =
       swiped
-        ? revealWidth *
-          0.25
-        : revealWidth *
-          0.34;
+        ? projectedX <
+          closingThreshold
+        : projectedX <
+          openingThreshold;
 
     if (
-      Math.abs(
-        currentX
-      ) >= threshold
+      shouldOpen
     ) {
       snapCard(
         -revealWidth
@@ -1603,6 +1739,15 @@ function WatchlistCard({
     touchY.current =
       null;
 
+    lastTouchX.current =
+      null;
+
+    lastTouchTime.current =
+      0;
+
+    swipeVelocity.current =
+      0;
+
     dragging.current =
       false;
 
@@ -1611,7 +1756,7 @@ function WatchlistCard({
         suppressClick.current =
           false;
       },
-      90
+      110
     );
   }
 
@@ -1748,13 +1893,13 @@ function WatchlistCard({
       -430,
       {
         duration:
-          0.22,
+          0.24,
 
         ease: [
-          0.4,
+          0.32,
           0,
-          1,
-          1,
+          0.67,
+          0,
         ],
       }
     );
@@ -1763,7 +1908,7 @@ function WatchlistCard({
       (resolve) =>
         window.setTimeout(
           resolve,
-          220
+          240
         )
     );
 
@@ -1890,8 +2035,8 @@ function WatchlistCard({
           right-0
           flex
           items-center
-          gap-[6px]
-          pr-[6px]
+          gap-[7px]
+          pr-[7px]
         "
       >
         <SwipeAction
@@ -1904,10 +2049,13 @@ function WatchlistCard({
             revealProgress
           }
           start={
-            0.46
+            0.48
+          }
+          peak={
+            0.8
           }
           end={
-            0.86
+            1
           }
           disabled={
             deleting
@@ -1927,10 +2075,13 @@ function WatchlistCard({
             revealProgress
           }
           start={
-            0.22
+            0.23
+          }
+          peak={
+            0.58
           }
           end={
-            0.66
+            0.86
           }
           disabled={
             deleting
@@ -1950,10 +2101,13 @@ function WatchlistCard({
             revealProgress
           }
           start={
-            0.02
+            0.03
+          }
+          peak={
+            0.34
           }
           end={
-            0.42
+            0.65
           }
           disabled={
             deleting
@@ -1988,6 +2142,9 @@ function WatchlistCard({
 
             backfaceVisibility:
               "hidden",
+
+            willChange:
+              "transform",
           }}
           className="
             flex
@@ -2196,10 +2353,6 @@ function WatchlistCard({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* LOADING                                                                     */
-/* -------------------------------------------------------------------------- */
-
 function WatchlistSkeleton() {
   return (
     <div className="space-y-[2px]">
@@ -2229,10 +2382,6 @@ function WatchlistSkeleton() {
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* PAGE                                                                         */
-/* -------------------------------------------------------------------------- */
 
 export default function Watchlist() {
   const {
