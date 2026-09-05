@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { POPULAR_TICKERS } from "@/lib/tickers";
 
 const DAY_SECONDS = 86400;
 const INTRADAY_TABLE = "stock_intraday_snapshots";
@@ -650,6 +651,105 @@ export async function preloadDailyChart(ticker) {
   });
 }
 
+function normalizeSearchItem(item) {
+  const ticker = String(
+    item?.ticker ||
+      item?.symbol ||
+      item?.displaySymbol ||
+      "",
+  )
+    .trim()
+    .toUpperCase();
+
+  if (!ticker) return null;
+
+  const name = String(
+    item?.name ||
+      item?.description ||
+      item?.company_name ||
+      ticker,
+  ).trim();
+
+  return {
+    ...item,
+    ticker,
+    symbol: ticker,
+    displaySymbol: ticker,
+    name,
+    description: name,
+    exchange: String(
+      item?.exchange || item?.primaryExchange || "",
+    ).trim(),
+  };
+}
+
+function localCompanyMatches(queryValue) {
+  const query = String(queryValue || "")
+    .trim()
+    .toUpperCase();
+
+  if (!query) return [];
+
+  return POPULAR_TICKERS
+    .map((item) => normalizeSearchItem(item))
+    .filter(Boolean)
+    .filter((item) => {
+      const name = item.name.toUpperCase();
+      return item.ticker.includes(query) || name.includes(query);
+    })
+    .sort((left, right) => {
+      const leftTicker = left.ticker.toUpperCase();
+      const rightTicker = right.ticker.toUpperCase();
+      const leftName = left.name.toUpperCase();
+      const rightName = right.name.toUpperCase();
+
+      const score = (ticker, name) => {
+        if (ticker === query) return 0;
+        if (name === query) return 1;
+        if (ticker.startsWith(query)) return 2;
+        if (name.startsWith(query)) return 3;
+        if (ticker.includes(query)) return 4;
+        return 5;
+      };
+
+      return (
+        score(leftTicker, leftName) - score(rightTicker, rightName) ||
+        leftName.localeCompare(rightName)
+      );
+    });
+}
+
+function mergeSearchPayload(data, queryValue) {
+  const remoteRaw = Array.isArray(data?.results)
+    ? data.results
+    : Array.isArray(data?.result)
+      ? data.result
+      : [];
+
+  const remote = remoteRaw
+    .map((item) => normalizeSearchItem(item))
+    .filter(Boolean);
+
+  const local = localCompanyMatches(queryValue);
+  const merged = [];
+  const seen = new Set();
+
+  for (const item of [...local, ...remote]) {
+    if (seen.has(item.ticker)) continue;
+    seen.add(item.ticker);
+    merged.push(item);
+  }
+
+  const results = merged.slice(0, 25);
+
+  return {
+    ...(data && typeof data === "object" ? data : {}),
+    count: results.length,
+    results,
+    result: results,
+  };
+}
+
 function safeProviderError(action) {
   if (action === "metrics") {
     return new Error(
@@ -742,6 +842,10 @@ export async function financialDatasetsRequest(body) {
   }
 
   if (error) {
+    if (body?.action === "search") {
+      return mergeSearchPayload(null, body?.query);
+    }
+
     console.error(
       "Financial Datasets Edge Function error:",
       error,
@@ -753,6 +857,10 @@ export async function financialDatasetsRequest(body) {
   }
 
   if (data?.error) {
+    if (body?.action === "search") {
+      return mergeSearchPayload(null, body?.query);
+    }
+
     console.error(
       "Financial Datasets provider error:",
       data.error,
@@ -761,6 +869,10 @@ export async function financialDatasetsRequest(body) {
     throw safeProviderError(
       String(body?.action || "").toLowerCase(),
     );
+  }
+
+  if (body?.action === "search") {
+    return mergeSearchPayload(data, body?.query);
   }
 
   if (body?.action === "metrics") {
