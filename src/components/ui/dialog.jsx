@@ -29,7 +29,22 @@ const DialogContent = React.forwardRef(({
   style,
   ...props
 }, ref) => {
+  const contentRef = React.useRef(null)
   const [visualViewport, setVisualViewport] = React.useState(null)
+  const [searchScrollThumb, setSearchScrollThumb] = React.useState(null)
+
+  const setContentRef = React.useCallback(
+    (node) => {
+      contentRef.current = node
+
+      if (typeof ref === "function") {
+        ref(node)
+      } else if (ref) {
+        ref.current = node
+      }
+    },
+    [ref]
+  )
 
   React.useEffect(() => {
     const viewport = window.visualViewport
@@ -64,6 +79,120 @@ const DialogContent = React.forwardRef(({
     }
   }, [])
 
+  React.useEffect(() => {
+    const content = contentRef.current
+
+    if (!content) {
+      return undefined
+    }
+
+    const searchInput = content.querySelector(
+      'input[placeholder="Search ticker or company"]'
+    )
+
+    if (!searchInput) {
+      setSearchScrollThumb(null)
+      return undefined
+    }
+
+    const scroller = content.querySelector(".overflow-y-auto")
+
+    if (!scroller) {
+      setSearchScrollThumb(null)
+      return undefined
+    }
+
+    scroller.classList.add("stockpulse-search-results-scroller")
+
+    let animationFrame = null
+
+    const updateThumb = () => {
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame)
+      }
+
+      animationFrame = requestAnimationFrame(() => {
+        animationFrame = null
+
+        const clientHeight = scroller.clientHeight
+        const scrollHeight = scroller.scrollHeight
+        const maxScrollTop = Math.max(0, scrollHeight - clientHeight)
+
+        if (clientHeight <= 0 || maxScrollTop <= 1) {
+          setSearchScrollThumb(null)
+          return
+        }
+
+        const contentRect = content.getBoundingClientRect()
+        const scrollerRect = scroller.getBoundingClientRect()
+        const inset = 6
+        const trackHeight = Math.max(0, clientHeight - inset * 2)
+        const thumbHeight = Math.max(
+          42,
+          Math.min(
+            trackHeight,
+            trackHeight * (clientHeight / scrollHeight)
+          )
+        )
+        const thumbTravel = Math.max(0, trackHeight - thumbHeight)
+        const progress = Math.min(
+          1,
+          Math.max(0, scroller.scrollTop / maxScrollTop)
+        )
+
+        setSearchScrollThumb({
+          top:
+            scrollerRect.top -
+            contentRect.top +
+            inset +
+            thumbTravel * progress,
+          right: Math.max(6, contentRect.right - scrollerRect.right + 6),
+          height: thumbHeight,
+        })
+      })
+    }
+
+    updateThumb()
+
+    scroller.addEventListener("scroll", updateThumb, { passive: true })
+    window.addEventListener("resize", updateThumb)
+    window.visualViewport?.addEventListener("resize", updateThumb)
+    window.visualViewport?.addEventListener("scroll", updateThumb)
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(updateThumb)
+        : null
+
+    resizeObserver?.observe(scroller)
+    resizeObserver?.observe(content)
+
+    const mutationObserver =
+      typeof MutationObserver !== "undefined"
+        ? new MutationObserver(updateThumb)
+        : null
+
+    mutationObserver?.observe(scroller, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+
+    return () => {
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame)
+      }
+
+      scroller.classList.remove("stockpulse-search-results-scroller")
+      scroller.removeEventListener("scroll", updateThumb)
+      window.removeEventListener("resize", updateThumb)
+      window.visualViewport?.removeEventListener("resize", updateThumb)
+      window.visualViewport?.removeEventListener("scroll", updateThumb)
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
+    }
+  }, [children, visualViewport])
+
   const keyboardStyle =
     visualViewport?.keyboardOpen
       ? {
@@ -80,8 +209,22 @@ const DialogContent = React.forwardRef(({
   return (
     <DialogPortal>
       <DialogOverlay />
+
+      <style>{`
+        .stockpulse-search-results-scroller {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+
+        .stockpulse-search-results-scroller::-webkit-scrollbar {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+      `}</style>
+
       <DialogPrimitive.Content
-        ref={ref}
+        ref={setContentRef}
         className={cn(
           "fixed z-50 grid border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 rounded-lg top-1/2 left-4 right-4 -translate-y-1/2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-full sm:max-w-lg gap-4",
           className
@@ -93,6 +236,19 @@ const DialogContent = React.forwardRef(({
         {...props}
       >
         {children}
+
+        {searchScrollThumb && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[80] w-[7px] rounded-full bg-foreground/70 shadow-[0_0_0_1px_hsl(var(--background)/0.7)]"
+            style={{
+              top: `${searchScrollThumb.top}px`,
+              right: `${searchScrollThumb.right}px`,
+              height: `${searchScrollThumb.height}px`,
+            }}
+          />
+        )}
+
         <DialogPrimitive.Close
           className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
         >
