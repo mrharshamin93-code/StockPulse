@@ -11,6 +11,11 @@ const isOAuthCallback =
   window.location.pathname ===
     "/auth/callback";
 
+const APPLE_PROVIDER_TOKEN_KEY =
+  "stockpulse:apple-provider-token";
+const APPLE_PROVIDER_REFRESH_TOKEN_KEY =
+  "stockpulse:apple-provider-refresh-token";
+
 if (
   !supabaseUrl ||
   !supabaseAnonKey
@@ -37,6 +42,140 @@ const rawSupabase =
       },
     },
   );
+
+function sessionUsesApple(session) {
+  const identities =
+    Array.isArray(
+      session?.user?.identities,
+    )
+      ? session.user.identities
+      : [];
+
+  const providers =
+    Array.isArray(
+      session?.user?.app_metadata
+        ?.providers,
+    )
+      ? session.user.app_metadata
+          .providers
+      : [];
+
+  return (
+    session?.user?.app_metadata
+      ?.provider === "apple" ||
+    providers.includes("apple") ||
+    identities.some(
+      (identity) =>
+        identity?.provider ===
+        "apple",
+    )
+  );
+}
+
+function persistAppleProviderTokens(
+  session,
+) {
+  if (
+    typeof window === "undefined" ||
+    !sessionUsesApple(session)
+  ) {
+    return;
+  }
+
+  try {
+    if (
+      session?.provider_refresh_token
+    ) {
+      window.localStorage.setItem(
+        APPLE_PROVIDER_REFRESH_TOKEN_KEY,
+        session.provider_refresh_token,
+      );
+    }
+
+    if (session?.provider_token) {
+      window.localStorage.setItem(
+        APPLE_PROVIDER_TOKEN_KEY,
+        session.provider_token,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      "Unable to preserve Apple authorization for account deletion:",
+      error,
+    );
+  }
+}
+
+function clearAppleProviderTokens() {
+  if (
+    typeof window === "undefined"
+  ) {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(
+      APPLE_PROVIDER_REFRESH_TOKEN_KEY,
+    );
+    window.localStorage.removeItem(
+      APPLE_PROVIDER_TOKEN_KEY,
+    );
+  } catch {
+    // Local cleanup is best-effort.
+  }
+}
+
+function getAppleRevocationToken() {
+  if (
+    typeof window === "undefined"
+  ) {
+    return null;
+  }
+
+  try {
+    const refreshToken =
+      window.localStorage.getItem(
+        APPLE_PROVIDER_REFRESH_TOKEN_KEY,
+      );
+
+    if (refreshToken) {
+      return {
+        token: refreshToken,
+        type: "refresh_token",
+      };
+    }
+
+    const accessToken =
+      window.localStorage.getItem(
+        APPLE_PROVIDER_TOKEN_KEY,
+      );
+
+    if (accessToken) {
+      return {
+        token: accessToken,
+        type: "access_token",
+      };
+    }
+  } catch {
+    // The Edge Function will request reauthentication if needed.
+  }
+
+  return null;
+}
+
+rawSupabase.auth.onAuthStateChange(
+  (event, session) => {
+    if (session) {
+      persistAppleProviderTokens(
+        session,
+      );
+    }
+
+    if (event === "SIGNED_OUT") {
+      clearAppleProviderTokens();
+    }
+  },
+);
 
 function sanitizeStockSingleResult(
   result,
@@ -134,6 +273,77 @@ function wrapStocksBuilder(
   );
 }
 
+function wrapFunctionsClient(client) {
+  return new Proxy(client, {
+    get(target, property) {
+      if (property === "invoke") {
+        return async (
+          functionName,
+          options = {},
+        ) => {
+          if (
+            functionName !==
+            "delete-account"
+          ) {
+            return target.invoke(
+              functionName,
+              options,
+            );
+          }
+
+          const appleToken =
+            getAppleRevocationToken();
+
+          const body = {
+            ...(options?.body || {}),
+          };
+
+          if (appleToken) {
+            body.appleProviderToken =
+              appleToken.token;
+            body.appleProviderTokenType =
+              appleToken.type;
+          }
+
+          const result =
+            await target.invoke(
+              functionName,
+              {
+                ...options,
+                body,
+              },
+            );
+
+          if (
+            !result?.error &&
+            result?.data?.success
+          ) {
+            clearAppleProviderTokens();
+          }
+
+          return result;
+        };
+      }
+
+      const value = Reflect.get(
+        target,
+        property,
+        target,
+      );
+
+      return typeof value ===
+        "function"
+        ? value.bind(target)
+        : value;
+    },
+  });
+}
+
+const wrappedFunctions =
+  wrapFunctionsClient(
+    rawSupabase.functions,
+  );
+
 export const supabase =
   new Proxy(
     rawSupabase,
@@ -160,6 +370,12 @@ export const supabase =
                 )
               : builder;
           };
+        }
+
+        if (
+          property === "functions"
+        ) {
+          return wrappedFunctions;
         }
 
         const value =
