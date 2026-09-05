@@ -71,12 +71,31 @@ export default function Settings() {
       );
 
       if (error) {
-        throw error;
+        let detailedMessage = "";
+
+        try {
+          if (error?.context?.json) {
+            const contextBody = await error.context.json();
+            detailedMessage =
+              contextBody?.diagnostic ||
+              contextBody?.error ||
+              "";
+          }
+        } catch {
+          // Best-effort diagnostic extraction only.
+        }
+
+        throw new Error(
+          detailedMessage ||
+            error?.message ||
+            "The account could not be deleted."
+        );
       }
 
       if (!data?.success) {
         throw new Error(
-          data?.error ||
+          data?.diagnostic ||
+            data?.error ||
             "The account could not be deleted."
         );
       }
@@ -112,7 +131,8 @@ export default function Settings() {
       );
 
       window.alert(
-        "Unable to delete your account right now. Please try again."
+        error?.message ||
+          "Unable to delete your account right now. Please try again."
       );
     } finally {
       setIsDeletingAccount(false);
@@ -277,46 +297,20 @@ export default function Settings() {
   );
 }
 
-function SettingsSection({
-  title,
-  children,
-}) {
+function SettingsSection({ title, children }) {
   return (
     <section className="mb-4">
-      <SectionHeading>
-        {title}
-      </SectionHeading>
-
-      <div
-        className="
-          overflow-hidden
-          rounded-[20px]
-          border
-          border-border
-          bg-card
-          shadow-[0_4px_10px_rgba(0,0,0,0.04)]
-        "
-      >
+      <SectionHeading>{title}</SectionHeading>
+      <div className="overflow-hidden rounded-[20px] border border-border bg-card shadow-[0_4px_10px_rgba(0,0,0,0.04)]">
         {children}
       </div>
     </section>
   );
 }
 
-function SectionHeading({
-  children,
-}) {
+function SectionHeading({ children }) {
   return (
-    <h2
-      className="
-        mb-2
-        px-2
-        text-[11px]
-        font-medium
-        tracking-[0.08em]
-        text-muted-foreground
-      "
-    >
+    <h2 className="mb-2 px-2 text-[11px] font-medium tracking-[0.08em] text-muted-foreground">
       {children}
     </h2>
   );
@@ -336,18 +330,7 @@ function SettingsRow({
       onClick={onClick}
       disabled={disabled}
       className={[
-        `
-          flex
-          h-[58px]
-          w-full
-          items-center
-          px-4
-          text-left
-          text-foreground
-          transition-[transform,background-color,opacity]
-          duration-150
-          ease-out
-        `,
+        "flex h-[58px] w-full items-center px-4 text-left text-foreground transition-[transform,background-color,opacity] duration-150 ease-out",
         disabled
           ? "cursor-not-allowed opacity-60"
           : "active:scale-[0.995] active:bg-muted/70",
@@ -364,43 +347,16 @@ function SettingsRow({
 
       <div
         className={[
-          `
-            flex
-            h-[58px]
-            min-w-0
-            flex-1
-            items-center
-          `,
-          !isLast
-            ? "border-b border-border"
-            : "",
+          "flex h-[58px] min-w-0 flex-1 items-center",
+          !isLast ? "border-b border-border" : "",
         ].join(" ")}
       >
-        <span
-          className="
-            min-w-0
-            flex-1
-            truncate
-            pr-3
-            text-[16px]
-            font-medium
-            tracking-[-0.15px]
-            text-foreground
-          "
-        >
+        <span className="min-w-0 flex-1 truncate pr-3 text-[16px] font-medium tracking-[-0.15px] text-foreground">
           {label}
         </span>
 
         {rightText ? (
-          <span
-            className="
-              mr-1.5
-              shrink-0
-              text-[15px]
-              font-normal
-              text-muted-foreground
-            "
-          >
+          <span className="mr-1.5 shrink-0 text-[15px] font-normal text-muted-foreground">
             {rightText}
           </span>
         ) : null}
@@ -422,8 +378,7 @@ function DeleteAccountModal({
   onConfirm,
   deleting = false,
 }) {
-  const [confirmationText, setConfirmationText] =
-    useState("");
+  const [confirmationText, setConfirmationText] = useState("");
   const [viewport, setViewport] = useState(() => ({
     height:
       typeof window !== "undefined"
@@ -442,8 +397,7 @@ function DeleteAccountModal({
       const visualViewport = window.visualViewport;
       const height = visualViewport?.height || window.innerHeight;
       const offsetTop = visualViewport?.offsetTop || 0;
-      const keyboardOpen =
-        window.innerHeight - height > 120;
+      const keyboardOpen = window.innerHeight - height > 120;
 
       setViewport({
         height,
@@ -455,50 +409,33 @@ function DeleteAccountModal({
     updateViewport();
 
     window.addEventListener("resize", updateViewport);
-    window.visualViewport?.addEventListener(
-      "resize",
-      updateViewport
-    );
-    window.visualViewport?.addEventListener(
-      "scroll",
-      updateViewport
-    );
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("scroll", updateViewport);
 
     return () => {
       window.removeEventListener("resize", updateViewport);
-      window.visualViewport?.removeEventListener(
-        "resize",
-        updateViewport
-      );
-      window.visualViewport?.removeEventListener(
-        "scroll",
-        updateViewport
-      );
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("scroll", updateViewport);
     };
   }, [open]);
 
   if (!open) return null;
 
   const canDelete =
-    confirmationText.trim().toUpperCase() ===
-    "DELETE";
+    confirmationText.trim().toUpperCase() === "DELETE";
 
   const handleClose = () => {
     if (deleting) return;
-
     setConfirmationText("");
     onClose();
   };
 
   const handleConfirm = () => {
     if (!canDelete || deleting) return;
-
     onConfirm();
   };
 
-  const tabBarClearance = viewport.keyboardOpen
-    ? 12
-    : 84;
+  const tabBarClearance = viewport.keyboardOpen ? 12 : 84;
 
   return (
     <div
@@ -506,27 +443,14 @@ function DeleteAccountModal({
       style={{
         top: `${viewport.offsetTop}px`,
         height: `${viewport.height}px`,
-        alignItems: viewport.keyboardOpen
-          ? "center"
-          : "flex-end",
+        alignItems: viewport.keyboardOpen ? "center" : "flex-end",
         paddingBottom: `${tabBarClearance}px`,
         paddingTop: "12px",
       }}
       onClick={handleClose}
     >
       <div
-        className="
-          w-full
-          max-w-sm
-          overflow-y-auto
-          rounded-[22px]
-          border
-          border-border
-          bg-card
-          p-5
-          text-foreground
-          shadow-2xl
-        "
+        className="w-full max-w-sm overflow-y-auto rounded-[22px] border border-border bg-card p-5 text-foreground shadow-2xl"
         style={{
           maxHeight: `${Math.max(
             280,
@@ -534,23 +458,9 @@ function DeleteAccountModal({
           )}px`,
           WebkitOverflowScrolling: "touch",
         }}
-        onClick={(event) =>
-          event.stopPropagation()
-        }
+        onClick={(event) => event.stopPropagation()}
       >
-        <div
-          className="
-            mb-4
-            flex
-            h-10
-            w-10
-            items-center
-            justify-center
-            rounded-full
-            bg-red-100
-            dark:bg-red-950/40
-          "
-        >
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40">
           <Trash2
             size={21}
             strokeWidth={2.1}
@@ -564,21 +474,12 @@ function DeleteAccountModal({
         </h3>
 
         <p className="mt-2 text-[14px] leading-5 text-muted-foreground">
-          This permanently removes your account and
-          associated StockPulse data. This cannot be
-          undone.
+          This permanently removes your account and associated StockPulse data. This cannot be undone.
         </p>
 
         <label
           htmlFor="delete-confirmation"
-          className="
-            mb-2
-            mt-4
-            block
-            text-[13px]
-            font-semibold
-            text-foreground
-          "
+          className="mb-2 mt-4 block text-[13px] font-semibold text-foreground"
         >
           Type DELETE to confirm
         </label>
@@ -587,37 +488,13 @@ function DeleteAccountModal({
           id="delete-confirmation"
           type="text"
           value={confirmationText}
-          onChange={(event) =>
-            setConfirmationText(
-              event.target.value
-            )
-          }
+          onChange={(event) => setConfirmationText(event.target.value)}
           disabled={deleting}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck="false"
           placeholder="DELETE"
-          className="
-            h-[46px]
-            w-full
-            rounded-[13px]
-            border
-            border-input
-            bg-background
-            px-4
-            text-[15px]
-            text-foreground
-            outline-none
-            transition-[border-color,box-shadow,opacity]
-            duration-150
-            placeholder:text-muted-foreground
-            focus:border-red-500
-            focus:ring-2
-            focus:ring-red-100
-            disabled:cursor-not-allowed
-            disabled:opacity-60
-            dark:focus:ring-red-950/40
-          "
+          className="h-[46px] w-full rounded-[13px] border border-input bg-background px-4 text-[15px] text-foreground outline-none transition-[border-color,box-shadow,opacity] duration-150 placeholder:text-muted-foreground focus:border-red-500 focus:ring-2 focus:ring-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-red-950/40"
         />
 
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -625,20 +502,7 @@ function DeleteAccountModal({
             type="button"
             onClick={handleClose}
             disabled={deleting}
-            className="
-              h-[46px]
-              rounded-[13px]
-              bg-muted
-              text-[15px]
-              font-semibold
-              text-foreground
-              transition-[transform,background-color,opacity]
-              duration-150
-              active:scale-[0.98]
-              active:bg-muted/70
-              disabled:cursor-not-allowed
-              disabled:opacity-60
-            "
+            className="h-[46px] rounded-[13px] bg-muted text-[15px] font-semibold text-foreground transition-[transform,background-color,opacity] duration-150 active:scale-[0.98] active:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Cancel
           </button>
@@ -648,23 +512,13 @@ function DeleteAccountModal({
             disabled={!canDelete || deleting}
             onClick={handleConfirm}
             className={[
-              `
-                h-[46px]
-                rounded-[13px]
-                text-[15px]
-                font-semibold
-                text-white
-                transition-[transform,background-color,opacity]
-                duration-150
-              `,
+              "h-[46px] rounded-[13px] text-[15px] font-semibold text-white transition-[transform,background-color,opacity] duration-150",
               canDelete && !deleting
                 ? "bg-red-600 active:scale-[0.98] active:bg-red-700"
-                : "cursor-not-allowed bg-red-300 dark:bg-red-900/50",
+                : "cursor-not-allowed bg-red-300 opacity-70 dark:bg-red-900/60",
             ].join(" ")}
           >
-            {deleting
-              ? "Deleting..."
-              : "Delete"}
+            {deleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>
