@@ -72,17 +72,19 @@ function sessionUsesApple(session) {
   );
 }
 
-function persistAppleProviderTokens(
+export function persistAppleAuthorizationFromSession(
   session,
 ) {
   if (
     typeof window === "undefined" ||
     !sessionUsesApple(session)
   ) {
-    return;
+    return false;
   }
 
   try {
+    let stored = false;
+
     if (
       session?.provider_refresh_token
     ) {
@@ -90,6 +92,7 @@ function persistAppleProviderTokens(
         APPLE_PROVIDER_REFRESH_TOKEN_KEY,
         session.provider_refresh_token,
       );
+      stored = true;
     }
 
     if (session?.provider_token) {
@@ -97,12 +100,16 @@ function persistAppleProviderTokens(
         APPLE_PROVIDER_TOKEN_KEY,
         session.provider_token,
       );
+      stored = true;
     }
+
+    return stored;
   } catch (error) {
     console.warn(
       "Unable to preserve Apple authorization for account deletion:",
       error,
     );
+    return false;
   }
 }
 
@@ -166,7 +173,7 @@ function getAppleRevocationToken() {
 rawSupabase.auth.onAuthStateChange(
   (event, session) => {
     if (session) {
-      persistAppleProviderTokens(
+      persistAppleAuthorizationFromSession(
         session,
       );
     }
