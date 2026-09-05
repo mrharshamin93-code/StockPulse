@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
+import {
+  persistAppleAuthorizationFromSession,
+  supabase,
+} from "@/lib/supabase";
 
 let callbackPromise = null;
 const AUTH_STEP_TIMEOUT_MS = 20000;
@@ -68,6 +71,7 @@ async function completeOAuthCallback(reportStage) {
   }
 
   if (existingData?.session?.user) {
+    persistAppleAuthorizationFromSession(existingData.session);
     return nextPath;
   }
 
@@ -95,6 +99,7 @@ async function completeOAuthCallback(reportStage) {
     );
 
     if (recoveredData?.session?.user) {
+      persistAppleAuthorizationFromSession(recoveredData.session);
       return nextPath;
     }
 
@@ -104,6 +109,8 @@ async function completeOAuthCallback(reportStage) {
   if (!data?.session?.user) {
     throw new Error("missing_session");
   }
+
+  persistAppleAuthorizationFromSession(data.session);
 
   reportStage("Saving your login session…");
 
@@ -123,6 +130,8 @@ async function completeOAuthCallback(reportStage) {
   if (!verifiedData?.session?.user) {
     throw new Error("session_not_saved");
   }
+
+  persistAppleAuthorizationFromSession(verifiedData.session);
 
   return nextPath;
 }
