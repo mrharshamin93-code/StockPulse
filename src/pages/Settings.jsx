@@ -1,6 +1,6 @@
 // src/pages/Settings.jsx
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Bell,
@@ -277,10 +277,6 @@ export default function Settings() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* SETTINGS SECTION                                                            */
-/* -------------------------------------------------------------------------- */
-
 function SettingsSection({
   title,
   children,
@@ -307,10 +303,6 @@ function SettingsSection({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* SECTION HEADING                                                             */
-/* -------------------------------------------------------------------------- */
-
 function SectionHeading({
   children,
 }) {
@@ -329,10 +321,6 @@ function SectionHeading({
     </h2>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* SETTINGS ROW                                                                */
-/* -------------------------------------------------------------------------- */
 
 function SettingsRow({
   icon: Icon,
@@ -365,7 +353,6 @@ function SettingsRow({
           : "active:scale-[0.995] active:bg-muted/70",
       ].join(" ")}
     >
-      {/* ICON */}
       <div className="flex w-[40px] shrink-0 items-center">
         <Icon
           size={20}
@@ -375,10 +362,6 @@ function SettingsRow({
         />
       </div>
 
-      {/* CONTENT
-          Divider begins after the icon instead of
-          running edge-to-edge, matching native iOS lists.
-      */}
       <div
         className={[
           `
@@ -433,10 +416,6 @@ function SettingsRow({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* DELETE ACCOUNT MODAL                                                        */
-/* -------------------------------------------------------------------------- */
-
 function DeleteAccountModal({
   open,
   onClose,
@@ -445,6 +424,58 @@ function DeleteAccountModal({
 }) {
   const [confirmationText, setConfirmationText] =
     useState("");
+  const [viewport, setViewport] = useState(() => ({
+    height:
+      typeof window !== "undefined"
+        ? window.innerHeight
+        : 800,
+    offsetTop: 0,
+    keyboardOpen: false,
+  }));
+
+  useEffect(() => {
+    if (!open || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const updateViewport = () => {
+      const visualViewport = window.visualViewport;
+      const height = visualViewport?.height || window.innerHeight;
+      const offsetTop = visualViewport?.offsetTop || 0;
+      const keyboardOpen =
+        window.innerHeight - height > 120;
+
+      setViewport({
+        height,
+        offsetTop,
+        keyboardOpen,
+      });
+    };
+
+    updateViewport();
+
+    window.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener(
+      "resize",
+      updateViewport
+    );
+    window.visualViewport?.addEventListener(
+      "scroll",
+      updateViewport
+    );
+
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        updateViewport
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        updateViewport
+      );
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -465,26 +496,29 @@ function DeleteAccountModal({
     onConfirm();
   };
 
+  const tabBarClearance = viewport.keyboardOpen
+    ? 12
+    : 84;
+
   return (
     <div
-      className="
-        fixed
-        inset-0
-        z-[100]
-        flex
-        items-end
-        justify-center
-        bg-black/40
-        px-3
-        pb-[calc(12px+env(safe-area-inset-bottom))]
-        backdrop-blur-[2px]
-      "
+      className="fixed left-0 right-0 z-[100] flex justify-center bg-black/40 px-3 backdrop-blur-[2px]"
+      style={{
+        top: `${viewport.offsetTop}px`,
+        height: `${viewport.height}px`,
+        alignItems: viewport.keyboardOpen
+          ? "center"
+          : "flex-end",
+        paddingBottom: `${tabBarClearance}px`,
+        paddingTop: "12px",
+      }}
       onClick={handleClose}
     >
       <div
         className="
           w-full
           max-w-sm
+          overflow-y-auto
           rounded-[22px]
           border
           border-border
@@ -493,11 +527,17 @@ function DeleteAccountModal({
           text-foreground
           shadow-2xl
         "
+        style={{
+          maxHeight: `${Math.max(
+            280,
+            viewport.height - tabBarClearance - 24
+          )}px`,
+          WebkitOverflowScrolling: "touch",
+        }}
         onClick={(event) =>
           event.stopPropagation()
         }
       >
-        {/* ICON */}
         <div
           className="
             mb-4
@@ -519,19 +559,16 @@ function DeleteAccountModal({
           />
         </div>
 
-        {/* TITLE */}
         <h3 className="text-[20px] font-bold tracking-[-0.3px] text-red-600">
           Delete Account
         </h3>
 
-        {/* DESCRIPTION */}
         <p className="mt-2 text-[14px] leading-5 text-muted-foreground">
           This permanently removes your account and
           associated StockPulse data. This cannot be
           undone.
         </p>
 
-        {/* CONFIRMATION LABEL */}
         <label
           htmlFor="delete-confirmation"
           className="
@@ -546,7 +583,6 @@ function DeleteAccountModal({
           Type DELETE to confirm
         </label>
 
-        {/* CONFIRMATION INPUT */}
         <input
           id="delete-confirmation"
           type="text"
@@ -584,7 +620,6 @@ function DeleteAccountModal({
           "
         />
 
-        {/* ACTIONS */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <button
             type="button"
