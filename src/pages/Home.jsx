@@ -11,6 +11,7 @@ import {
 } from "framer-motion";
 
 import {
+  Briefcase,
   Loader2,
 } from "lucide-react";
 
@@ -26,6 +27,76 @@ import StockCard from "@/components/portfolio/StockCard";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
 import PortfolioGrowthChart from "@/components/portfolio/PortfolioGrowthChart";
 import PortfolioOnboarding from "@/components/portfolio/PortfolioOnboarding";
+
+function portfolioStartedStorageKey(userId) {
+  return `stockpulse:portfolio-started:${userId}`;
+}
+
+function readPortfolioStarted(userId) {
+  if (!userId) {
+    return false;
+  }
+
+  try {
+    return (
+      window.localStorage.getItem(
+        portfolioStartedStorageKey(userId),
+      ) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function markPortfolioStarted(userId) {
+  if (!userId) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      portfolioStartedStorageKey(userId),
+      "true",
+    );
+  } catch {
+    // The in-memory state still keeps the correct experience for this session.
+  }
+}
+
+function EmptyPortfolio() {
+  return (
+    <div className="mx-auto flex w-full max-w-[340px] flex-col items-center justify-center px-5 py-16 text-center">
+      <div
+        className="
+          flex
+          h-[58px]
+          w-[58px]
+          items-center
+          justify-center
+          rounded-[18px]
+          border
+          border-border
+          bg-card
+          shadow-[0_4px_12px_rgba(0,0,0,0.045)]
+        "
+      >
+        <Briefcase
+          size={25}
+          strokeWidth={2}
+          className="text-foreground"
+        />
+      </div>
+
+      <h2 className="mt-5 text-[20px] font-bold tracking-[-0.4px] text-foreground">
+        Empty portfolio
+      </h2>
+
+      <p className="mt-2 max-w-[260px] text-[14px] leading-5 text-muted-foreground">
+        Tap the + button below to add a stock to your Portfolio.
+      </p>
+    </div>
+  );
+}
 
 function PortfolioLoading() {
   return (
@@ -123,6 +194,12 @@ export default function Home() {
   const [loading, setLoading] =
     useState(() => initialCachedStocks === null);
 
+  const [hasStartedPortfolio, setHasStartedPortfolio] =
+    useState(() =>
+      Boolean(initialCachedStocks?.length) ||
+      readPortfolioStarted(user?.id),
+    );
+
   const pricedStocks =
     useMemo(
       () =>
@@ -160,6 +237,7 @@ export default function Home() {
     useCallback(async () => {
       if (!user?.id) {
         setStocks([]);
+        setHasStartedPortfolio(false);
         setLoading(false);
         return;
       }
@@ -187,6 +265,15 @@ export default function Home() {
               stock.id !== "undefined"
           );
 
+        if (nextStocks.length > 0) {
+          setHasStartedPortfolio(true);
+          markPortfolioStarted(user.id);
+        } else {
+          setHasStartedPortfolio(
+            readPortfolioStarted(user.id),
+          );
+        }
+
         setStocks(nextStocks);
         cachePortfolioStocks(user.id, nextStocks);
       } catch (error) {
@@ -200,6 +287,16 @@ export default function Home() {
         setLoading(false);
       }
     }, [user?.id]);
+
+  useEffect(() => {
+    setHasStartedPortfolio(
+      Boolean(initialCachedStocks?.length) ||
+      readPortfolioStarted(user?.id),
+    );
+  }, [
+    user?.id,
+    initialCachedStocks,
+  ]);
 
   useEffect(() => {
     loadStocks();
@@ -332,7 +429,11 @@ export default function Home() {
         {loading ? (
           <PortfolioLoading />
         ) : stocks.length === 0 ? (
-          <PortfolioOnboarding />
+          hasStartedPortfolio ? (
+            <EmptyPortfolio />
+          ) : (
+            <PortfolioOnboarding />
+          )
         ) : (
           <motion.div
             initial={{
