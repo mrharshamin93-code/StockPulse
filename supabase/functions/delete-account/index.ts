@@ -49,6 +49,42 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+class AppleRevocationError extends Error {
+  diagnostic: string;
+
+  constructor(message: string, diagnostic: string) {
+    super(message);
+    this.name = "AppleRevocationError";
+    this.diagnostic = diagnostic;
+  }
+}
+
+function parseAppleErrorBody(rawBody: string) {
+  const trimmed = rawBody.trim();
+
+  if (!trimmed) {
+    return "empty_response";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    const code = String(parsed?.error || "").trim();
+    const description = String(parsed?.error_description || "").trim();
+
+    if (code && description) {
+      return `${code}: ${description}`;
+    }
+
+    if (code) {
+      return code;
+    }
+  } catch {
+    // Fall through to a conservative plain-text diagnostic.
+  }
+
+  return trimmed.replace(/[^a-zA-Z0-9_ .:-]/g, "").slice(0, 240) || "unknown_error";
+}
+
 async function revokeAppleAuthorization(
   token: string,
   tokenType: "refresh_token" | "access_token",
@@ -64,7 +100,11 @@ async function revokeAppleAuthorization(
         hasClientSecret: Boolean(clientSecret),
       }),
     );
-    throw new Error("Apple account deletion is not fully configured.");
+
+    throw new AppleRevocationError(
+      "Apple account deletion is not fully configured.",
+      "missing_apple_configuration",
+    );
   }
 
   const clientSecretClaims = decodeJwtPayload(clientSecret);
@@ -73,6 +113,8 @@ async function revokeAppleAuthorization(
     JSON.stringify({
       tokenType,
       clientId,
+      tokenLength: token.length,
+      tokenLooksJwt: token.split(".").length === 3,
       clientSecretIssuer: clientSecretClaims?.iss ?? null,
       clientSecretSubject: clientSecretClaims?.sub ?? null,
       clientSecretAudience: clientSecretClaims?.aud ?? null,
@@ -97,18 +139,24 @@ async function revokeAppleAuthorization(
 
   if (!response.ok) {
     const responseText = await response.text().catch(() => "");
+    const appleError = parseAppleErrorBody(responseText);
+    const diagnostic = `Apple revoke HTTP ${response.status}: ${appleError}`;
+
     console.error(
       "Apple authorization revocation failed:",
       JSON.stringify({
         status: response.status,
         statusText: response.statusText,
-        body: responseText.slice(0, 1000),
+        appleError,
         tokenType,
         clientId,
+        tokenLength: token.length,
       }),
     );
-    throw new Error(
-      `Apple authorization could not be revoked (HTTP ${response.status}).`,
+
+    throw new AppleRevocationError(
+      "Apple authorization could not be revoked.",
+      diagnostic,
     );
   }
 
@@ -154,9 +202,7 @@ async function collectReportStoragePaths(
 
   for (const delivery of deliveries || []) {
     const path = String(delivery?.storage_path || "").trim();
-    if (path) {
-      paths.add(path);
-    }
+    if (path) paths.add(path);
   }
 
   const { data: monthEntries, error: monthError } = await adminClient.storage
@@ -174,9 +220,7 @@ async function collectReportStoragePaths(
 
   for (const monthEntry of monthEntries || []) {
     const monthName = String(monthEntry?.name || "").trim();
-    if (!monthName) {
-      continue;
-    }
+    if (!monthName) continue;
 
     const monthPrefix = `${userId}/${monthName}`;
     const { data: files, error: filesError } = await adminClient.storage
@@ -194,9 +238,7 @@ async function collectReportStoragePaths(
 
     for (const file of files || []) {
       const fileName = String(file?.name || "").trim();
-      if (fileName) {
-        paths.add(`${monthPrefix}/${fileName}`);
-      }
+      if (fileName) paths.add(`${monthPrefix}/${fileName}`);
     }
   }
 
@@ -209,9 +251,7 @@ async function removeReportFiles(
 ) {
   for (let index = 0; index < paths.length; index += 100) {
     const batch = paths.slice(index, index + 100);
-    if (!batch.length) {
-      continue;
-    }
+    if (!batch.length) continue;
 
     const { error } = await adminClient.storage
       .from(REPORT_BUCKET)
@@ -329,12 +369,19 @@ Deno.serve(async (request) => {
           "Apple revocation failed before account deletion:",
           error,
         );
+
+        const diagnostic =
+          error instanceof AppleRevocationError
+            ? error.diagnostic
+            : "apple_revocation_unknown_error";
+
         return jsonResponse(
           {
             success: false,
             code: "APPLE_REVOCATION_FAILED",
             error:
               "Apple authorization could not be revoked. Please try again.",
+            diagnostic,
           },
           502,
         );
