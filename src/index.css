@@ -142,6 +142,15 @@
   contain: layout paint style;
 }
 
+/*
+ * On a true cold launch, Watchlist briefly waits for Supabase before the real
+ * cards are available. Do not flash five empty placeholder cards during that
+ * window; keep the content area clean until the cached/real rows render.
+ */
+.stockpulse-watchlist-scroll main .animate-pulse {
+  display: none;
+}
+
 /* Apple-style watchlist swipe action palette. */
 .stockpulse-watchlist-card button[aria-label="Delete"] {
   background-color: #ff3b30 !important;
