@@ -201,12 +201,15 @@ header[style*="safe-area-inset-top"] button[aria-label="Go back"]::after {
 }
 
 /*
- * Add to Watchlist search results: show only the real moving scroll thumb.
- * No decorative track or fake indicator is drawn. The thumb appears only when
- * the result list is taller than its box and follows the actual scroll position.
+ * Add to Watchlist search results: keep the results themselves as the scroll
+ * container. This is important on iOS because the dialog also becomes
+ * keyboard-aware; without a height cap Safari scrolls the whole dialog and a
+ * results scrollbar has nothing to track.
  */
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto {
+  max-height: clamp(160px, calc(100dvh - 260px), 320px);
+  overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--foreground) / 0.58) transparent;
   scrollbar-gutter: auto;
