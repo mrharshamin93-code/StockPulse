@@ -201,6 +201,52 @@ header[style*="safe-area-inset-top"] button[aria-label="Go back"]::after {
 }
 
 /*
+ * Add to Watchlist search results: keep a visible slim scroll cue on the
+ * right edge so users can immediately tell that more matches are available.
+ * Desktop/WebKit browsers use the real scrollbar. iOS often overlays and
+ * hides native scrollbars, so the inset indicator remains visible there too.
+ */
+[role="dialog"]:has(input[placeholder="Search ticker or company"])
+  .overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.5)
+    hsl(var(--border) / 0.45);
+  background-image:
+    linear-gradient(
+      to bottom,
+      hsl(var(--muted-foreground) / 0.5),
+      hsl(var(--muted-foreground) / 0.5)
+    ),
+    linear-gradient(
+      to bottom,
+      hsl(var(--border) / 0.5),
+      hsl(var(--border) / 0.5)
+    );
+  background-repeat: no-repeat;
+  background-size: 3px 42px, 3px calc(100% - 16px);
+  background-position:
+    calc(100% - 5px) 8px,
+    calc(100% - 5px) 8px;
+}
+
+[role="dialog"]:has(input[placeholder="Search ticker or company"])
+  .overflow-y-auto::-webkit-scrollbar {
+  width: 5px;
+}
+
+[role="dialog"]:has(input[placeholder="Search ticker or company"])
+  .overflow-y-auto::-webkit-scrollbar-track {
+  background: hsl(var(--border) / 0.45);
+  border-radius: 9999px;
+}
+
+[role="dialog"]:has(input[placeholder="Search ticker or company"])
+  .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.5);
+  border-radius: 9999px;
+}
+
+/*
  * Several migrated screens still use Tailwind's neutral colour utilities.
  * Map those shared surfaces to the active StockPulse theme so one selection
  * consistently colours every authenticated tab while feature-specific accent
