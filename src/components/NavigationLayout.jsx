@@ -77,6 +77,7 @@ export default function NavigationLayout() {
   const layoutRef = useRef(null);
   const scrollPositions = useRef({});
   const previousTab = useRef(activeTab);
+  const previousPathname = useRef(pathname);
   const contentScrollRef = useRef(null);
 
   useEffect(() => {
@@ -140,6 +141,37 @@ export default function NavigationLayout() {
       );
     };
   }, []);
+
+  useEffect(() => {
+    const previousPath = previousPathname.current;
+    const scrollContainer = contentScrollRef.current;
+    const isStockRoute = pathname.startsWith("/stock/");
+    const wasStockRoute = previousPath.startsWith("/stock/");
+    const cameFromWatchlist =
+      previousPath === "/watchlist" || previousPath === "/";
+    const returnedToWatchlist =
+      wasStockRoute &&
+      (pathname === "/watchlist" || pathname === "/");
+
+    if (isStockRoute && pathname !== previousPath) {
+      if (cameFromWatchlist) {
+        scrollPositions.current["/watchlist"] =
+          scrollContainer?.scrollTop ?? 0;
+      }
+
+      scrollContainer?.scrollTo({
+        top: 0,
+        behavior: "instant",
+      });
+    } else if (returnedToWatchlist) {
+      scrollContainer?.scrollTo({
+        top: scrollPositions.current["/watchlist"] ?? 0,
+        behavior: "instant",
+      });
+    }
+
+    previousPathname.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     if (!pathname.startsWith("/stock/")) {
