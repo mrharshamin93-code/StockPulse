@@ -37,6 +37,18 @@ function userUsesApple(user: any) {
   );
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 async function revokeAppleAuthorization(
   token: string,
   tokenType: "refresh_token" | "access_token",
@@ -45,8 +57,28 @@ async function revokeAppleAuthorization(
   const clientSecret = Deno.env.get("APPLE_CLIENT_SECRET");
 
   if (!clientId || !clientSecret) {
+    console.error(
+      "Apple revocation configuration missing:",
+      JSON.stringify({
+        hasClientId: Boolean(clientId),
+        hasClientSecret: Boolean(clientSecret),
+      }),
+    );
     throw new Error("Apple account deletion is not fully configured.");
   }
+
+  const clientSecretClaims = decodeJwtPayload(clientSecret);
+  console.log(
+    "Apple revocation attempt:",
+    JSON.stringify({
+      tokenType,
+      clientId,
+      clientSecretIssuer: clientSecretClaims?.iss ?? null,
+      clientSecretSubject: clientSecretClaims?.sub ?? null,
+      clientSecretAudience: clientSecretClaims?.aud ?? null,
+      clientSecretExpiresAt: clientSecretClaims?.exp ?? null,
+    }),
+  );
 
   const form = new URLSearchParams({
     client_id: clientId,
@@ -67,11 +99,23 @@ async function revokeAppleAuthorization(
     const responseText = await response.text().catch(() => "");
     console.error(
       "Apple authorization revocation failed:",
-      response.status,
-      responseText,
+      JSON.stringify({
+        status: response.status,
+        statusText: response.statusText,
+        body: responseText.slice(0, 1000),
+        tokenType,
+        clientId,
+      }),
     );
-    throw new Error("Apple authorization could not be revoked.");
+    throw new Error(
+      `Apple authorization could not be revoked (HTTP ${response.status}).`,
+    );
   }
+
+  console.log(
+    "Apple authorization revoked successfully:",
+    JSON.stringify({ tokenType, status: response.status }),
+  );
 }
 
 async function deleteRows(
