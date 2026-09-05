@@ -481,6 +481,18 @@ export default function AddStockDialog({
       setTickerValid(null);
 
       onStockAdded?.();
+
+      window.dispatchEvent(
+        new CustomEvent(
+          "stockpulse:portfolio-updated",
+          {
+            detail: {
+              userId: user.id,
+              ticker: cleanTicker,
+            },
+          },
+        ),
+      );
     };
 
   const handleOpenChange =
