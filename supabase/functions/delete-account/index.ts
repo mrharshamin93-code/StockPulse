@@ -4,305 +4,348 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods":
-    "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const REPORT_BUCKET = "monthly-reports";
 
 function jsonResponse(
   body: Record<string, unknown>,
   status = 200,
 ) {
-  return new Response(
-    JSON.stringify(body),
-    {
-      status,
-      headers: {
-        ...corsHeaders,
-        "Content-Type":
-          "application/json",
-      },
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
     },
+  });
+}
+
+function userUsesApple(user: any) {
+  const identities = Array.isArray(user?.identities)
+    ? user.identities
+    : [];
+  const providers = Array.isArray(user?.app_metadata?.providers)
+    ? user.app_metadata.providers
+    : [];
+
+  return (
+    user?.app_metadata?.provider === "apple" ||
+    providers.includes("apple") ||
+    identities.some((identity: any) => identity?.provider === "apple")
   );
 }
 
-Deno.serve(
-  async (request) => {
-    if (
-      request.method ===
-      "OPTIONS"
-    ) {
-      return new Response(
-        "ok",
-        {
-          headers:
-            corsHeaders,
-        },
-      );
+async function revokeAppleAuthorization(
+  token: string,
+  tokenType: "refresh_token" | "access_token",
+) {
+  const clientId = Deno.env.get("APPLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("APPLE_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Apple account deletion is not fully configured.");
+  }
+
+  const form = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    token,
+    token_type_hint: tokenType,
+  });
+
+  const response = await fetch("https://appleid.apple.com/auth/revoke", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text().catch(() => "");
+    console.error(
+      "Apple authorization revocation failed:",
+      response.status,
+      responseText,
+    );
+    throw new Error("Apple authorization could not be revoked.");
+  }
+}
+
+async function deleteRows(
+  adminClient: ReturnType<typeof createClient>,
+  table: string,
+  column: string,
+  userId: string,
+) {
+  const { error } = await adminClient
+    .from(table)
+    .delete()
+    .eq(column, userId);
+
+  if (error) {
+    throw new Error(`Failed to clear ${table}: ${error.message}`);
+  }
+}
+
+async function collectReportStoragePaths(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<string[]> {
+  const paths = new Set<string>();
+
+  const { data: deliveries, error: deliveryError } = await adminClient
+    .from("monthly_report_deliveries")
+    .select("storage_path")
+    .eq("user_id", userId)
+    .not("storage_path", "is", null);
+
+  if (deliveryError) {
+    throw new Error(
+      `Failed to load monthly report files: ${deliveryError.message}`,
+    );
+  }
+
+  for (const delivery of deliveries || []) {
+    const path = String(delivery?.storage_path || "").trim();
+    if (path) {
+      paths.add(path);
+    }
+  }
+
+  const { data: monthEntries, error: monthError } = await adminClient.storage
+    .from(REPORT_BUCKET)
+    .list(userId, {
+      limit: 1000,
+      sortBy: { column: "name", order: "asc" },
+    });
+
+  if (monthError) {
+    throw new Error(
+      `Failed to inspect monthly report storage: ${monthError.message}`,
+    );
+  }
+
+  for (const monthEntry of monthEntries || []) {
+    const monthName = String(monthEntry?.name || "").trim();
+    if (!monthName) {
+      continue;
     }
 
-    if (
-      request.method !==
-      "POST"
-    ) {
-      return jsonResponse(
-        {
-          success: false,
-          error:
-            "Method not allowed",
-        },
-        405,
-      );
-    }
-
-    try {
-      const supabaseUrl =
-        Deno.env.get(
-          "SUPABASE_URL",
-        );
-
-      const serviceRoleKey =
-        Deno.env.get(
-          "SUPABASE_SERVICE_ROLE_KEY",
-        );
-
-      const anonKey =
-        Deno.env.get(
-          "SUPABASE_ANON_KEY",
-        );
-
-      if (
-        !supabaseUrl ||
-        !serviceRoleKey ||
-        !anonKey
-      ) {
-        return jsonResponse(
-          {
-            success: false,
-            error:
-              "Supabase environment is not configured.",
-          },
-          500,
-        );
-      }
-
-      const authorization =
-        request.headers.get(
-          "Authorization",
-        );
-
-      if (
-        !authorization?.startsWith(
-          "Bearer ",
-        )
-      ) {
-        return jsonResponse(
-          {
-            success: false,
-            error:
-              "Authentication required.",
-          },
-          401,
-        );
-      }
-
-      const body =
-        await request
-          .json()
-          .catch(
-            () => ({}),
-          );
-
-      if (
-        body?.confirmation !==
-        "DELETE_ACCOUNT"
-      ) {
-        return jsonResponse(
-          {
-            success: false,
-            error:
-              "Account deletion was not confirmed.",
-          },
-          400,
-        );
-      }
-
-      /*
-       * Client scoped to the signed-in user.
-       * This verifies that the caller owns a
-       * legitimate Supabase session.
-       */
-      const userClient =
-        createClient(
-          supabaseUrl,
-          anonKey,
-          {
-            global: {
-              headers: {
-                Authorization:
-                  authorization,
-              },
-            },
-            auth: {
-              persistSession:
-                false,
-              autoRefreshToken:
-                false,
-            },
-          },
-        );
-
-      const {
-        data: userData,
-        error: userError,
-      } =
-        await userClient.auth.getUser();
-
-      if (
-        userError ||
-        !userData?.user?.id
-      ) {
-        return jsonResponse(
-          {
-            success: false,
-            error:
-              "Your session is invalid or has expired.",
-          },
-          401,
-        );
-      }
-
-      const userId =
-        userData.user.id;
-
-      /*
-       * Admin client.
-       *
-       * Never expose SUPABASE_SERVICE_ROLE_KEY
-       * in the browser or Capacitor app.
-       */
-      const adminClient =
-        createClient(
-          supabaseUrl,
-          serviceRoleKey,
-          {
-            auth: {
-              persistSession:
-                false,
-              autoRefreshToken:
-                false,
-            },
-          },
-        );
-
-      /*
-       * Delete public user-owned data first.
-       *
-       * These correspond to StockPulse features.
-       * Each delete is user-scoped.
-       *
-       * A table that doesn't exist is ignored so
-       * future schema differences don't prevent
-       * the user's auth account from being removed.
-       */
-      const tables = [
-        "price_alerts",
-        "transactions",
-        "saved_screens",
-        "watchlist_items",
-        "watchlists",
-        "stocks",
-        "profiles",
-      ];
-
-      for (
-        const table of tables
-      ) {
-        try {
-          const {
-            error,
-          } =
-            await adminClient
-              .from(table)
-              .delete()
-              .eq(
-                "user_id",
-                userId,
-              );
-
-          if (error) {
-            /*
-             * Some StockPulse installations may
-             * not have every optional table.
-             */
-            console.warn(
-              `Could not clear ${table}:`,
-              error.message,
-            );
-          }
-        } catch (
-          error
-        ) {
-          console.warn(
-            `Could not clear ${table}:`,
-            error,
-          );
-        }
-      }
-
-      /*
-       * Finally remove the Supabase Auth account.
-       */
-      const {
-        error:
-          deleteUserError,
-      } =
-        await adminClient
-          .auth
-          .admin
-          .deleteUser(
-            userId,
-          );
-
-      if (
-        deleteUserError
-      ) {
-        console.error(
-          "Failed to delete auth user:",
-          deleteUserError,
-        );
-
-        return jsonResponse(
-          {
-            success: false,
-            error:
-              "The account could not be deleted.",
-          },
-          500,
-        );
-      }
-
-      return jsonResponse({
-        success: true,
+    const monthPrefix = `${userId}/${monthName}`;
+    const { data: files, error: filesError } = await adminClient.storage
+      .from(REPORT_BUCKET)
+      .list(monthPrefix, {
+        limit: 1000,
+        sortBy: { column: "name", order: "asc" },
       });
-    } catch (
-      error
-    ) {
-      console.error(
-        "Delete account function error:",
-        error,
+
+    if (filesError) {
+      throw new Error(
+        `Failed to inspect monthly report folder: ${filesError.message}`,
       );
+    }
 
+    for (const file of files || []) {
+      const fileName = String(file?.name || "").trim();
+      if (fileName) {
+        paths.add(`${monthPrefix}/${fileName}`);
+      }
+    }
+  }
+
+  return [...paths];
+}
+
+async function removeReportFiles(
+  adminClient: ReturnType<typeof createClient>,
+  paths: string[],
+) {
+  for (let index = 0; index < paths.length; index += 100) {
+    const batch = paths.slice(index, index + 100);
+    if (!batch.length) {
+      continue;
+    }
+
+    const { error } = await adminClient.storage
+      .from(REPORT_BUCKET)
+      .remove(batch);
+
+    if (error) {
+      throw new Error(
+        `Failed to delete monthly report files: ${error.message}`,
+      );
+    }
+  }
+}
+
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse(
+      { success: false, error: "Method not allowed" },
+      405,
+    );
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) {
+      console.error("Delete account environment is incomplete.");
       return jsonResponse(
-        {
-          success: false,
-
-          error:
-            error instanceof Error
-              ? error.message
-              : "The account could not be deleted.",
-        },
+        { success: false, error: "The account could not be deleted." },
         500,
       );
     }
-  },
-);
+
+    const authorization = request.headers.get("Authorization");
+
+    if (!authorization?.startsWith("Bearer ")) {
+      return jsonResponse(
+        { success: false, error: "Authentication required." },
+        401,
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+
+    if (body?.confirmation !== "DELETE_ACCOUNT") {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Account deletion was not confirmed.",
+        },
+        400,
+      );
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: {
+        headers: {
+          Authorization: authorization,
+        },
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+
+    const { data: userData, error: userError } =
+      await userClient.auth.getUser();
+
+    if (userError || !userData?.user?.id) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Your session is invalid or has expired.",
+        },
+        401,
+      );
+    }
+
+    const userId = userData.user.id;
+
+    if (userUsesApple(userData.user)) {
+      const appleProviderToken = String(
+        body?.appleProviderToken || "",
+      ).trim();
+      const appleProviderTokenType: "refresh_token" | "access_token" =
+        body?.appleProviderTokenType === "access_token"
+          ? "access_token"
+          : "refresh_token";
+
+      if (!appleProviderToken) {
+        return jsonResponse(
+          {
+            success: false,
+            code: "APPLE_REAUTH_REQUIRED",
+            error:
+              "Please sign in with Apple again, then retry account deletion.",
+          },
+          409,
+        );
+      }
+
+      try {
+        await revokeAppleAuthorization(
+          appleProviderToken,
+          appleProviderTokenType,
+        );
+      } catch (error) {
+        console.error(
+          "Apple revocation failed before account deletion:",
+          error,
+        );
+        return jsonResponse(
+          {
+            success: false,
+            code: "APPLE_REVOCATION_FAILED",
+            error:
+              "Apple authorization could not be revoked. Please try again.",
+          },
+          502,
+        );
+      }
+    }
+
+    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+
+    const reportPaths = await collectReportStoragePaths(
+      adminClient,
+      userId,
+    );
+
+    await removeReportFiles(adminClient, reportPaths);
+
+    await deleteRows(adminClient, "app_notifications", "user_id", userId);
+    await deleteRows(
+      adminClient,
+      "monthly_report_deliveries",
+      "user_id",
+      userId,
+    );
+    await deleteRows(adminClient, "stock_alerts", "user_id", userId);
+    await deleteRows(adminClient, "stock_transactions", "user_id", userId);
+    await deleteRows(adminClient, "saved_screens", "user_id", userId);
+    await deleteRows(adminClient, "watchlist_items", "user_id", userId);
+    await deleteRows(adminClient, "watchlists", "user_id", userId);
+    await deleteRows(adminClient, "stocks", "user_id", userId);
+    await deleteRows(adminClient, "profiles", "id", userId);
+
+    const { error: deleteUserError } = await adminClient.auth.admin.deleteUser(
+      userId,
+    );
+
+    if (deleteUserError) {
+      throw new Error(
+        `Failed to delete auth user: ${deleteUserError.message}`,
+      );
+    }
+
+    return jsonResponse({ success: true });
+  } catch (error) {
+    console.error("Delete account function error:", error);
+
+    return jsonResponse(
+      {
+        success: false,
+        error: "The account could not be deleted. Please try again.",
+      },
+      500,
+    );
+  }
+});
