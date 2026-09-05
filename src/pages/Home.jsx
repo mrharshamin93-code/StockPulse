@@ -236,6 +236,35 @@ export default function Home() {
   ]);
 
   useEffect(() => {
+    const handlePortfolioUpdated = (event) => {
+      if (
+        event?.detail?.userId &&
+        event.detail.userId !== user?.id
+      ) {
+        return;
+      }
+
+      setLoading(true);
+      void loadStocks();
+    };
+
+    window.addEventListener(
+      "stockpulse:portfolio-updated",
+      handlePortfolioUpdated,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "stockpulse:portfolio-updated",
+        handlePortfolioUpdated,
+      );
+    };
+  }, [
+    user?.id,
+    loadStocks,
+  ]);
+
+  useEffect(() => {
     if (!stocks.length) {
       return;
     }
