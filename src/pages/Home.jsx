@@ -2,7 +2,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -12,7 +11,6 @@ import {
 } from "framer-motion";
 
 import {
-  Briefcase,
   Loader2,
 } from "lucide-react";
 
@@ -28,99 +26,6 @@ import StockCard from "@/components/portfolio/StockCard";
 import PortfolioSummary from "@/components/portfolio/PortfolioSummary";
 import PortfolioGrowthChart from "@/components/portfolio/PortfolioGrowthChart";
 import PortfolioOnboarding from "@/components/portfolio/PortfolioOnboarding";
-
-function onboardingStorageKey(userId) {
-  return `stockpulse:portfolio-onboarding-seen:${userId}`;
-}
-
-function hasSeenPortfolioOnboarding(user) {
-  if (
-    user?.user_metadata?.portfolio_onboarding_seen ||
-    user?.user_metadata?.onboarding_completed
-  ) {
-    return true;
-  }
-
-  try {
-    return (
-      window.localStorage.getItem(
-        onboardingStorageKey(user?.id)
-      ) === "true"
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function markPortfolioOnboardingSeen(userId) {
-  try {
-    window.localStorage.setItem(
-      onboardingStorageKey(userId),
-      "true"
-    );
-  } catch {
-    // Supabase metadata remains the cross-device source of truth.
-  }
-
-  try {
-    const { error } =
-      await supabase.auth.updateUser({
-        data: {
-          portfolio_onboarding_seen: true,
-        },
-      });
-
-    if (!error) {
-      return;
-    }
-
-    console.warn(
-      "Failed to persist portfolio onboarding state:",
-      error
-    );
-  } catch (error) {
-    console.warn(
-      "Failed to persist portfolio onboarding state:",
-      error
-    );
-  }
-}
-
-function EmptyPortfolio() {
-  return (
-    <div className="mx-auto flex w-full max-w-[340px] flex-col items-center justify-center px-5 py-16 text-center">
-      <div
-        className="
-          flex
-          h-[58px]
-          w-[58px]
-          items-center
-          justify-center
-          rounded-[18px]
-          border
-          border-border
-          bg-card
-          shadow-[0_4px_12px_rgba(0,0,0,0.045)]
-        "
-      >
-        <Briefcase
-          size={25}
-          strokeWidth={2}
-          className="text-foreground"
-        />
-      </div>
-
-      <h2 className="mt-5 text-[20px] font-bold tracking-[-0.4px] text-foreground">
-        Empty portfolio
-      </h2>
-
-      <p className="mt-2 max-w-[260px] text-[14px] leading-5 text-muted-foreground">
-        Star a stock in your Watchlist to add it to your
-        Portfolio.
-      </p>
-    </div>
-  );
-}
 
 function PortfolioLoading() {
   return (
@@ -218,17 +123,6 @@ export default function Home() {
   const [loading, setLoading] =
     useState(() => initialCachedStocks === null);
 
-  const [
-    showPortfolioOnboarding,
-    setShowPortfolioOnboarding,
-  ] = useState(false);
-
-  const onboardingDecisionMade =
-    useRef(false);
-
-  const onboardingMarked =
-    useRef(false);
-
   const pricedStocks =
     useMemo(
       () =>
@@ -271,110 +165,30 @@ export default function Home() {
       }
 
       try {
-        const [
-          stocksResult,
-          watchlistResult,
-        ] = await Promise.all([
-          supabase
-            .from("stocks")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", {
-              ascending: false,
-            }),
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("stocks")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", {
+            ascending: false,
+          });
 
-          supabase
-            .from("watchlist_items")
-            .select("ticker")
-            .eq("user_id", user.id),
-        ]);
-
-        if (stocksResult.error) {
-          throw stocksResult.error;
+        if (error) {
+          throw error;
         }
-
-        if (watchlistResult.error) {
-          throw watchlistResult.error;
-        }
-
-        const watchlistTickers =
-          new Set(
-            (watchlistResult.data || [])
-              .map((item) =>
-                String(
-                  item?.ticker || ""
-                )
-                  .trim()
-                  .toUpperCase()
-              )
-              .filter(Boolean)
-          );
 
         const nextStocks =
-          (stocksResult.data || [])
-            .filter(
-              (stock) =>
-                stock?.id &&
-                stock.id !== "undefined"
-            )
-            .filter((stock) =>
-              watchlistTickers.has(
-                String(
-                  stock?.ticker || ""
-                )
-                  .trim()
-                  .toUpperCase()
-              )
-            );
-
-        const alreadySeen =
-          hasSeenPortfolioOnboarding(
-            user
+          (data || []).filter(
+            (stock) =>
+              stock?.id &&
+              stock.id !== "undefined"
           );
 
         setStocks(nextStocks);
         cachePortfolioStocks(user.id, nextStocks);
-
-        if (
-          !onboardingDecisionMade.current
-        ) {
-          const showFirstVisit =
-            nextStocks.length === 0 &&
-            !alreadySeen;
-
-          onboardingDecisionMade.current =
-            true;
-
-          setShowPortfolioOnboarding(
-            showFirstVisit
-          );
-
-          if (showFirstVisit) {
-            onboardingMarked.current =
-              true;
-
-            void markPortfolioOnboardingSeen(
-              user.id
-            );
-          }
-        }
-
-        if (
-          nextStocks.length > 0 &&
-          !alreadySeen &&
-          !onboardingMarked.current
-        ) {
-          onboardingMarked.current =
-            true;
-
-          setShowPortfolioOnboarding(
-            false
-          );
-
-          void markPortfolioOnboardingSeen(
-            user.id
-          );
-        }
       } catch (error) {
         console.error(
           "Error loading portfolio:",
@@ -385,17 +199,7 @@ export default function Home() {
       } finally {
         setLoading(false);
       }
-    }, [user]);
-
-  useEffect(() => {
-    onboardingDecisionMade.current =
-      false;
-
-    onboardingMarked.current =
-      false;
-
-    setShowPortfolioOnboarding(false);
-  }, [user?.id]);
+    }, [user?.id]);
 
   useEffect(() => {
     loadStocks();
@@ -421,19 +225,6 @@ export default function Home() {
           void loadStocks();
         }
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "watchlist_items",
-          filter:
-            `user_id=eq.${user.id}`,
-        },
-        () => {
-          void loadStocks();
-        }
-      )
       .subscribe();
 
     return () => {
@@ -449,8 +240,6 @@ export default function Home() {
       return;
     }
 
-    // Cached prices make the page appear instantly; force a silent refresh so
-    // the restored chart endpoint never waits for a manual pull-to-refresh.
     void refreshQuotes(
       stocks.map(
         (stock) =>
@@ -514,11 +303,7 @@ export default function Home() {
         {loading ? (
           <PortfolioLoading />
         ) : stocks.length === 0 ? (
-          showPortfolioOnboarding ? (
-            <PortfolioOnboarding />
-          ) : (
-            <EmptyPortfolio />
-          )
+          <PortfolioOnboarding />
         ) : (
           <motion.div
             initial={{
