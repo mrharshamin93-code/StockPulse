@@ -115,6 +115,19 @@ const DialogContent = React.forwardRef(({
       animationFrame = requestAnimationFrame(() => {
         animationFrame = null
 
+        const contentRect = content.getBoundingClientRect()
+        const scrollerRectBeforeSizing = scroller.getBoundingClientRect()
+        const availableHeight = Math.max(
+          132,
+          contentRect.bottom - scrollerRectBeforeSizing.top - 14
+        )
+        const targetHeight = Math.min(264, availableHeight)
+
+        scroller.style.maxHeight = `${targetHeight}px`
+        scroller.style.overflowY = "auto"
+        scroller.style.WebkitOverflowScrolling = "touch"
+        scroller.style.flexShrink = "1"
+
         const clientHeight = scroller.clientHeight
         const scrollHeight = scroller.scrollHeight
         const maxScrollTop = Math.max(0, scrollHeight - clientHeight)
@@ -124,12 +137,11 @@ const DialogContent = React.forwardRef(({
           return
         }
 
-        const contentRect = content.getBoundingClientRect()
         const scrollerRect = scroller.getBoundingClientRect()
-        const inset = 5
+        const inset = 6
         const trackHeight = Math.max(0, clientHeight - inset * 2)
         const thumbHeight = Math.max(
-          34,
+          38,
           Math.min(
             trackHeight,
             trackHeight * (clientHeight / scrollHeight)
@@ -147,7 +159,7 @@ const DialogContent = React.forwardRef(({
             contentRect.top +
             inset +
             thumbTravel * progress,
-          right: Math.max(3, contentRect.right - scrollerRect.right + 3),
+          right: Math.max(7, contentRect.right - scrollerRect.right + 7),
           height: thumbHeight,
         })
       })
@@ -190,6 +202,11 @@ const DialogContent = React.forwardRef(({
       window.visualViewport?.removeEventListener("scroll", updateThumb)
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
+
+      scroller.style.maxHeight = ""
+      scroller.style.overflowY = ""
+      scroller.style.WebkitOverflowScrolling = ""
+      scroller.style.flexShrink = ""
     }
   }, [children, visualViewport])
 
@@ -226,7 +243,7 @@ const DialogContent = React.forwardRef(({
         {searchScrollThumb && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute z-[70] w-[5px] rounded-full bg-foreground/55 shadow-[0_0_0_1px_hsl(var(--background)/0.45)]"
+            className="pointer-events-none absolute z-[90] w-[7px] rounded-full bg-foreground/70 shadow-[0_0_0_1px_hsl(var(--background)/0.7)]"
             style={{
               top: `${searchScrollThumb.top}px`,
               right: `${searchScrollThumb.right}px`,
