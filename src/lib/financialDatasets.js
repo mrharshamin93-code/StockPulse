@@ -2,6 +2,19 @@ import { supabase } from "@/lib/supabase";
 
 const DAY_SECONDS = 86400;
 const INTRADAY_TABLE = "stock_intraday_snapshots";
+const DAILY_CHART_CACHE_TTL_MS = 15 * 60 * 1000;
+const DAILY_CHART_BACKFILL_DAYS = 380;
+const DAILY_CHART_PERIODS = new Set([
+  "1W",
+  "1M",
+  "3M",
+  "6M",
+  "YTD",
+  "1Y",
+]);
+
+const dailyChartCache = new Map();
+const dailyChartInflight = new Map();
 
 function finiteNumber(value) {
   if (
@@ -402,6 +415,46 @@ function normalizeCandleRequest(body) {
   return body;
 }
 
+function candleSource(data) {
+  if (Array.isArray(data?.candles)) {
+    return data.candles;
+  }
+
+  if (Array.isArray(data?.prices)) {
+    return data.prices;
+  }
+
+  return [];
+}
+
+function normalizedCandles(data) {
+  return candleSource(data)
+    .filter((item) => {
+      const timestamp = finiteNumber(item?.t);
+      const close = finiteNumber(item?.c);
+
+      return timestamp !== null && close !== null;
+    })
+    .sort(
+      (left, right) =>
+        Number(left.t) - Number(right.t),
+    );
+}
+
+function withCandles(data, candles) {
+  return {
+    ...data,
+    candles,
+    prices: candles,
+    t: candles.map((item) => item.t),
+    o: candles.map((item) => item.o),
+    h: candles.map((item) => item.h),
+    l: candles.map((item) => item.l),
+    c: candles.map((item) => item.c),
+    v: candles.map((item) => item.v),
+  };
+}
+
 function normalizeCandlePayload(data, originalBody) {
   if (
     !data ||
@@ -419,23 +472,7 @@ function normalizeCandlePayload(data, originalBody) {
     return data;
   }
 
-  const source = Array.isArray(data.candles)
-    ? data.candles
-    : Array.isArray(data.prices)
-      ? data.prices
-      : [];
-
-  const candles = source
-    .filter((item) => {
-      const timestamp = finiteNumber(item?.t);
-      const close = finiteNumber(item?.c);
-
-      return timestamp !== null && close !== null;
-    })
-    .sort(
-      (left, right) =>
-        Number(left.t) - Number(right.t),
-    );
+  const candles = normalizedCandles(data);
 
   if (!candles.length) {
     return data;
@@ -456,17 +493,161 @@ function normalizeCandlePayload(data, originalBody) {
     selected = candles.slice(-5);
   }
 
-  return {
-    ...data,
-    candles: selected,
-    prices: selected,
-    t: selected.map((item) => item.t),
-    o: selected.map((item) => item.o),
-    h: selected.map((item) => item.h),
-    l: selected.map((item) => item.l),
-    c: selected.map((item) => item.c),
-    v: selected.map((item) => item.v),
-  };
+  return withCandles(data, selected);
+}
+
+function dailyChartCacheKey(body) {
+  return String(body?.ticker || "")
+    .trim()
+    .toUpperCase();
+}
+
+function sliceDailyChartPayload(data, body) {
+  const candles = normalizedCandles(data);
+
+  if (!candles.length) {
+    return data;
+  }
+
+  const period = String(body?.period || "").toUpperCase();
+  const requestedTo = finiteNumber(body?.to);
+  const requestedFrom = finiteNumber(body?.from);
+
+  let selected = candles;
+
+  if (requestedTo !== null) {
+    selected = selected.filter(
+      (item) => Number(item.t) <= requestedTo,
+    );
+  }
+
+  if (period === "1W") {
+    if (!selected.length) {
+      return withCandles(data, []);
+    }
+
+    const newestTimestamp = Number(
+      selected[selected.length - 1]?.t,
+    );
+    const oneWeekAgo = newestTimestamp - 7 * DAY_SECONDS;
+
+    selected = selected.filter(
+      (item) => Number(item.t) >= oneWeekAgo,
+    );
+
+    if (selected.length < 2) {
+      selected = candles.slice(-5);
+    }
+  } else if (requestedFrom !== null) {
+    selected = selected.filter(
+      (item) => Number(item.t) >= requestedFrom,
+    );
+  }
+
+  return withCandles(data, selected);
+}
+
+function isFreshDailyCache(entry) {
+  return Boolean(
+    entry &&
+    Date.now() - entry.fetchedAt < DAILY_CHART_CACHE_TTL_MS &&
+    normalizedCandles(entry.data).length > 0
+  );
+}
+
+async function loadDailyChartBacking(body) {
+  const ticker = dailyChartCacheKey(body);
+
+  if (!ticker) {
+    return null;
+  }
+
+  const cached = dailyChartCache.get(ticker);
+
+  if (isFreshDailyCache(cached)) {
+    return cached.data;
+  }
+
+  const existingRequest = dailyChartInflight.get(ticker);
+
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const to =
+    finiteNumber(body?.to) ??
+    Math.floor(Date.now() / 1000);
+  const from = to - DAILY_CHART_BACKFILL_DAYS * DAY_SECONDS;
+
+  const request = (async () => {
+    const { data, error } = await supabase.functions.invoke(
+      "stock-chart-prices",
+      {
+        body: {
+          action: "candles_range",
+          ticker,
+          period: "1Y",
+          resolution: "D",
+          from,
+          to,
+        },
+      },
+    );
+
+    if (error) {
+      console.error(
+        "Daily chart preload failed:",
+        error,
+      );
+      throw safeProviderError("candles_range");
+    }
+
+    if (data?.error) {
+      console.error(
+        "Daily chart preload provider error:",
+        data.error,
+      );
+      throw safeProviderError("candles_range");
+    }
+
+    const normalized = withCandles(
+      data,
+      normalizedCandles(data),
+    );
+
+    dailyChartCache.set(ticker, {
+      data: normalized,
+      fetchedAt: Date.now(),
+    });
+
+    return normalized;
+  })();
+
+  dailyChartInflight.set(ticker, request);
+
+  try {
+    return await request;
+  } finally {
+    dailyChartInflight.delete(ticker);
+  }
+}
+
+export async function preloadDailyChart(ticker) {
+  const normalizedTicker = String(ticker || "")
+    .trim()
+    .toUpperCase();
+
+  if (!normalizedTicker) {
+    return null;
+  }
+
+  return loadDailyChartBacking({
+    action: "candles_range",
+    ticker: normalizedTicker,
+    period: "1Y",
+    resolution: "D",
+    to: Math.floor(Date.now() / 1000),
+  });
 }
 
 function safeProviderError(action) {
@@ -513,6 +694,20 @@ export async function financialDatasetsRequest(body) {
   const period = String(
     body?.period || "",
   ).toUpperCase();
+
+  if (
+    isChartRequest &&
+    DAILY_CHART_PERIODS.has(period)
+  ) {
+    const dailyBacking = await loadDailyChartBacking(body);
+
+    if (dailyBacking) {
+      return normalizeCandlePayload(
+        sliceDailyChartPayload(dailyBacking, body),
+        body,
+      );
+    }
+  }
 
   const functionName =
     body?.action === "news"
