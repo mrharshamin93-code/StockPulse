@@ -45,6 +45,9 @@ export default function PriceAlerts() {
   const [open, setOpen] =
     useState(false);
 
+  const [openedFromWatchlist, setOpenedFromWatchlist] =
+    useState(false);
+
   const [ticker, setTicker] =
     useState("");
 
@@ -132,6 +135,7 @@ export default function PriceAlerts() {
     setCondition("above");
     setTargetPrice("");
     setError("");
+    setOpenedFromWatchlist(true);
     setOpen(true);
 
     navigate(
@@ -149,11 +153,22 @@ export default function PriceAlerts() {
   ]);
 
   function openBlankAlertDialog() {
+    setOpenedFromWatchlist(false);
     setTicker("");
     setCondition("above");
     setTargetPrice("");
     setError("");
     setOpen(true);
+  }
+
+  function returnToWatchlistIfNeeded() {
+    if (!openedFromWatchlist) {
+      return false;
+    }
+
+    setOpenedFromWatchlist(false);
+    navigate(-1);
+    return true;
   }
 
   function handleAlertDialogOpenChange(
@@ -168,6 +183,7 @@ export default function PriceAlerts() {
       setTicker("");
       setCondition("above");
       setTargetPrice("");
+      returnToWatchlistIfNeeded();
     }
   }
 
@@ -278,7 +294,9 @@ export default function PriceAlerts() {
       setCondition("above");
       setTargetPrice("");
 
-      await load();
+      if (!returnToWatchlistIfNeeded()) {
+        await load();
+      }
     } catch (saveError) {
       console.error(
         "Price alert creation failed:",
@@ -384,7 +402,11 @@ export default function PriceAlerts() {
     >
       <SubPageHeader
         title="Price Alerts"
-        backPath="/settings"
+        backPath={
+          openedFromWatchlist
+            ? "/watchlist"
+            : "/settings"
+        }
       />
 
       <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
