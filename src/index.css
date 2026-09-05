@@ -142,6 +142,22 @@
   contain: layout paint style;
 }
 
+/* Apple-style watchlist swipe action palette. */
+.stockpulse-watchlist-card button[aria-label="Delete"] {
+  background-color: #ff3b30 !important;
+  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.24);
+}
+
+.stockpulse-watchlist-card button[aria-label="Alert"] {
+  background-color: #ff9f0a !important;
+  box-shadow: 0 4px 12px rgba(255, 159, 10, 0.22);
+}
+
+.stockpulse-watchlist-card button[aria-label="Share"] {
+  background-color: #0a84ff !important;
+  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.22);
+}
+
 /*
  * Make every app back control very easy to hit on touch screens without
  * changing the visible icon/button size. The pseudo-element expands the
