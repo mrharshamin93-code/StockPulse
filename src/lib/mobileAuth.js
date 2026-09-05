@@ -2,7 +2,10 @@ import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 
-import { supabase } from "@/lib/supabase";
+import {
+  persistAppleAuthorizationFromSession,
+  supabase,
+} from "@/lib/supabase";
 
 export const IOS_AUTH_CALLBACK =
   "com.harshamin.stockpulse://auth/callback";
@@ -199,6 +202,9 @@ async function handleNativeUrl(url) {
     if (
       existingSessionData?.session?.user
     ) {
+      persistAppleAuthorizationFromSession(
+        existingSessionData.session,
+      );
       return;
     }
 
@@ -237,6 +243,9 @@ async function handleNativeUrl(url) {
         recoveredSessionData?.session
           ?.user
       ) {
+        persistAppleAuthorizationFromSession(
+          recoveredSessionData.session,
+        );
         return;
       }
 
@@ -248,6 +257,10 @@ async function handleNativeUrl(url) {
         "Authentication completed but no session was created.",
       );
     }
+
+    persistAppleAuthorizationFromSession(
+      data.session,
+    );
 
     /*
      * Do not reload the Capacitor WebView here.
