@@ -201,43 +201,38 @@ header[style*="safe-area-inset-top"] button[aria-label="Go back"]::after {
 }
 
 /*
- * Add to Watchlist search results: use the browser's real vertical scrollbar.
- * It only exists when the results actually overflow, so short result sets stay
- * clean while longer ticker/company searches clearly show that the list can be
- * scrolled. The thumb is the real scroll thumb, not a decorative indicator.
+ * Add to Watchlist search results: show only the real moving scroll thumb.
+ * No decorative track or fake indicator is drawn. The thumb appears only when
+ * the result list is taller than its box and follows the actual scroll position.
  */
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto {
-  scrollbar-width: auto;
-  scrollbar-color: hsl(var(--muted-foreground) / 0.7)
-    hsl(var(--border) / 0.35);
-  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--foreground) / 0.58) transparent;
+  scrollbar-gutter: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar-track {
-  background: hsl(var(--border) / 0.35);
-  border-radius: 9999px;
+  background: transparent;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar-thumb {
-  min-height: 34px;
-  background: hsl(var(--muted-foreground) / 0.7);
-  border: 2px solid transparent;
-  background-clip: content-box;
+  min-height: 38px;
+  background: hsl(var(--foreground) / 0.58);
   border-radius: 9999px;
 }
 
 [role="dialog"]:has(input[placeholder="Search ticker or company"])
   .overflow-y-auto::-webkit-scrollbar-thumb:active {
-  background: hsl(var(--foreground) / 0.65);
-  background-clip: content-box;
+  background: hsl(var(--foreground) / 0.78);
 }
 
 /*
