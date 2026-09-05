@@ -12,7 +12,7 @@ import {
 
 import { useAuth } from "@/lib/AuthContext";
 
-const LAST_UPDATED = "July 30, 2026";
+const LAST_UPDATED = "September 5, 2026";
 
 const PRIVACY_POLICY = `
 StockPulse ("StockPulse," "we," "our," or "us") provides stock-price information, portfolio tracking, watchlists, alerts, stock-screening tools, reports, and informational AI-generated stock analysis.
@@ -43,6 +43,10 @@ StockPulse stores information you voluntarily enter to provide portfolio-trackin
 
 This information is used to provide StockPulse features. StockPulse does not connect to your bank or brokerage account, hold money, or execute securities transactions.
 
+### Push notifications
+
+If you enable push notifications, StockPulse may store an app- and device-specific push notification token associated with your account. We use this token to deliver notifications you request or enable, such as stock price alerts. Push notification delivery on Apple devices is provided through the Apple Push Notification service (APNs). You can control notification permissions through your device settings.
+
 ### Referral and premium information
 
 If you participate in the referral program or use premium features, we may store your referral code, referral attribution, promotional eligibility, premium entitlement, and applicable expiration information.
@@ -55,10 +59,11 @@ When you contact StockPulse, we may collect your email address, the subject and 
 
 StockPulse does not use third-party behavioral analytics or advertising trackers.
 
-Our hosting, authentication, security, email-delivery, and infrastructure providers may process limited technical information needed to operate and protect the service, such as:
+Our hosting, authentication, security, email-delivery, notification-delivery, and infrastructure providers may process limited technical information needed to operate and protect the service, such as:
 
 - IP address.
 - Browser or device type.
+- Push notification token, when notifications are enabled.
 - Request timestamps.
 - Authentication events.
 - Error and security logs.
@@ -90,6 +95,7 @@ We use collected information to:
 - Calculate manually tracked portfolio values and returns.
 - Provide stock prices, charts, company information, news, and screening data.
 - Create watchlists, alerts, saved screens, and reports.
+- Deliver enabled push notifications, including price alerts.
 - Generate informational AI-assisted stock analysis.
 - Manage referrals and premium access.
 - Respond to support requests.
@@ -106,10 +112,11 @@ StockPulse relies on third-party service providers to operate the service. These
 - xAI, for informational AI-generated stock analysis.
 - Vercel, for website hosting, delivery, and operational services.
 - Apple and Google, when you choose their authentication services.
+- Apple Push Notification service (APNs), for delivery of push notifications on Apple devices.
 - An email-delivery provider, if enabled, for transmitting support messages.
 - Apple or another authorized payment provider, if paid features are offered through an applicable platform.
 
-When StockPulse requests market data or AI analysis, relevant stock symbols, company names, or prompts may be transmitted to the applicable provider. Each provider processes information under its own terms and privacy practices.
+When StockPulse requests market data or AI analysis, relevant stock symbols, company names, or prompts may be transmitted to the applicable provider. When push notifications are enabled, the applicable push notification token and notification payload are transmitted as necessary to deliver the notification. Each provider processes information under its own terms and privacy practices.
 
 ## 5. Data Sharing
 
@@ -141,7 +148,7 @@ No online service can guarantee absolute security. You are responsible for maint
 
 ## 8. Data Retention
 
-We generally retain account and portfolio information while your account remains active or as needed to provide StockPulse.
+We generally retain account and portfolio information while your account remains active or as needed to provide StockPulse. Push notification tokens may be retained while notifications are enabled or as needed to provide notification functionality and may be replaced when the operating system issues a new token.
 
 Support communications and limited operational records may be retained for a reasonable period to respond to requests, maintain security, diagnose problems, and comply with legal obligations.
 
@@ -156,6 +163,7 @@ Account deletion is intended to remove:
 - Your StockPulse account.
 - Portfolio holdings and transactions.
 - Watchlists and price alerts.
+- Push notification registration information associated with your account.
 - Saved screens.
 - Reports and related files.
 - Referral and profile information associated with your account.
