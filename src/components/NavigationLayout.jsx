@@ -47,6 +47,20 @@ const tabs = [
 const TAB_BAR_HEIGHT = 56;
 const CHART_LONG_PRESS_DELAY = 325;
 const CHART_SCROLL_CANCEL_DISTANCE = 8;
+const CHART_AXIS_TRANSITION_DELAY = 650;
+const STOCK_CHART_PERIODS = new Set([
+  "1D",
+  "1W",
+  "1M",
+  "3M",
+  "6M",
+  "YTD",
+  "1Y",
+  "2Y",
+  "5Y",
+  "10Y",
+  "All",
+]);
 
 export default function NavigationLayout() {
   const location = useLocation();
@@ -147,6 +161,8 @@ export default function NavigationLayout() {
     }
 
     let gesture = null;
+    let axisTransitionActive = false;
+    let axisRevealTimer = null;
 
     const getChartSurface = (target) => {
       if (!(target instanceof Element)) {
@@ -162,6 +178,68 @@ export default function NavigationLayout() {
       }
 
       return responsiveContainer.parentElement;
+    };
+
+    const getXAxisElements = () => {
+      const scrollRoot = contentScrollRef.current;
+
+      if (!scrollRoot) return [];
+
+      return Array.from(
+        scrollRoot.querySelectorAll(".recharts-xAxis")
+      );
+    };
+
+    const hideChartXAxis = () => {
+      getXAxisElements().forEach((axis) => {
+        if (axis.style.opacity !== "0") {
+          axis.style.opacity = "0";
+        }
+      });
+    };
+
+    const revealChartXAxis = () => {
+      axisTransitionActive = false;
+
+      getXAxisElements().forEach((axis) => {
+        axis.style.removeProperty("opacity");
+      });
+    };
+
+    const scheduleXAxisReveal = () => {
+      if (axisRevealTimer) {
+        window.clearTimeout(axisRevealTimer);
+      }
+
+      axisRevealTimer = window.setTimeout(() => {
+        revealChartXAxis();
+        axisRevealTimer = null;
+      }, CHART_AXIS_TRANSITION_DELAY);
+    };
+
+    const handleChartPeriodClick = (event) => {
+      const button =
+        event.target instanceof Element
+          ? event.target.closest("button")
+          : null;
+
+      if (!button) return;
+
+      const label = String(button.textContent || "").trim();
+
+      if (!STOCK_CHART_PERIODS.has(label)) {
+        return;
+      }
+
+      const chartSection = button.closest("section");
+
+      if (!chartSection?.querySelector(".recharts-responsive-container")) {
+        return;
+      }
+
+      axisTransitionActive = true;
+      hideChartXAxis();
+      scheduleXAxisReveal();
     };
 
     const enableChartScrolling = () => {
@@ -194,6 +272,10 @@ export default function NavigationLayout() {
             );
           }
         });
+
+      if (axisTransitionActive) {
+        hideChartXAxis();
+      }
     };
 
     const dispatchChartMouseMove = (
@@ -338,6 +420,11 @@ export default function NavigationLayout() {
     }
 
     document.addEventListener(
+      "click",
+      handleChartPeriodClick,
+      true
+    );
+    document.addEventListener(
       "touchstart",
       handleTouchStart,
       { capture: true, passive: true }
@@ -360,8 +447,19 @@ export default function NavigationLayout() {
 
     return () => {
       clearLongPressTimer();
+
+      if (axisRevealTimer) {
+        window.clearTimeout(axisRevealTimer);
+      }
+
+      revealChartXAxis();
       observer.disconnect();
 
+      document.removeEventListener(
+        "click",
+        handleChartPeriodClick,
+        true
+      );
       document.removeEventListener(
         "touchstart",
         handleTouchStart,
