@@ -2,31 +2,21 @@ const API_BASE_URL =
   "https://api.financialdatasets.ai";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
-// Every attempt consumes a provider request. The shared cache handles
-// fallback and retry backoff without spending hidden extra units.
 const DEFAULT_MAX_RETRIES = 0;
-
 const MAX_PRICE_PAGES = 100;
 
-type UnknownRecord =
-  Record<string, unknown>;
+type UnknownRecord = Record<string, unknown>;
 
 export type ProviderRequestHooks = {
   beforeRequest?: () => Promise<void>;
-  afterRequest?: (
-    success: boolean,
-  ) => Promise<void>;
+  afterRequest?: (success: boolean) => Promise<void>;
 };
 
 class FinancialDatasetsProviderError extends Error {
   status: number;
   payload: unknown;
 
-  constructor(
-    message: string,
-    status: number,
-    payload: unknown,
-  ) {
+  constructor(message: string, status: number, payload: unknown) {
     super(message);
     this.name = "FinancialDatasetsProviderError";
     this.status = status;
@@ -55,43 +45,22 @@ export type FinancialDatasetsPrice = {
   volume: number | null;
 };
 
-function normalizeText(
-  value: unknown,
-): string {
-  return String(value ?? "")
-    .trim();
+function normalizeText(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function normalizeTicker(
-  value: unknown,
-): string {
-  return normalizeText(value)
-    .toUpperCase();
+function normalizeTicker(value: unknown): string {
+  return normalizeText(value).toUpperCase();
 }
 
-export function finiteNumber(
-  value: unknown,
-): number | null {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
+export function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
-
-  return Number.isFinite(parsed)
-    ? parsed
-    : null;
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function timestampSeconds(
-  value: unknown,
-): number | null {
+export function timestampSeconds(value: unknown): number | null {
   const numeric = finiteNumber(value);
-
   if (numeric !== null) {
     return numeric > 10_000_000_000
       ? Math.floor(numeric / 1000)
@@ -99,105 +68,40 @@ export function timestampSeconds(
   }
 
   const text = normalizeText(value);
-
-  if (!text) {
-    return null;
-  }
+  if (!text) return null;
 
   const parsed = Date.parse(text);
-
-  return Number.isFinite(parsed)
-    ? Math.floor(parsed / 1000)
-    : null;
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
 }
 
-export function timestampToIso(
-  value: unknown,
-): string | null {
-  const timestamp =
-    timestampSeconds(value);
+export function timestampToIso(value: unknown): string | null {
+  const timestamp = timestampSeconds(value);
+  if (timestamp === null || timestamp <= 0) return null;
 
-  if (
-    timestamp === null ||
-    timestamp <= 0
-  ) {
-    return null;
-  }
-
-  const date = new Date(
-    timestamp * 1000,
-  );
-
-  return Number.isNaN(
-    date.getTime(),
-  )
-    ? null
-    : date.toISOString();
+  const date = new Date(timestamp * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function providerMessage(
-  status: number,
-  payload: unknown,
-): string {
-  if (
-    payload &&
-    typeof payload === "object"
-  ) {
-    const record =
-      payload as UnknownRecord;
-
+function providerMessage(status: number, payload: unknown): string {
+  if (payload && typeof payload === "object") {
+    const record = payload as UnknownRecord;
     const message =
-      normalizeText(
-        record.message,
-      ) ||
-      normalizeText(
-        record.error,
-      ) ||
-      normalizeText(
-        record.detail,
-      );
-
-    if (message) {
-      return message;
-    }
+      normalizeText(record.message) ||
+      normalizeText(record.error) ||
+      normalizeText(record.detail);
+    if (message) return message;
   }
 
-  if (
-    typeof payload === "string" &&
-    payload.trim()
-  ) {
-    return payload.trim();
-  }
-
-  if (status === 401) {
-    return "Financial Datasets rejected the API key.";
-  }
-
-  if (status === 402) {
-    return "Financial Datasets requires an active plan or API credits.";
-  }
-
-  if (status === 404) {
-    return "Financial Datasets returned no data for the requested ticker.";
-  }
-
-  if (status === 429) {
-    return "Financial Datasets rate limit reached.";
-  }
-
+  if (typeof payload === "string" && payload.trim()) return payload.trim();
+  if (status === 401) return "Financial Datasets rejected the API key.";
+  if (status === 402) return "Financial Datasets requires an active plan or API credits.";
+  if (status === 404) return "Financial Datasets returned no data for the requested ticker.";
+  if (status === 429) return "Financial Datasets rate limit reached.";
   return `Financial Datasets returned status ${status}.`;
 }
 
-async function delay(
-  milliseconds: number,
-): Promise<void> {
-  await new Promise(
-    (resolve) =>
-      setTimeout(
-        resolve,
-        milliseconds,
-      ),
-  );
+async function delay(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function providerGet(
@@ -208,47 +112,20 @@ async function providerGet(
   maxRetries = DEFAULT_MAX_RETRIES,
   hooks: ProviderRequestHooks = {},
 ): Promise<unknown> {
-  if (!apiKey) {
-    throw new Error(
-      "Missing FINANCIAL_DATASETS_API_KEY.",
-    );
-  }
+  if (!apiKey) throw new Error("Missing FINANCIAL_DATASETS_API_KEY.");
 
-  const url = new URL(
-    `${API_BASE_URL}${path}`,
-  );
-
-  for (
-    const [key, value]
-    of Object.entries(query)
-  ) {
-    if (
-      value !== null &&
-      value !== undefined &&
-      value !== ""
-    ) {
-      url.searchParams.set(
-        key,
-        String(value),
-      );
+  const url = new URL(`${API_BASE_URL}${path}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== null && value !== undefined && value !== "") {
+      url.searchParams.set(key, String(value));
     }
   }
 
   let lastError: Error | null = null;
 
-  for (
-    let attempt = 0;
-    attempt <= maxRetries;
-    attempt += 1
-  ) {
-    const controller =
-      new AbortController();
-
-    const timeout = setTimeout(
-      () => controller.abort(),
-      timeoutMs,
-    );
-
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     let requestStarted = false;
     let resultRecorded = false;
 
@@ -256,327 +133,178 @@ async function providerGet(
       await hooks.beforeRequest?.();
       requestStarted = true;
 
-      const response = await fetch(
-        url.toString(),
-        {
-          headers: {
-            Accept: "application/json",
-            "X-API-KEY": apiKey,
-          },
-          signal: controller.signal,
-        },
-      );
+      const response = await fetch(url.toString(), {
+        headers: { Accept: "application/json", "X-API-KEY": apiKey },
+        signal: controller.signal,
+      });
 
-      const text =
-        await response.text();
-
+      const text = await response.text();
       let payload: unknown = null;
-
       if (text) {
-        try {
-          payload = JSON.parse(text);
-        } catch {
-          payload = text;
-        }
+        try { payload = JSON.parse(text); } catch { payload = text; }
       }
 
-      await hooks.afterRequest?.(
-        response.ok,
-      );
+      await hooks.afterRequest?.(response.ok);
       resultRecorded = true;
 
-      if (response.ok) {
-        return payload;
-      }
+      if (response.ok) return payload;
 
       const error = new FinancialDatasetsProviderError(
-        providerMessage(
-          response.status,
-          payload,
-        ),
+        providerMessage(response.status, payload),
         response.status,
         payload,
       );
 
-      if (
-        attempt < maxRetries &&
-        (
-          response.status === 429 ||
-          response.status >= 500
-        )
-      ) {
+      if (attempt < maxRetries && (response.status === 429 || response.status >= 500)) {
         lastError = error;
-        await delay(
-          800 * 2 ** attempt,
-        );
+        await delay(800 * 2 ** attempt);
         continue;
       }
 
       throw error;
     } catch (error) {
-      if (
-        requestStarted &&
-        !resultRecorded
-      ) {
-        try {
-          await hooks.afterRequest?.(
-            false,
-          );
-        } catch (usageError) {
+      if (requestStarted && !resultRecorded) {
+        try { await hooks.afterRequest?.(false); }
+        catch (usageError) {
           console.warn(
             "Could not record Financial Datasets request result:",
-            usageError instanceof Error
-              ? usageError.message
-              : usageError,
+            usageError instanceof Error ? usageError.message : usageError,
           );
         }
       }
 
-      lastError =
-        error instanceof Error
-          ? error
-          : new Error(
-              "Financial Datasets request failed.",
-            );
+      lastError = error instanceof Error
+        ? error
+        : new Error("Financial Datasets request failed.");
 
       if (
         attempt >= maxRetries ||
-        (
-          lastError.name !==
-            "AbortError" &&
-          !/fetch|network/i.test(
-            lastError.message,
-          )
-        )
+        (lastError.name !== "AbortError" && !/fetch|network/i.test(lastError.message))
       ) {
         throw lastError;
       }
 
-      await delay(
-        800 * 2 ** attempt,
-      );
+      await delay(800 * 2 ** attempt);
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  throw lastError ??
-    new Error(
-      "Financial Datasets request failed.",
-    );
+  throw lastError ?? new Error("Financial Datasets request failed.");
 }
 
 export async function fetchFinancialDatasetsQuote(
   tickerValue: unknown,
   apiKey: string,
 ): Promise<FinancialDatasetsQuote> {
-  const ticker =
-    normalizeTicker(tickerValue);
+  const ticker = normalizeTicker(tickerValue);
+  if (!ticker) throw new Error("Ticker is required.");
 
-  if (!ticker) {
-    throw new Error(
-      "Ticker is required.",
-    );
-  }
+  const payload = await providerGet("/prices/snapshot", { ticker }, apiKey);
+  const root = payload && typeof payload === "object"
+    ? payload as UnknownRecord
+    : {};
+  const snapshot = root.snapshot && typeof root.snapshot === "object"
+    ? root.snapshot as UnknownRecord
+    : root;
 
-  const payload =
-    await providerGet(
-      "/prices/snapshot",
-      { ticker },
-      apiKey,
-    );
-
-  const root =
-    payload &&
-    typeof payload === "object"
-      ? payload as UnknownRecord
-      : {};
-
-  const snapshot =
-    root.snapshot &&
-    typeof root.snapshot === "object"
-      ? root.snapshot as UnknownRecord
-      : root;
-
-  const snapshotPrice = finiteNumber(
-    snapshot.price ??
-      snapshot.close ??
-      snapshot.current_price,
+  // `price` can move in pre/after-hours while `close` remains the completed
+  // regular-session close. Keep the latest price for display, but calculate
+  // the regular daily move from the regular close so extended-hours movement
+  // is not folded into StockPulse's "Today" percentage.
+  const latestPrice = finiteNumber(
+    snapshot.price ?? snapshot.current_price ?? snapshot.close,
   );
-
-  const changeAmount = finiteNumber(
-    snapshot.day_change ??
-      snapshot.change ??
-      snapshot.change_amount,
+  const regularClose = finiteNumber(snapshot.close);
+  const providerChangeAmount = finiteNumber(
+    snapshot.day_change ?? snapshot.change ?? snapshot.change_amount,
   );
 
   const previousClose =
-    finiteNumber(
-      snapshot.previous_close ??
-        snapshot.previousClose,
-    ) ??
+    finiteNumber(snapshot.previous_close ?? snapshot.previousClose) ??
     (
-      snapshotPrice !== null &&
-      changeAmount !== null
-        ? snapshotPrice - changeAmount
+      latestPrice !== null && providerChangeAmount !== null
+        ? latestPrice - providerChangeAmount
         : null
     );
 
-  // Some valid snapshots, especially outside regular market hours, expose
-  // only the most recent close. Treat it as the current display price rather
-  // than returning an accepted quote with a null price.
-  const price =
-    snapshotPrice ??
-    previousClose;
+  const price = latestPrice ?? previousClose;
 
+  let changeAmount = providerChangeAmount;
   let changePercent = finiteNumber(
-    snapshot.day_change_percent ??
-      snapshot.change_percent ??
-      snapshot.changePercent,
+    snapshot.day_change_percent ?? snapshot.change_percent ?? snapshot.changePercent,
   );
 
   if (
+    regularClose !== null &&
+    regularClose > 0 &&
+    previousClose !== null &&
+    previousClose > 0
+  ) {
+    changeAmount = regularClose - previousClose;
+    changePercent = (changeAmount / previousClose) * 100;
+  } else if (
     changePercent === null &&
     changeAmount !== null &&
     previousClose !== null &&
     previousClose !== 0
   ) {
-    changePercent =
-      changeAmount /
-      previousClose *
-      100;
+    changePercent = (changeAmount / previousClose) * 100;
   }
 
   if (
-    (
-      price === null ||
-      price <= 0
-    ) &&
-    (
-      previousClose === null ||
-      previousClose <= 0
-    )
+    (price === null || price <= 0) &&
+    (previousClose === null || previousClose <= 0)
   ) {
-    throw new Error(
-      "Financial Datasets returned no usable quote.",
-    );
+    throw new Error("Financial Datasets returned no usable quote.");
   }
 
   return {
-    ticker:
-      normalizeTicker(
-        snapshot.ticker,
-      ) || ticker,
+    ticker: normalizeTicker(snapshot.ticker) || ticker,
     price,
     changeAmount,
     changePercent,
     previousClose,
-    open: finiteNumber(
-      snapshot.open ??
-        snapshot.open_price,
-    ),
-    high: finiteNumber(
-      snapshot.high ??
-        snapshot.day_high,
-    ),
-    low: finiteNumber(
-      snapshot.low ??
-        snapshot.day_low,
-    ),
+    open: finiteNumber(snapshot.open ?? snapshot.open_price),
+    high: finiteNumber(snapshot.high ?? snapshot.day_high),
+    low: finiteNumber(snapshot.low ?? snapshot.day_low),
     timestamp:
-      timestampSeconds(
-        snapshot.time_milliseconds,
-      ) ??
-      timestampSeconds(
-        snapshot.time,
-      ) ??
-      timestampSeconds(
-        snapshot.date,
-      ),
+      timestampSeconds(snapshot.time_milliseconds) ??
+      timestampSeconds(snapshot.time) ??
+      timestampSeconds(snapshot.date),
   };
 }
 
-function normalizePriceRecord(
-  item: unknown,
-): FinancialDatasetsPrice | null {
-  const record =
-    item &&
-    typeof item === "object"
-      ? item as UnknownRecord
-      : {};
+function normalizePriceRecord(item: unknown): FinancialDatasetsPrice | null {
+  const record = item && typeof item === "object"
+    ? item as UnknownRecord
+    : {};
+  const timestamp = timestampSeconds(record.time ?? record.date);
+  const close = finiteNumber(record.close ?? record.price);
 
-  const timestamp =
-    timestampSeconds(
-      record.time ??
-        record.date,
-    );
-
-  const close = finiteNumber(
-    record.close ??
-      record.price,
-  );
-
-  if (
-    timestamp === null ||
-    timestamp <= 0 ||
-    close === null ||
-    close <= 0
-  ) {
+  if (timestamp === null || timestamp <= 0 || close === null || close <= 0) {
     return null;
   }
 
-  const volume = finiteNumber(
-    record.volume,
-  );
-
+  const volume = finiteNumber(record.volume);
   return {
     timestamp,
-    open: finiteNumber(
-      record.open,
-    ),
-    high: finiteNumber(
-      record.high,
-    ),
-    low: finiteNumber(
-      record.low,
-    ),
+    open: finiteNumber(record.open),
+    high: finiteNumber(record.high),
+    low: finiteNumber(record.low),
     close,
-    volume:
-      volume !== null &&
-      volume >= 0
-        ? volume
-        : null,
+    volume: volume !== null && volume >= 0 ? volume : null,
   };
 }
 
-function cursorFromNextPageUrl(
-  value: unknown,
-): string | null {
-  const nextPageUrl =
-    normalizeText(value);
-
-  if (!nextPageUrl) {
-    return null;
-  }
+function cursorFromNextPageUrl(value: unknown): string | null {
+  const nextPageUrl = normalizeText(value);
+  if (!nextPageUrl) return null;
 
   try {
-    const url = new URL(
-      nextPageUrl,
-      API_BASE_URL,
-    );
-
-    if (
-      url.origin !==
-      new URL(API_BASE_URL).origin
-    ) {
-      return null;
-    }
-
-    return normalizeText(
-      url.searchParams.get(
-        "cursor",
-      ),
-    ) || null;
+    const url = new URL(nextPageUrl, API_BASE_URL);
+    if (url.origin !== new URL(API_BASE_URL).origin) return null;
+    return normalizeText(url.searchParams.get("cursor")) || null;
   } catch {
     return null;
   }
@@ -592,129 +320,50 @@ export async function fetchFinancialDatasetsPrices(
     requestHooks?: ProviderRequestHooks;
   },
 ): Promise<FinancialDatasetsPrice[]> {
-  const ticker =
-    normalizeTicker(tickerValue);
-
-  if (!ticker) {
-    throw new Error(
-      "Ticker is required.",
-    );
-  }
+  const ticker = normalizeTicker(tickerValue);
+  if (!ticker) throw new Error("Ticker is required.");
 
   const baseQuery: UnknownRecord = {
     ticker,
-    interval:
-      options.interval ??
-      "day",
-    start_date:
-      options.startDate,
-    end_date:
-      options.endDate,
+    interval: options.interval ?? "day",
+    start_date: options.startDate,
+    end_date: options.endDate,
   };
 
-  const allPrices:
-    FinancialDatasetsPrice[] = [];
+  const allPrices: FinancialDatasetsPrice[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
 
-  const seenCursors =
-    new Set<string>();
-
-  let cursor:
-    string | null = null;
-
-  for (
-    let page = 0;
-    page < MAX_PRICE_PAGES;
-    page += 1
-  ) {
-    const payload =
-      await providerGet(
-        "/prices",
-        {
-          ...baseQuery,
-          ...(cursor
-            ? { cursor }
-            : {}),
-        },
-        apiKey,
-        DEFAULT_TIMEOUT_MS,
-        DEFAULT_MAX_RETRIES,
-        options.requestHooks,
-      );
-
-    const root =
-      payload &&
-      typeof payload === "object"
-        ? payload as UnknownRecord
-        : {};
-
-    const prices =
-      Array.isArray(
-        root.prices,
-      )
-        ? root.prices
-        : [];
-
-    for (
-      const item of prices
-    ) {
-      const normalized =
-        normalizePriceRecord(
-          item,
-        );
-
-      if (normalized) {
-        allPrices.push(
-          normalized,
-        );
-      }
-    }
-
-    const nextCursor =
-      cursorFromNextPageUrl(
-        root.next_page_url,
-      );
-
-    if (!nextCursor) {
-      break;
-    }
-
-    if (
-      seenCursors.has(
-        nextCursor,
-      )
-    ) {
-      break;
-    }
-
-    seenCursors.add(
-      nextCursor,
+  for (let page = 0; page < MAX_PRICE_PAGES; page += 1) {
+    const payload = await providerGet(
+      "/prices",
+      { ...baseQuery, ...(cursor ? { cursor } : {}) },
+      apiKey,
+      DEFAULT_TIMEOUT_MS,
+      DEFAULT_MAX_RETRIES,
+      options.requestHooks,
     );
 
-    cursor =
-      nextCursor;
+    const root = payload && typeof payload === "object"
+      ? payload as UnknownRecord
+      : {};
+    const prices = Array.isArray(root.prices) ? root.prices : [];
+
+    for (const item of prices) {
+      const normalized = normalizePriceRecord(item);
+      if (normalized) allPrices.push(normalized);
+    }
+
+    const nextCursor = cursorFromNextPageUrl(root.next_page_url);
+    if (!nextCursor || seenCursors.has(nextCursor)) break;
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
   }
 
-  const deduped =
-    new Map<
-      number,
-      FinancialDatasetsPrice
-    >();
+  const deduped = new Map<number, FinancialDatasetsPrice>();
+  for (const price of allPrices) deduped.set(price.timestamp, price);
 
-  for (
-    const price of
-      allPrices
-  ) {
-    deduped.set(
-      price.timestamp,
-      price,
-    );
-  }
-
-  return [
-    ...deduped.values(),
-  ].sort(
-    (left, right) =>
-      left.timestamp -
-      right.timestamp,
+  return [...deduped.values()].sort(
+    (left, right) => left.timestamp - right.timestamp,
   );
 }
