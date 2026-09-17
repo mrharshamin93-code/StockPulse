@@ -1482,11 +1482,25 @@ function StockChart({
               <YAxis
                 orientation="right"
                 domain={["auto", "auto"]}
-                tickFormatter={(value) =>
-                  comparisonsActive
-                    ? `${value.toFixed(0)}%`
-                    : `$${value.toFixed(0)}`
-                }
+                tickFormatter={(value) => {
+                  if (comparisonsActive) {
+                    return `${value.toFixed(0)}%`;
+                  }
+
+                  const prices = displayChartData
+                    .map((point) => Number(point?.primaryValue))
+                    .filter(Number.isFinite);
+                  const minPrice = prices.length ? Math.min(...prices) : Number(value);
+                  const maxPrice = prices.length ? Math.max(...prices) : Number(value);
+                  const range = maxPrice - minPrice;
+                  const decimals =
+                    range < 0.01 ? 4 :
+                    range < 0.1 ? 3 :
+                    range < 5 ? 2 :
+                    range < 50 ? 1 : 0;
+
+                  return `$${Number(value).toFixed(decimals)}`;
+                }}
                 tick={{
                   fontSize: 10,
                   fill: "#6b7280",
