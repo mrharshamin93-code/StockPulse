@@ -138,6 +138,151 @@ async function marketDataProxy(body, signal) {
   return payload;
 }
 
+const INTRADAY_STORAGE_PREFIX = "stockpulse_intraday_30m_v1_";
+const INTRADAY_BUCKET_MINUTES = 30;
+const INTRADAY_MAX_SESSIONS = 10;
+
+function getNewYorkNowParts() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+
+  const value = (type) =>
+    parts.find((part) => part.type === type)?.value || "";
+
+  return {
+    weekday: value("weekday"),
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: Number(value("hour")),
+    minute: Number(value("minute")),
+  };
+}
+
+function readIntradaySessions(ticker) {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const raw = window.localStorage.getItem(
+      `${INTRADAY_STORAGE_PREFIX}${normalizeTickerInput(ticker)}`
+    );
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function readLatestIntradayPoints(ticker) {
+  const sessions = readIntradaySessions(ticker);
+  const dateKeys = Object.keys(sessions).sort();
+
+  for (let index = dateKeys.length - 1; index >= 0; index -= 1) {
+    const points = Array.isArray(sessions[dateKeys[index]])
+      ? sessions[dateKeys[index]]
+      : [];
+
+    const normalized = points
+      .map((point) => ({
+        timestamp: Number(point?.timestamp),
+        value: Number(point?.value),
+      }))
+      .filter(
+        (point) =>
+          Number.isFinite(point.timestamp) &&
+          Number.isFinite(point.value)
+      )
+      .sort((left, right) => left.timestamp - right.timestamp);
+
+    if (normalized.length >= 2) return normalized;
+  }
+
+  return [];
+}
+
+function saveIntradaySnapshot(ticker, price) {
+  if (typeof window === "undefined") return;
+
+  const normalizedPrice = roundPrice(price);
+  if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) return;
+
+  const now = getNewYorkNowParts();
+  if (now.weekday === "Sat" || now.weekday === "Sun") return;
+
+  const minuteOfDay = now.hour * 60 + now.minute;
+  const marketOpenMinute = 9 * 60 + 30;
+  const marketCloseMinute = 16 * 60;
+
+  if (
+    !Number.isFinite(minuteOfDay) ||
+    minuteOfDay < marketOpenMinute ||
+    minuteOfDay >= marketCloseMinute
+  ) {
+    return;
+  }
+
+  const dateKey =
+    now.year && now.month && now.day
+      ? `${now.year}-${now.month}-${now.day}`
+      : "";
+  if (!dateKey) return;
+
+  const bucketStart =
+    marketOpenMinute +
+    Math.floor((minuteOfDay - marketOpenMinute) / INTRADAY_BUCKET_MINUTES) *
+      INTRADAY_BUCKET_MINUTES;
+
+  const bucketHour = Math.floor(bucketStart / 60);
+  const bucketMinute = bucketStart % 60;
+
+  // Build a timestamp that represents the current 30-minute ET bucket.
+  // Date.parse is only used for ordering/storage; labels are rendered in ET.
+  const liveTimestamp = Math.floor(Date.now() / 1000);
+  const liveParts = getNewYorkTimeParts(liveTimestamp);
+  const deltaMinutes =
+    (liveParts.hour * 60 + liveParts.minute) - bucketStart;
+  const bucketTimestamp = liveTimestamp - Math.max(0, deltaMinutes) * 60;
+
+  const sessions = readIntradaySessions(ticker);
+  const points = Array.isArray(sessions[dateKey])
+    ? sessions[dateKey].filter(
+        (point) => Number(point?.bucketStart) !== bucketStart
+      )
+    : [];
+
+  points.push({
+    bucketStart,
+    timestamp: bucketTimestamp,
+    value: normalizedPrice,
+  });
+
+  sessions[dateKey] = points.sort(
+    (left, right) => Number(left.timestamp) - Number(right.timestamp)
+  );
+
+  const dateKeys = Object.keys(sessions).sort();
+  while (dateKeys.length > INTRADAY_MAX_SESSIONS) {
+    delete sessions[dateKeys.shift()];
+  }
+
+  try {
+    window.localStorage.setItem(
+      `${INTRADAY_STORAGE_PREFIX}${normalizeTickerInput(ticker)}`,
+      JSON.stringify(sessions)
+    );
+  } catch {
+    // Storage can be unavailable in private/restricted browser contexts.
+  }
+}
+
 function getPeriodBounds(period) {
   const config = PERIOD_CONFIG[period] || PERIOD_CONFIG["1M"];
   const to = Math.floor(Date.now() / 1000);
@@ -426,6 +571,14 @@ async function fetchChartData(ticker, period, signal) {
   // rendered together as one intraday chart.
   const sessionPoints = period === "1D"
     ? (() => {
+        // Financial Datasets historical bars are EOD-only. StockPulse builds
+        // its own 30-minute 1D series by sampling real-time snapshots while
+        // the market is open and persists completed sessions locally. Prefer
+        // that series whenever we have at least two observations; this also
+        // keeps the last trading session visible on weekends and holidays.
+        const sampledPoints = readLatestIntradayPoints(ticker);
+        if (sampledPoints.length >= 2) return sampledPoints;
+
         const latestDateKey = getNewYorkDateKey(points[points.length - 1]?.timestamp);
         return latestDateKey
           ? points.filter(
@@ -777,6 +930,18 @@ function StockChart({
   const comparisonsActive = compareTickers.length > 0;
   const longRangeUnavailable =
     activePeriod === "10Y" || activePeriod === "All";
+
+  useEffect(() => {
+    if (activePeriod !== "1D" || comparisonsActive) return undefined;
+
+    const capture = () => saveIntradaySnapshot(primaryTicker, currentPrice);
+    capture();
+
+    // The same 30-minute bucket is overwritten rather than duplicated, so
+    // checking once a minute safely captures the latest snapshot for it.
+    const intervalId = window.setInterval(capture, 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [activePeriod, comparisonsActive, primaryTicker, currentPrice]);
 
   useEffect(() => {
     setCompareTickers([]);
