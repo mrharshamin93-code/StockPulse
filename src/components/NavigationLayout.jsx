@@ -83,12 +83,6 @@ export default function NavigationLayout() {
         setKeyboardOpen(nextKeyboardOpen);
       }
 
-      if (layoutRef.current && Number.isFinite(viewportHeight) && viewportHeight > 0) {
-        layoutRef.current.style.setProperty(
-          "--stockpulse-viewport-height",
-          `${Math.round(viewportHeight)}px`
-        );
-      }
     };
 
     updateViewport();
@@ -138,18 +132,30 @@ export default function NavigationLayout() {
   return (
     <div
       ref={layoutRef}
-      className="relative w-full max-w-full overflow-hidden overscroll-none bg-background"
-      style={{ height: "var(--stockpulse-viewport-height, 100dvh)" }}
+      className="stockpulse-layout relative w-full max-w-full overflow-hidden overscroll-none bg-background"
+      style={{ height: "100dvh" }}
     >
       <PortfolioChartPreloader />
 
       <style>{`
-        [data-keyboard-open="true"] [data-stockpulse-tab-bar] {
+        [data-keyboard-open="true"] [data-stockpulse-tab-bar],
+        .stockpulse-layout:has(input:focus) [data-stockpulse-tab-bar],
+        .stockpulse-layout:has(textarea:focus) [data-stockpulse-tab-bar],
+        .stockpulse-layout:has(select:focus) [data-stockpulse-tab-bar],
+        .stockpulse-layout:has([contenteditable="true"]:focus) [data-stockpulse-tab-bar] {
           display: none !important;
+        }
+
+        .stockpulse-layout:has(input:focus) [data-stockpulse-content],
+        .stockpulse-layout:has(textarea:focus) [data-stockpulse-content],
+        .stockpulse-layout:has(select:focus) [data-stockpulse-content],
+        .stockpulse-layout:has([contenteditable="true"]:focus) [data-stockpulse-content] {
+          bottom: 0 !important;
         }
       `}</style>
 
       <div
+        data-stockpulse-content
         className="absolute inset-x-0 top-0 min-h-0 overflow-hidden"
         style={{
           bottom: tabsVisible
