@@ -35,7 +35,8 @@ export default function NavigationLayout() {
   const contentScrollRef = useRef(null);
   const scrollPositions = useRef({});
   const previousTab = useRef(null);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);\n  const keyboardOpenRef = useRef(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const keyboardOpenRef = useRef(false);
 
   const activeTab = (() => {
     if (pathname === "/" || pathname === "/watchlist" || pathname.startsWith("/stock/")) return "/watchlist";
