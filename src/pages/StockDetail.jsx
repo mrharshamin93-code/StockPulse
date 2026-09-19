@@ -420,7 +420,22 @@ async function fetchChartData(ticker, period, signal) {
     throw new Error(`No chart data returned for ${ticker} (${period})`);
   }
 
-  return points.map((point) => ({
+  // A 1D request looks back several calendar days so weekends/holidays still
+  // return data. Only chart the most recent session that actually has candles.
+  // This also prevents Friday + Monday (or multiple prior days) from being
+  // rendered together as one intraday chart.
+  const sessionPoints = period === "1D"
+    ? (() => {
+        const latestDateKey = getNewYorkDateKey(points[points.length - 1]?.timestamp);
+        return latestDateKey
+          ? points.filter(
+              (point) => getNewYorkDateKey(point.timestamp) === latestDateKey
+            )
+          : points;
+      })()
+    : points;
+
+  return sessionPoints.map((point) => ({
     timestamp: point.timestamp,
     key: getTimestampKey(point.timestamp, period),
     label: formatChartLabel(point.timestamp, period),
