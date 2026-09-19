@@ -45,7 +45,15 @@ export default function NavigationLayout() {
   })();
 
   const showTabs = !pathname.startsWith("/stock/");
-  const tabsVisible = showTabs && !keyboardOpen;
+  // Never render the tab bar while an editable control owns focus. This is
+  // synchronous with the render path and avoids a one-frame iOS/WKWebView
+  // viewport race where the keyboard can lift the fixed tab bar above itself.
+  const activeElement =
+    typeof document !== "undefined" ? document.activeElement : null;
+  const editableFocused =
+    ["INPUT", "TEXTAREA", "SELECT"].includes(activeElement?.tagName) ||
+    activeElement?.isContentEditable === true;
+  const tabsVisible = showTabs && !keyboardOpen && !editableFocused;
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -63,6 +71,12 @@ export default function NavigationLayout() {
       // which makes keyboardHeight look like 0 even while the keyboard is open.
       // Focus on an editable control is therefore the primary keyboard signal.
       const nextKeyboardOpen = isEditable || keyboardHeight > KEYBOARD_THRESHOLD;
+
+      // Hide/show the native-style tab bar immediately as well as through
+      // React state. iOS can paint the keyboard before React commits state.
+      if (layoutRef.current) {
+        layoutRef.current.dataset.keyboardOpen = nextKeyboardOpen ? "true" : "false";
+      }
 
       if (keyboardOpenRef.current !== nextKeyboardOpen) {
         keyboardOpenRef.current = nextKeyboardOpen;
@@ -129,6 +143,12 @@ export default function NavigationLayout() {
     >
       <PortfolioChartPreloader />
 
+      <style>{`
+        [data-keyboard-open="true"] [data-stockpulse-tab-bar] {
+          display: none !important;
+        }
+      `}</style>
+
       <div
         className="absolute inset-x-0 top-0 min-h-0 overflow-hidden"
         style={{
@@ -152,10 +172,12 @@ export default function NavigationLayout() {
         </div>
       )}
 
-      {tabsVisible && (
+      {showTabs && (
         <nav
+          data-stockpulse-tab-bar
           className="absolute inset-x-0 bottom-0 z-50 w-full shrink-0 overflow-hidden overscroll-none border-t border-gray-100 bg-[hsl(var(--card))]"
           style={{
+            display: tabsVisible ? undefined : "none",
             paddingBottom: "env(safe-area-inset-bottom)",
             touchAction: "manipulation",
             WebkitTransform: "translateZ(0)",
