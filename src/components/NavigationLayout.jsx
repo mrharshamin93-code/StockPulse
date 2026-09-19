@@ -35,7 +35,7 @@ export default function NavigationLayout() {
   const contentScrollRef = useRef(null);
   const scrollPositions = useRef({});
   const previousTab = useRef(null);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);\n  const keyboardOpenRef = useRef(false);
 
   const activeTab = (() => {
     if (pathname === "/" || pathname === "/watchlist" || pathname.startsWith("/stock/")) return "/watchlist";
@@ -53,10 +53,20 @@ export default function NavigationLayout() {
       const viewportHeight = visualViewport?.height || window.innerHeight;
       const fullHeight = window.innerHeight;
       const keyboardHeight = Math.max(0, fullHeight - viewportHeight - (visualViewport?.offsetTop || 0));
-      const isEditable = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
-      const nextKeyboardOpen = isEditable && keyboardHeight > KEYBOARD_THRESHOLD;
+      const activeElement = document.activeElement;
+      const isEditable =
+        ["INPUT", "TEXTAREA", "SELECT"].includes(activeElement?.tagName) ||
+        activeElement?.isContentEditable === true;
 
-      setKeyboardOpen(nextKeyboardOpen);
+      // iOS WKWebView can resize window.innerHeight together with visualViewport,
+      // which makes keyboardHeight look like 0 even while the keyboard is open.
+      // Focus on an editable control is therefore the primary keyboard signal.
+      const nextKeyboardOpen = isEditable || keyboardHeight > KEYBOARD_THRESHOLD;
+
+      if (keyboardOpenRef.current !== nextKeyboardOpen) {
+        keyboardOpenRef.current = nextKeyboardOpen;
+        setKeyboardOpen(nextKeyboardOpen);
+      }
 
       if (layoutRef.current && Number.isFinite(viewportHeight) && viewportHeight > 0) {
         layoutRef.current.style.setProperty(
@@ -70,7 +80,12 @@ export default function NavigationLayout() {
     window.addEventListener("resize", updateViewport);
     window.addEventListener("orientationchange", updateViewport);
     document.addEventListener("focusin", updateViewport);
-    document.addEventListener("focusout", updateViewport);
+    const handleFocusOut = () => {
+      // Let iOS finish moving focus before checking document.activeElement.
+      window.setTimeout(updateViewport, 0);
+    };
+
+    document.addEventListener("focusout", handleFocusOut);
     visualViewport?.addEventListener("resize", updateViewport);
     visualViewport?.addEventListener("scroll", updateViewport);
 
@@ -78,7 +93,7 @@ export default function NavigationLayout() {
       window.removeEventListener("resize", updateViewport);
       window.removeEventListener("orientationchange", updateViewport);
       document.removeEventListener("focusin", updateViewport);
-      document.removeEventListener("focusout", updateViewport);
+      document.removeEventListener("focusout", handleFocusOut);
       visualViewport?.removeEventListener("resize", updateViewport);
       visualViewport?.removeEventListener("scroll", updateViewport);
     };
