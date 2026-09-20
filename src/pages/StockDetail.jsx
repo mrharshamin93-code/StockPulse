@@ -2066,11 +2066,14 @@ export default function StockDetail() {
       };
     }
 
-    return synchronousPrefetch && isTickerRoute
+    return isTickerRoute && tickerFromRoute
       ? {
           ticker: tickerFromRoute,
           company_name:
-            synchronousPrefetch?.profile?.name || tickerFromRoute,
+            synchronousPrefetch?.profile?.name ||
+            location.state?.companyName ||
+            location.state?.company_name ||
+            tickerFromRoute,
           sector: synchronousPrefetch?.profile?.sector || "",
           logo_url: synchronousPrefetch?.profile?.logo || "",
           current_price: synchronousPrice,
@@ -2082,8 +2085,11 @@ export default function StockDetail() {
         }
       : null;
   });
+  // A watchlist tap already gives us enough synchronous route state to paint
+  // the detail shell immediately. Network requests below progressively refresh
+  // quote/profile/chart data instead of replacing the whole page with a spinner.
   const [loading, setLoading] = useState(
-    () => !(synchronousPrefetch && (isTickerRoute || synchronousRouteStock))
+    () => !(synchronousRouteStock || (isTickerRoute && tickerFromRoute))
   );
   const [pageError, setPageError] = useState("");
   const [fundamentals, setFundamentals] = useState(null);
@@ -2168,7 +2174,14 @@ export default function StockDetail() {
       const detailPrefetch = readStockDetailPrefetch(cachedTicker);
 
       if (!detailPrefetch) {
-        setLoading(true);
+        // Keep already-available watchlist/route data visible while the detail
+        // requests run. Only show the full-page loader when we truly have
+        // nothing useful to render (for example a cold direct ID route).
+        if (!synchronousRouteStock && !(isTickerRoute && cachedTicker)) {
+          setLoading(true);
+        } else {
+          setLoading(false);
+        }
         setExtendedSession(null);
         setInitialChartData(null);
       } else {
