@@ -829,6 +829,20 @@ export default function Analysis() {
       : quoteChangePercent >=
         0;
 
+  const hasVerifiedMetrics = [
+    metrics.marketCapB,
+    metrics.pe,
+    metrics.revenueGrowthYoy,
+    metrics.epsGrowthYoy,
+    metrics.grossMargin,
+    metrics.roe,
+    metrics.debtToEquity,
+    metrics.dividendYield,
+  ].some(
+    (value) =>
+      finiteNumber(value) !== null,
+  );
+
   return (
     <div
       className="min-h-full w-full max-w-full overflow-x-hidden overscroll-x-none bg-background text-foreground touch-pan-y"
@@ -1093,6 +1107,7 @@ export default function Analysis() {
               </p>
             </section>
 
+            {hasVerifiedMetrics ? (
             <section className="w-full max-w-full overflow-hidden">
               <div className="mb-2 flex items-center gap-1.5 px-2">
                 <Database className="h-3.5 w-3.5 text-muted-foreground" />
@@ -1190,6 +1205,7 @@ export default function Analysis() {
                 </div>
               </div>
             </section>
+            ) : null}
 
             <section className="w-full max-w-full overflow-hidden">
               <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
