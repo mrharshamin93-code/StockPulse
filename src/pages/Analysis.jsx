@@ -1113,12 +1113,17 @@ export default function Analysis() {
 
                   <MetricCard
                     label="P/E"
-                    value={formatMetric(
-                      metrics.pe,
-                      {
-                        suffix: "x",
-                      },
-                    )}
+                    value={
+                      finiteNumber(metrics.pe) !== null &&
+                      finiteNumber(metrics.pe) >= 0
+                        ? formatMetric(
+                            metrics.pe,
+                            {
+                              suffix: "x",
+                            },
+                          )
+                        : "—"
+                    }
                   />
 
                   <MetricCard
