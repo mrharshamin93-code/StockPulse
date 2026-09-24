@@ -1592,13 +1592,7 @@ function StockChart({
           </div>
         )}
 
-        {activePeriod === "1D" ? (
-          <div className="flex h-full items-center justify-center rounded-[16px] border border-dashed border-border bg-muted/25 px-5 text-center">
-            <p className="text-[14px] font-semibold text-muted-foreground">
-              Market closed
-            </p>
-          </div>
-        ) : longRangeUnavailable ? (
+        {longRangeUnavailable ? (
           <div className="flex h-full items-center justify-center rounded-[16px] border border-dashed border-border bg-muted/25 px-5 text-center">
             <p className="text-[14px] font-semibold text-muted-foreground">
               Chart is unavailable for now.
