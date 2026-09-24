@@ -199,6 +199,35 @@ function groundingQuote(payload: unknown) {
   return out;
 }
 
+function hasPlaceholderAnalysis(value: unknown) {
+  const isPlaceholder = (text: unknown) =>
+    typeof text === "string" && /^placeholder(?:\b|$)/i.test(text.trim());
+
+  if (!value || typeof value !== "object") return true;
+  const analysis = value as {
+    valid?: unknown;
+    summary?: unknown;
+    pros?: Array<{ title?: unknown; detail?: unknown }>;
+    cons?: Array<{ title?: unknown; detail?: unknown }>;
+  };
+
+  if (analysis.valid !== true) return false;
+  if (isPlaceholder(analysis.summary) || !String(analysis.summary ?? "").trim()) return true;
+
+  for (const items of [analysis.pros, analysis.cons]) {
+    if (!Array.isArray(items) || items.length < 4) return true;
+    if (items.some((item) =>
+      !item ||
+      isPlaceholder(item.title) ||
+      isPlaceholder(item.detail) ||
+      !String(item.title ?? "").trim() ||
+      !String(item.detail ?? "").trim()
+    )) return true;
+  }
+
+  return false;
+}
+
 function outputText(payload: Record<string, unknown>) {
   if (typeof payload.output_text === "string") return payload.output_text;
   const output = Array.isArray(payload.output) ? payload.output : [];
@@ -276,7 +305,7 @@ Deno.serve(async (request) => {
         input: [
           {
             role: "system",
-            content: "You are an equity research analyst for StockPulse. Analyze the stock using the supplied financial data and current web research.\n\nIdentify the 4-6 most valuable bullish arguments and 4-6 most important bearish arguments for the company. Prioritize factors that could materially affect the business, including growth, profitability, competitive position, valuation, balance sheet, catalysts, dilution, and major risks.\n\nEvery factual or numerical claim must be credible and verified. Prefer company filings, earnings releases, investor presentations, SEC filings, and other authoritative sources. Never invent facts or numbers.\n\nFocus on insight rather than generic observations. Explain briefly why each point matters to the investment thesis. Do not create weak bearish or bullish points simply to fill the list.\n\nDo not display citations, URLs, source names, footnotes, or citation markers in the Bullish or Bearish sections. Sources should be used only to verify the analysis.\n\nFinish with a concise, balanced 2-3 sentence summary of the central investment thesis and its biggest risk.\n\nBe concise, specific, credible, and analytical. Avoid hype, filler, repetition, price predictions, and personalized financial advice.",
+            content: "You are an equity research analyst for StockPulse. Analyze the stock using the supplied financial data and current web research.\n\nIdentify the 4-6 most valuable bullish arguments and 4-6 most important bearish arguments for the company. Prioritize factors that could materially affect the business, including growth, profitability, competitive position, valuation, balance sheet, catalysts, dilution, and major risks.\n\nEvery factual or numerical claim must be credible and verified. Never return placeholder, dummy, example, template, or filler text in any output field. Prefer company filings, earnings releases, investor presentations, SEC filings, and other authoritative sources. Never invent facts or numbers.\n\nFocus on insight rather than generic observations. Explain briefly why each point matters to the investment thesis. Do not create weak bearish or bullish points simply to fill the list.\n\nDo not display citations, URLs, source names, footnotes, or citation markers in the Bullish or Bearish sections. Sources should be used only to verify the analysis.\n\nFinish with a concise, balanced 2-3 sentence summary of the central investment thesis and its biggest risk.\n\nBe concise, specific, credible, and analytical. Avoid hype, filler, repetition, price predictions, and personalized financial advice.",
           },
           {
             role: "user",
@@ -308,6 +337,10 @@ Deno.serve(async (request) => {
     if (!raw) return json({ error: "The analysis model returned no result" }, 502);
 
     const parsed = JSON.parse(raw);
+    if (hasPlaceholderAnalysis(parsed)) {
+      console.error("xAI returned placeholder or incomplete analysis", ticker);
+      return json({ error: "The analysis model returned incomplete content. Please try again." }, 502);
+    }
     const result = { ...parsed, metrics: displayMetrics || {} };
     await saveCache(ticker, result);
     return json({ ...result, cached: false });
