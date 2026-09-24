@@ -11,7 +11,7 @@ const XAI_URL = "https://api.x.ai/v1/responses";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const GROK_MODEL = Deno.env.get("XAI_MODEL") || "grok-4.6";
-const CACHE_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
