@@ -506,14 +506,6 @@ export default function Analysis() {
                 pollStartedAt <
               timeoutMs
             ) {
-              await new Promise(
-                (resolve) =>
-                  setTimeout(
-                    resolve,
-                    pollEveryMs,
-                  ),
-              );
-
               if (
                 requestId.current !==
                 currentRequest
@@ -535,6 +527,14 @@ export default function Analysis() {
               ) {
                 return status.analysis;
               }
+
+              await new Promise(
+                (resolve) =>
+                  setTimeout(
+                    resolve,
+                    pollEveryMs,
+                  ),
+              );
             }
 
             throw new Error(
