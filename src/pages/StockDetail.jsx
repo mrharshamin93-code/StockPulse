@@ -1672,21 +1672,19 @@ function StockChart({
                     .filter(Number.isFinite);
                   const minPrice = prices.length ? Math.min(...prices) : Number(value);
                   const maxPrice = prices.length ? Math.max(...prices) : Number(value);
-                  const roundedMin = Math.round(minPrice);
-                  const roundedMax = Math.round(maxPrice);
+                  const range = maxPrice - minPrice;
 
-                  // Keep the axis clean when the visible prices span multiple
-                  // whole-dollar values. Only show decimals when whole-dollar
-                  // labels would collapse the chart to the same number.
-                  if (roundedMin !== roundedMax) {
+                  // Use decimals only for tight price ranges. For wider ranges,
+                  // keep the Y-axis clean with whole-dollar labels.
+                  if (range > 3) {
                     return `${Math.round(Number(value))}`;
                   }
 
-                  const range = maxPrice - minPrice;
                   const decimals =
                     range < 0.01 ? 4 :
                     range < 0.1 ? 3 :
-                    2;
+                    range <= 3 ? 1 :
+                    0;
 
                   return `${Number(value).toFixed(decimals)}`;
                 }}
