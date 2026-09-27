@@ -38,7 +38,6 @@ import ReferralPage from "@/pages/ReferralPage";
 import ContactUs from "@/pages/ContactUs";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/privacy", "/terms", "/legal", "/contact-us"]);
-const FREE_ACCESS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function ThemeSync() {
   const { preferences } = useAuth();
@@ -74,11 +73,9 @@ function SubscriptionGate({ children }) {
       if (error) throw error;
       const grandfathered = profile?.grandfathered_free === true;
       const serverPremium = profile?.access_tier === "premium";
-      const createdAt = user.created_at ? new Date(user.created_at).getTime() : Date.now();
-      const withinFreeAccess = Date.now() - createdAt < FREE_ACCESS_MS;
       let storeActive = false;
       let price = "$4.99";
-      if (!grandfathered && !withinFreeAccess) {
+      if (!grandfathered && !serverPremium) {
         try {
           const [active, product] = await Promise.all([hasActiveStockPulseSubscription(), getMonthlyProduct()]);
           storeActive = active;
@@ -87,7 +84,7 @@ function SubscriptionGate({ children }) {
           console.error("Unable to check App Store subscription:", storeError);
         }
       }
-      setState((s) => ({ ...s, loading: false, allowed: grandfathered || serverPremium || withinFreeAccess || storeActive, price }));
+      setState((s) => ({ ...s, loading: false, allowed: grandfathered || serverPremium || storeActive, price }));
     } catch (error) {
       console.error("Unable to determine StockPulse access:", error);
       setState((s) => ({ ...s, loading: false, allowed: false }));
