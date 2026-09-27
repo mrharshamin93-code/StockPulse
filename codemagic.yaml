@@ -81,6 +81,7 @@ workflows:
         APP_STORE_APPLE_ID: "6808373094"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
+        IOS_MARKETING_VERSION: "1.0.4"
 
     cache:
       cache_paths:
@@ -106,7 +107,7 @@ workflows:
           xcode-project use-profiles \
             --project "$XCODE_PROJECT"
 
-      - name: Set iOS build number
+      - name: Set iOS version and build number
         script: |
           NEXT_BUILD_NUMBER="$BUILD_NUMBER"
 
@@ -114,15 +115,20 @@ workflows:
             NEXT_BUILD_NUMBER=2
           fi
 
+          echo "Using iOS marketing version: $IOS_MARKETING_VERSION"
           echo "Codemagic BUILD_NUMBER: $BUILD_NUMBER"
           echo "Using iOS build number: $NEXT_BUILD_NUMBER"
+
+          sed -i '' \
+            "s/MARKETING_VERSION = [^;]*;/MARKETING_VERSION = $IOS_MARKETING_VERSION;/g" \
+            ios/App/App.xcodeproj/project.pbxproj
 
           sed -i '' \
             "s/CURRENT_PROJECT_VERSION = [0-9][0-9]*;/CURRENT_PROJECT_VERSION = $NEXT_BUILD_NUMBER;/g" \
             ios/App/App.xcodeproj/project.pbxproj
 
-          echo "Xcode build numbers after update:"
-          grep "CURRENT_PROJECT_VERSION" ios/App/App.xcodeproj/project.pbxproj
+          echo "Xcode versions after update:"
+          grep "MARKETING_VERSION\|CURRENT_PROJECT_VERSION" ios/App/App.xcodeproj/project.pbxproj
 
       - name: Build signed IPA
         script: |
