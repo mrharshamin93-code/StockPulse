@@ -1,76 +1,86 @@
 import React from "react";
-import { Sparkles, Check, Lock } from "lucide-react";
+import { BarChart3, Bell, Check, Sparkles, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const PREMIUM_FEATURES = [
-  "AI-powered stock analysis & insights",
-  "Bullish & bearish breakdowns",
-  "Curated news per stock",
-  "No ads — ever",
+const FEATURES = [
+  { icon: Sparkles, text: "AI-powered stock analysis & insights" },
+  { icon: Bell, text: "Real-time stock alerts" },
+  { icon: BarChart3, text: "Advanced screener, portfolio & watchlist" },
 ];
 
-export default function PremiumGate() {
+export default function PremiumGate({ onSubscribe, onRestore, isProcessing = false }) {
   return (
     <div
-      className="min-h-screen bg-gray-50/50 flex flex-col"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}
+      className="fixed inset-0 z-[100] overflow-y-auto bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
     >
-      <header
-        className="bg-white border-b border-gray-100 sticky top-0 z-10"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
-      >
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5 text-center">
-          <h1 className="font-heading text-2xl font-bold tracking-tight">Analysis</h1>
-          <p className="text-xs text-muted-foreground">AI-powered stock insights</p>
-        </div>
-      </header>
-
-      <main className="flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-sm">
-          {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 rounded-3xl bg-violet-50 flex items-center justify-center relative">
-              <Sparkles className="w-10 h-10 text-violet-500" />
-              <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-amber-400 flex items-center justify-center shadow">
-                <Lock className="w-3.5 h-3.5 text-white" />
-              </div>
+      <main className="min-h-full flex items-center justify-center px-5 py-8">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-7">
+            <div className="mx-auto mb-5 w-16 h-16 rounded-2xl bg-red-600 flex items-center justify-center shadow-lg shadow-red-950/40">
+              <BarChart3 className="w-9 h-9 text-white" />
             </div>
-          </div>
-
-          <div className="text-center mb-8">
-            <h2 className="font-heading text-2xl font-bold mb-2">Unlock Premium</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Get unlimited AI stock analysis, curated news, and an ad-free experience.
+            <p className="text-red-400 text-sm font-semibold tracking-wide mb-2">STOCKPULSE PRO</p>
+            <h1 className="font-heading text-3xl font-bold tracking-tight mb-3">
+              Keep your investing edge
+            </h1>
+            <p className="text-slate-300 text-sm leading-relaxed max-w-sm mx-auto">
+              Your 7-day free access has ended. Subscribe to keep full access to StockPulse.
             </p>
           </div>
 
-          {/* Pricing card */}
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 mb-5 shadow-sm">
-            <div className="flex items-end gap-1 mb-1">
-              <span className="font-heading text-4xl font-bold">$4.99</span>
-              <span className="text-muted-foreground text-sm mb-1.5">/month</span>
-            </div>
-            <p className="text-xs text-muted-foreground mb-5">Cancel anytime. No commitments.</p>
-
-            <div className="space-y-3">
-              {PREMIUM_FEATURES.map(f => (
-                <div key={f} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                    <Check className="w-3 h-3 text-emerald-600" />
+          <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 mb-5 shadow-2xl">
+            <div className="space-y-4 mb-6">
+              {FEATURES.map(({ icon: Icon, text }) => (
+                <div key={text} className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
+                    <Icon className="w-4.5 h-4.5 text-red-400" />
                   </div>
-                  <span className="text-sm font-medium">{f}</span>
+                  <span className="text-sm font-medium text-slate-100">{text}</span>
+                  <Check className="w-4 h-4 text-emerald-400 ml-auto shrink-0" />
                 </div>
               ))}
             </div>
+
+            <div className="border-t border-white/10 pt-5 text-center">
+              <div className="flex items-end justify-center gap-1">
+                <span className="text-4xl font-bold tracking-tight">$4.99</span>
+                <span className="text-slate-400 text-sm mb-1.5">/ month</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Auto-renewing subscription. Cancel anytime.</p>
+            </div>
           </div>
 
-          <Button className="w-full h-12 text-base font-semibold gap-2 bg-violet-600 hover:bg-violet-700 text-white">
-            <Sparkles className="w-4 h-4" />
-            Upgrade to Premium
+          <Button
+            type="button"
+            onClick={onSubscribe}
+            disabled={isProcessing}
+            className="w-full h-13 rounded-2xl text-base font-bold bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-950/30"
+          >
+            {isProcessing ? "Please wait…" : "Continue with StockPulse Pro"}
           </Button>
-          <p className="text-center text-xs text-muted-foreground mt-3">
-            Payment coming soon. Stay tuned!
-          </p>
+
+          <button
+            type="button"
+            onClick={onRestore}
+            disabled={isProcessing}
+            className="w-full mt-4 text-sm font-medium text-slate-300 hover:text-white disabled:opacity-50"
+          >
+            Restore Purchases
+          </button>
+
+          <div className="flex items-center justify-center gap-1 mt-6 text-xs text-slate-500">
+            <Star className="w-3 h-3" />
+            <span>Full access to every StockPulse feature</span>
+          </div>
+
+          <div className="flex justify-center gap-5 mt-4 text-[11px] text-slate-500">
+            <a href="/terms" className="hover:text-slate-300">Terms</a>
+            <a href="/privacy" className="hover:text-slate-300">Privacy Policy</a>
+          </div>
         </div>
       </main>
     </div>
