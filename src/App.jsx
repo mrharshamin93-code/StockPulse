@@ -7,7 +7,6 @@ import { queryClientInstance } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { MarketDataProvider } from "@/lib/MarketDataContext";
 import { recordReviewSession } from "@/lib/reviewPrompt";
-import { supabase } from "@/lib/supabase";
 import { getMonthlyProduct, hasActiveStockPulseSubscription, purchaseStockPulsePro, restoreStockPulsePurchases } from "@/lib/subscription";
 import { applyTheme } from "@/components/settings/ThemeSection.jsx";
 import PremiumGate from "@/components/PremiumGate";
@@ -38,6 +37,9 @@ import ReferralPage from "@/pages/ReferralPage";
 import ContactUs from "@/pages/ContactUs";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/privacy", "/terms", "/legal", "/contact-us"]);
+// Accounts created before the subscription launch remain free permanently.
+// New accounts created on/after Sep 27, 2026 must activate StockPulse Pro.
+const GRANDFATHER_CUTOFF_MS = Date.parse("2026-09-27T00:00:00Z");
 
 function ThemeSync() {
   const { preferences } = useAuth();
@@ -69,13 +71,12 @@ function SubscriptionGate({ children }) {
     if (!user?.id) { setState((s) => ({ ...s, loading: false, allowed: true })); return; }
     setState((s) => ({ ...s, loading: true }));
     try {
-      const { data: profile, error } = await supabase.from("profiles").select("grandfathered_free, access_tier").eq("id", user.id).maybeSingle();
-      if (error) throw error;
-      const grandfathered = profile?.grandfathered_free === true;
-      const serverPremium = profile?.access_tier === "premium";
+      const createdAtMs = Date.parse(user.created_at || "");
+      const grandfathered = Number.isFinite(createdAtMs) && createdAtMs < GRANDFATHER_CUTOFF_MS;
       let storeActive = false;
       let price = "$4.99";
-      if (!grandfathered && !serverPremium) {
+
+      if (!grandfathered) {
         try {
           const [active, product] = await Promise.all([hasActiveStockPulseSubscription(), getMonthlyProduct()]);
           storeActive = active;
@@ -84,7 +85,8 @@ function SubscriptionGate({ children }) {
           console.error("Unable to check App Store subscription:", storeError);
         }
       }
-      setState((s) => ({ ...s, loading: false, allowed: grandfathered || serverPremium || storeActive, price }));
+
+      setState((s) => ({ ...s, loading: false, allowed: grandfathered || storeActive, price }));
     } catch (error) {
       console.error("Unable to determine StockPulse access:", error);
       setState((s) => ({ ...s, loading: false, allowed: false }));
