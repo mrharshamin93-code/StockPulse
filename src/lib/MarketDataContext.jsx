@@ -2,10 +2,13 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+
+import { App as CapacitorApp } from "@capacitor/app";
 
 import { useAuth } from "@/lib/AuthContext";
 import { financialDatasetsRequest } from "@/lib/financialDatasets";
@@ -302,6 +305,71 @@ export function MarketDataProvider({ children }) {
     async (tickers) => loadQuotes(tickers, { force: false }),
     [loadQuotes],
   );
+
+  const lastForegroundRefreshRef = useRef(0);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let appStateHandle = null;
+
+    const refreshOnForeground = () => {
+      const now = Date.now();
+
+      // iOS can emit both appStateChange and visibilitychange on resume.
+      // De-dupe them while still forcing a fresh quote request whenever
+      // StockPulse is brought back to the foreground.
+      if (
+        now - lastForegroundRefreshRef.current < 1500 ||
+        !tickersRef.current.length
+      ) {
+        return;
+      }
+
+      lastForegroundRefreshRef.current = now;
+
+      void refreshQuotes().catch((error) => {
+        console.warn("Foreground quote refresh failed:", error);
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshOnForeground();
+      }
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange,
+    );
+
+    CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      if (isActive && !disposed) {
+        refreshOnForeground();
+      }
+    })
+      .then((handle) => {
+        if (disposed) {
+          handle.remove();
+        } else {
+          appStateHandle = handle;
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+      appStateHandle?.remove();
+    };
+  }, [user?.id, refreshQuotes]);
 
   const value = useMemo(
     () => ({
