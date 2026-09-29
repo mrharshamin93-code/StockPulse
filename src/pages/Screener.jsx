@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -1638,6 +1639,23 @@ export default function Screener() {
 
       setLoading(true);
 
+      void trackEvent(
+        "screener_run",
+        {
+          filter_keys:
+            Object.keys(
+              selectedFilters,
+            ),
+          preset:
+            activePreset === null
+              ? null
+              : POPULAR_SCREENS[
+                  activePreset
+                ]?.label ||
+                null,
+        },
+      );
+
       try {
         window.sessionStorage.setItem(
           "screener_filters",
@@ -1693,6 +1711,14 @@ export default function Screener() {
             ? data.stocks
             : [];
 
+        void trackEvent(
+          "screener_result",
+          {
+            result_count:
+              results.length,
+          },
+        );
+
         try {
           window.sessionStorage.setItem(
             "screener_last_results",
@@ -1722,6 +1748,14 @@ export default function Screener() {
         console.error(
           "Stock screener failed:",
           error,
+        );
+
+        void trackEvent(
+          "screener_result",
+          {
+            result_count: 0,
+            failed: true,
+          },
         );
 
         navigate(
