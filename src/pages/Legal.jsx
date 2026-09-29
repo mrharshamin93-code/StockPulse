@@ -12,7 +12,7 @@ import {
 
 import { useAuth } from "@/lib/AuthContext";
 
-const LAST_UPDATED = "September 5, 2026";
+const LAST_UPDATED = "September 29, 2026";
 
 const PRIVACY_POLICY = `
 StockPulse ("StockPulse," "we," "our," or "us") provides stock-price information, portfolio tracking, watchlists, alerts, stock-screening tools, reports, and informational AI-generated stock analysis.
@@ -54,6 +54,20 @@ If you participate in the referral program or use premium features, we may store
 ### Support communications
 
 When you contact StockPulse, we may collect your email address, the subject and contents of your message, and any additional information you voluntarily include.
+
+### First-party product analytics
+
+StockPulse collects limited first-party product-usage information to understand how the app is used and improve its features. This information may include:
+
+- App opens and foreground sessions.
+- Screens or features viewed.
+- Stock symbols viewed.
+- Stock-analysis searches performed in the app.
+- Stock-screener runs and the number of results returned.
+- A StockPulse account identifier and a temporary session identifier.
+- App platform, app version, build number, and event timestamps.
+
+These analytics events are associated with your StockPulse account so we can measure usage, feature adoption, retention, and reliability. StockPulse does not use this information to track you across other companies' apps or websites, for third-party advertising, or to sell advertising profiles.
 
 ### Technical and operational information
 
@@ -101,6 +115,7 @@ We use collected information to:
 - Respond to support requests.
 - Maintain security and prevent misuse.
 - Diagnose technical problems.
+- Measure app usage, feature adoption, and retention to improve StockPulse.
 - Comply with legal obligations and enforce our Terms of Service.
 
 ## 4. Service Providers
@@ -130,6 +145,8 @@ StockPulse does not sell or rent personal information. Information may be shared
 
 ## 6. Advertising and Tracking
 
+StockPulse uses first-party product analytics as described above. These analytics are used to understand and improve StockPulse and are not used for cross-app or cross-site tracking.
+
 StockPulse does not:
 
 - Display third-party behavioral advertising.
@@ -152,6 +169,8 @@ We generally retain account and portfolio information while your account remains
 
 Support communications and limited operational records may be retained for a reasonable period to respond to requests, maintain security, diagnose problems, and comply with legal obligations.
 
+First-party product analytics events may be retained for a reasonable period to measure usage trends, feature adoption, and retention. Analytics events directly associated with your StockPulse account are designed to be deleted when your account is permanently deleted.
+
 Service-provider backups or security logs may remain for a limited period after deletion before being overwritten according to the provider's normal retention cycle.
 
 ## 9. Account and Data Deletion
@@ -167,6 +186,7 @@ Account deletion is intended to remove:
 - Saved screens.
 - Reports and related files.
 - Referral and profile information associated with your account.
+- First-party product analytics events associated with your account.
 
 If you use Sign in with Apple, StockPulse also attempts to revoke the applicable Apple authorization as part of deletion. You may also use the public Contact Us page for assistance.
 
