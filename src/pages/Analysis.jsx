@@ -27,6 +27,7 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/lib/analytics";
 
 import {
   financialDatasetsRequest,
@@ -415,6 +416,14 @@ export default function Analysis() {
           );
           return;
         }
+
+        void trackEvent(
+          "analysis_search",
+          {
+            ticker:
+              normalizedTicker,
+          },
+        );
 
         const currentRequest =
           requestId.current + 1;
