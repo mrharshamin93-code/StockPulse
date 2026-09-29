@@ -47,6 +47,11 @@ function readSessionState() {
 
     return {
       id: parsed.id,
+      userId:
+        typeof parsed.userId ===
+        "string"
+          ? parsed.userId
+          : null,
       startedAt: Number(
         parsed.startedAt ||
           parsed.lastActivityAt,
@@ -100,24 +105,27 @@ function clearSessionState(
   }
 }
 
-function ensureSession() {
+function ensureSession(userId) {
   const now = Date.now();
   const current =
     readSessionState();
 
   const expired =
     !current ||
+    current.userId !== userId ||
     now - current.lastActivityAt >
       SESSION_TIMEOUT_MS;
 
   const next = expired
     ? {
         id: makeSessionId(),
+        userId,
         startedAt: now,
         lastActivityAt: now,
       }
     : {
         ...current,
+        userId,
         lastActivityAt: now,
       };
 
@@ -217,7 +225,9 @@ export async function trackEvent(
     const {
       sessionId,
       isNewSession,
-    } = ensureSession();
+    } = ensureSession(
+      userId,
+    );
 
     const {
       platform,
