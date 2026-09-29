@@ -7,6 +7,7 @@ import { queryClientInstance } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { MarketDataProvider } from "@/lib/MarketDataContext";
 import { recordReviewSession } from "@/lib/reviewPrompt";
+import { trackEvent } from "@/lib/analytics";
 import { getMonthlyProduct, hasActiveStockPulseSubscription, purchaseStockPulsePro, restoreStockPulsePurchases } from "@/lib/subscription";
 import { applyTheme } from "@/components/settings/ThemeSection.jsx";
 import PremiumGate from "@/components/PremiumGate";
@@ -42,6 +43,113 @@ const GRANDFATHER_CUTOFF_MS = Date.parse("2026-09-27T00:00:00Z");
 function ThemeSync() { const { preferences } = useAuth(); useEffect(() => { applyTheme(preferences?.theme || "default"); }, [preferences?.theme]); return null; }
 function ReviewPromptTracker() { const { user } = useAuth(); useEffect(() => { if (!user?.id) return undefined; let disposed=false, listenerHandle=null, reviewTimer=null; const scheduleSessionCheck=()=>{ if(reviewTimer) clearTimeout(reviewTimer); reviewTimer=window.setTimeout(()=>{if(!disposed) recordReviewSession();},4000);}; scheduleSessionCheck(); CapacitorApp.addListener("appStateChange",({isActive})=>{if(isActive)scheduleSessionCheck();}).then((handle)=>{if(disposed)handle.remove();else listenerHandle=handle;}).catch(()=>{}); return()=>{disposed=true;if(reviewTimer)clearTimeout(reviewTimer);listenerHandle?.remove();}; },[user?.id]); return null; }
 
+function AnalyticsTracker() {
+  const { user } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (
+      !user?.id ||
+      PUBLIC_PATHS.has(
+        location.pathname,
+      )
+    ) {
+      return;
+    }
+
+    const stockMatch =
+      location.pathname.match(
+        /^\/stock\/([^/]+)$/,
+      );
+
+    void trackEvent(
+      "screen_view",
+      {
+        path: location.pathname,
+      },
+    );
+
+    if (stockMatch?.[1]) {
+      void trackEvent(
+        "stock_view",
+        {
+          ticker: decodeURIComponent(
+            stockMatch[1],
+          ).toUpperCase(),
+        },
+      );
+    }
+  }, [
+    user?.id,
+    location.pathname,
+  ]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let listenerHandle = null;
+    let lastOpenAt = 0;
+
+    const recordOpen = (
+      source,
+    ) => {
+      const now = Date.now();
+
+      if (
+        now - lastOpenAt <
+        1500
+      ) {
+        return;
+      }
+
+      lastOpenAt = now;
+
+      void trackEvent(
+        "app_open",
+        {
+          source,
+        },
+      );
+    };
+
+    recordOpen("launch");
+
+    CapacitorApp.addListener(
+      "appStateChange",
+      ({ isActive }) => {
+        if (
+          isActive &&
+          !disposed
+        ) {
+          recordOpen(
+            "foreground",
+          );
+        }
+      },
+    )
+      .then((handle) => {
+        if (disposed) {
+          handle.remove();
+        } else {
+          listenerHandle =
+            handle;
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      listenerHandle?.remove();
+    };
+  }, [user?.id]);
+
+  return null;
+}
+
+
 function SubscriptionGate({ children }) {
   const { user, logout } = useAuth();
   const [state, setState] = useState({ loading: true, allowed: false, price: "$4.99", processing: false });
@@ -66,4 +174,4 @@ function SubscriptionGate({ children }) {
 }
 
 function AuthenticatedApp(){const{isLoadingPublicSettings,authError}=useAuth();const location=useLocation();const isPublicPath=PUBLIC_PATHS.has(location.pathname);if(isLoadingPublicSettings&&!isPublicPath)return <div className="fixed inset-0 flex items-center justify-center">Loading...</div>;if(authError?.type==="user_not_registered"&&!isPublicPath)return <UserNotRegisteredError/>;return <Routes location={location}><Route path="/login" element={<Login/>}/><Route path="/register" element={<Register/>}/><Route path="/forgot-password" element={<ForgotPassword/>}/><Route path="/reset-password" element={<ResetPassword/>}/><Route path="/auth/callback" element={<AuthCallback/>}/><Route path="/privacy" element={<Legal page="privacy"/>}/><Route path="/terms" element={<Legal page="terms"/>}/><Route path="/legal" element={<Legal/>}/><Route path="/contact-us" element={<ContactUs/>}/><Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace/>}/>}><Route element={<SubscriptionGate><NavigationLayout/></SubscriptionGate>}><Route path="/" element={<Navigate to="/watchlist" replace/>}/><Route path="/home" element={<Home/>}/><Route path="/watchlist" element={<Watchlist/>}/><Route path="/onboarding" element={<Onboarding/>}/><Route path="/stock/:ticker" element={<StockDetail/>}/><Route path="/analysis" element={<Analysis/>}/><Route path="/analysis/:ticker" element={<Analysis/>}/><Route path="/screener" element={<Screener/>}/><Route path="/screener/results" element={<ScreenerResults/>}/><Route path="/settings" element={<Settings/>}/><Route path="/settings/theme" element={<ThemeSettings/>}/><Route path="/settings/currency" element={<CurrencySettings/>}/><Route path="/price-alerts" element={<PriceAlerts/>}/><Route path="/monthly-report" element={<MonthlyReport/>}/><Route path="/referrals" element={<ReferralPage/>}/></Route></Route><Route path="*" element={<PageNotFound/>}/></Routes>;}
-export default function App(){return <AuthProvider><ThemeSync/><ReviewPromptTracker/><QueryClientProvider client={queryClientInstance}><Router><MarketDataProvider><ScrollToTop/><AuthenticatedApp/></MarketDataProvider></Router><Toaster/></QueryClientProvider></AuthProvider>;}
+export default function App(){return <AuthProvider><ThemeSync/><ReviewPromptTracker/><QueryClientProvider client={queryClientInstance}><Router><AnalyticsTracker/><MarketDataProvider><ScrollToTop/><AuthenticatedApp/></MarketDataProvider></Router><Toaster/></QueryClientProvider></AuthProvider>;}
