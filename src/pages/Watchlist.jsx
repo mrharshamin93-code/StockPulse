@@ -886,18 +886,6 @@ async function fetchSparkline(
     );
   }
 
-  const sparklineStartDate =
-    new Date(
-      Date.now() -
-        30 *
-          24 *
-          60 *
-          60 *
-          1000
-    )
-      .toISOString()
-      .slice(0, 10);
-
   const {
     data: rows,
     error,
@@ -913,17 +901,14 @@ async function fetchSparkline(
         "ticker",
         key
       )
-      .gte(
-        "trading_date",
-        sparklineStartDate
-      )
       .order(
         "trading_date",
         {
           ascending:
             false,
         }
-      );
+      )
+      .limit(30);
 
   if (
     signal?.aborted
