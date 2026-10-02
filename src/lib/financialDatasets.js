@@ -498,9 +498,95 @@ function normalizeCandlePayload(data, originalBody) {
 }
 
 function dailyChartCacheKey(body) {
+  const ticker = String(body?.ticker || "")
+    .trim()
+    .toUpperCase();
+  const period = String(body?.period || "1M")
+    .trim()
+    .toUpperCase();
+
+  return ticker ? `${ticker}:${period}` : "";
+}
+
+function dailyChartTicker(body) {
   return String(body?.ticker || "")
     .trim()
     .toUpperCase();
+}
+
+function localDailyRequirements(period) {
+  switch (String(period || "").toUpperCase()) {
+    case "1W":
+      return { minRows: 5, maxRows: 10, backfillDays: 14 };
+    case "1M":
+      return { minRows: 18, maxRows: 30, backfillDays: 45 };
+    case "3M":
+      return { minRows: 55, maxRows: 70, backfillDays: 110 };
+    case "6M":
+      return { minRows: 115, maxRows: 140, backfillDays: 220 };
+    case "YTD":
+    case "1Y":
+      return { minRows: 200, maxRows: 260, backfillDays: 400 };
+    default:
+      return { minRows: 20, maxRows: 90, backfillDays: DAILY_CHART_BACKFILL_DAYS };
+  }
+}
+
+async function loadStoredDailyChartBacking(body) {
+  const ticker = dailyChartTicker(body);
+  if (!ticker) return null;
+
+  const requirements = localDailyRequirements(body?.period);
+
+  const { data: rows, error } = await supabase
+    .from("stock_daily_prices")
+    .select("trading_date,open,high,low,close,volume")
+    .eq("ticker", ticker)
+    .order("trading_date", { ascending: false })
+    .limit(requirements.maxRows);
+
+  if (error) {
+    console.warn("Stored daily-price read failed:", error.message);
+    return null;
+  }
+
+  const candles = (rows || [])
+    .slice()
+    .reverse()
+    .map((row) => {
+      const close = finiteNumber(row?.close);
+      const timestamp = Math.floor(
+        Date.parse(`${row?.trading_date}T12:00:00.000Z`) / 1000,
+      );
+
+      if (!Number.isFinite(timestamp) || close === null || close <= 0) {
+        return null;
+      }
+
+      return {
+        t: timestamp,
+        o: finiteNumber(row?.open) ?? close,
+        h: finiteNumber(row?.high) ?? close,
+        l: finiteNumber(row?.low) ?? close,
+        c: close,
+        v: finiteNumber(row?.volume),
+      };
+    })
+    .filter(Boolean);
+
+  if (candles.length < requirements.minRows) {
+    return null;
+  }
+
+  return withCandles(
+    {
+      ticker,
+      interval: "day",
+      s: "ok",
+      source: "stock_daily_prices",
+    },
+    candles,
+  );
 }
 
 function sliceDailyChartPayload(data, body) {
@@ -557,19 +643,20 @@ function isFreshDailyCache(entry) {
 }
 
 async function loadDailyChartBacking(body) {
-  const ticker = dailyChartCacheKey(body);
+  const ticker = dailyChartTicker(body);
+  const cacheKey = dailyChartCacheKey(body);
 
-  if (!ticker) {
+  if (!ticker || !cacheKey) {
     return null;
   }
 
-  const cached = dailyChartCache.get(ticker);
+  const cached = dailyChartCache.get(cacheKey);
 
   if (isFreshDailyCache(cached)) {
     return cached.data;
   }
 
-  const existingRequest = dailyChartInflight.get(ticker);
+  const existingRequest = dailyChartInflight.get(cacheKey);
 
   if (existingRequest) {
     return existingRequest;
@@ -578,16 +665,30 @@ async function loadDailyChartBacking(body) {
   const to =
     finiteNumber(body?.to) ??
     Math.floor(Date.now() / 1000);
-  const from = to - DAILY_CHART_BACKFILL_DAYS * DAY_SECONDS;
+  const period = String(body?.period || "1M").toUpperCase();
+  const requirements = localDailyRequirements(period);
+  const from =
+    finiteNumber(body?.from) ??
+    to - requirements.backfillDays * DAY_SECONDS;
 
   const request = (async () => {
+    const stored = await loadStoredDailyChartBacking(body);
+
+    if (stored) {
+      dailyChartCache.set(cacheKey, {
+        data: stored,
+        fetchedAt: Date.now(),
+      });
+      return stored;
+    }
+
     const { data, error } = await supabase.functions.invoke(
       "stock-chart-prices",
       {
         body: {
           action: "candles_range",
           ticker,
-          period: "1Y",
+          period,
           resolution: "D",
           from,
           to,
@@ -616,7 +717,7 @@ async function loadDailyChartBacking(body) {
       normalizedCandles(data),
     );
 
-    dailyChartCache.set(ticker, {
+    dailyChartCache.set(cacheKey, {
       data: normalized,
       fetchedAt: Date.now(),
     });
@@ -624,12 +725,12 @@ async function loadDailyChartBacking(body) {
     return normalized;
   })();
 
-  dailyChartInflight.set(ticker, request);
+  dailyChartInflight.set(cacheKey, request);
 
   try {
     return await request;
   } finally {
-    dailyChartInflight.delete(ticker);
+    dailyChartInflight.delete(cacheKey);
   }
 }
 
