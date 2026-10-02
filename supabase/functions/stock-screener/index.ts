@@ -1,3 +1,4 @@
+import { requireStockPulseAccess } from "../_shared/entitlement.ts";
 import {
   createClient,
   type SupabaseClient,
@@ -605,7 +606,7 @@ const technicalFilterKeys =
     "minReturn1Month",
     "maxReturn1Month",
     "minReturn3Month",
-    "maxReturn3Month",
+    "maxReturn3Month",
     "minBullishMaCrossoverDays",
     "maxBullishMaCrossoverDays",
   ]);
@@ -989,6 +990,11 @@ Deno.serve(
         },
         405,
       );
+    }
+
+    const access = await requireStockPulseAccess(request);
+    if (!access.ok) {
+      return jsonResponse({ ok: false, error: access.error }, access.status);
     }
 
     const authorization =
