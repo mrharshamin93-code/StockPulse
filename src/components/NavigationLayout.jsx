@@ -35,6 +35,7 @@ export default function NavigationLayout() {
   const contentScrollRef = useRef(null);
   const scrollPositions = useRef({});
   const previousTab = useRef(null);
+  const previousPath = useRef(pathname);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const keyboardOpenRef = useRef(false);
 
@@ -45,9 +46,6 @@ export default function NavigationLayout() {
   })();
 
   const showTabs = !pathname.startsWith("/stock/");
-  // Never render the tab bar while an editable control owns focus. This is
-  // synchronous with the render path and avoids a one-frame iOS/WKWebView
-  // viewport race where the keyboard can lift the fixed tab bar above itself.
   const activeElement =
     typeof document !== "undefined" ? document.activeElement : null;
   const editableFocused =
@@ -66,14 +64,8 @@ export default function NavigationLayout() {
       const isEditable =
         ["INPUT", "TEXTAREA", "SELECT"].includes(activeElement?.tagName) ||
         activeElement?.isContentEditable === true;
-
-      // iOS WKWebView can resize window.innerHeight together with visualViewport,
-      // which makes keyboardHeight look like 0 even while the keyboard is open.
-      // Focus on an editable control is therefore the primary keyboard signal.
       const nextKeyboardOpen = isEditable || keyboardHeight > KEYBOARD_THRESHOLD;
 
-      // Hide/show the native-style tab bar immediately as well as through
-      // React state. iOS can paint the keyboard before React commits state.
       if (layoutRef.current) {
         layoutRef.current.dataset.keyboardOpen = nextKeyboardOpen ? "true" : "false";
       }
@@ -82,7 +74,6 @@ export default function NavigationLayout() {
         keyboardOpenRef.current = nextKeyboardOpen;
         setKeyboardOpen(nextKeyboardOpen);
       }
-
     };
 
     updateViewport();
@@ -90,7 +81,6 @@ export default function NavigationLayout() {
     window.addEventListener("orientationchange", updateViewport);
     document.addEventListener("focusin", updateViewport);
     const handleFocusOut = () => {
-      // Let iOS finish moving focus before checking document.activeElement.
       window.setTimeout(updateViewport, 0);
     };
 
@@ -120,6 +110,26 @@ export default function NavigationLayout() {
     scrollContainer?.scrollTo({ top: scrollPositions.current[activeTab] ?? 0, behavior: "instant" });
     previousTab.current = activeTab;
   }, [activeTab]);
+
+  useEffect(() => {
+    const scrollContainer = contentScrollRef.current;
+    const previous = previousPath.current;
+
+    if (pathname.startsWith("/stock/") && !previous.startsWith("/stock/")) {
+      scrollPositions.current["/watchlist"] = scrollContainer?.scrollTop ?? 0;
+      scrollContainer?.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    } else if (pathname === "/watchlist" && previous.startsWith("/stock/")) {
+      scrollContainer?.scrollTo({
+        top: scrollPositions.current["/watchlist"] ?? 0,
+        left: 0,
+        behavior: "instant",
+      });
+    } else if (pathname.startsWith("/stock/") && previous !== pathname) {
+      scrollContainer?.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    }
+
+    previousPath.current = pathname;
+  }, [pathname]);
 
   const handleTabClick = useCallback((event, path) => {
     if (activeTab !== path) return;
