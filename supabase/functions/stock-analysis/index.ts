@@ -7,7 +7,6 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FD_BASE = "https://api.financialdatasets.ai";
 const XAI_URL = "https://api.x.ai/v1/responses";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -140,15 +139,53 @@ async function logGrokUsage(ticker: string, payload: any, httpStatus: number, ok
   if (error) console.error("Grok usage log failed", error.message);
 }
 
-async function fetchFD(path: string, ticker: string, apiKey: string) {
-  const url = new URL(`${FD_BASE}${path}`);
-  url.searchParams.set("ticker", ticker);
-  const response = await fetch(url, {
-    headers: { Accept: "application/json", "X-API-KEY": apiKey },
-  });
+async function fetchFD(path: string, ticker: string) {
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    return { ok: false, status: 503, payload: null };
+  }
+
+  const action = path.includes("financial-metrics")
+    ? "metrics"
+    : "quote";
+
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/financial-datasets`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        apikey: SERVICE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action, ticker }),
+    },
+  );
+
   const raw = await response.text();
-  let payload: unknown = null;
-  try { payload = raw ? JSON.parse(raw) : null; } catch { payload = null; }
+  let payload: any = null;
+
+  try {
+    payload = raw ? JSON.parse(raw) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (response.ok && action === "quote" && payload) {
+    payload = {
+      snapshot: {
+        ticker,
+        price: payload.c,
+        day_change: payload.d,
+        day_change_percent: payload.dp,
+        previous_close: payload.pc,
+        open: payload.o,
+        high: payload.h,
+        low: payload.l,
+        time: payload.t,
+      },
+    };
+  }
+
   return { ok: response.ok, status: response.status, payload };
 }
 
@@ -257,9 +294,7 @@ Deno.serve(async (request) => {
   if (!authorization?.startsWith("Bearer ")) return json({ error: "Authentication required" }, 401);
 
   const xaiKey = Deno.env.get("XAI_API_KEY");
-  const fdKey = Deno.env.get("FINANCIAL_DATASETS_API_KEY");
   if (!xaiKey) return json({ error: "The stock analysis model is not configured" }, 503);
-  if (!fdKey) return json({ error: "Financial Datasets is not configured" }, 503);
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -271,8 +306,8 @@ Deno.serve(async (request) => {
     if (cached) return json({ ...cached, cached: true });
 
     const [metricsResult, quoteResult] = await Promise.all([
-      fetchFD("/financial-metrics/snapshot", ticker, fdKey),
-      fetchFD("/prices/snapshot", ticker, fdKey),
+      fetchFD("/financial-metrics/snapshot", ticker),
+      fetchFD("/prices/snapshot", ticker),
     ]);
 
     const fdMetrics = metricsResult.ok ? groundingMetrics(metricsResult.payload) : null;
