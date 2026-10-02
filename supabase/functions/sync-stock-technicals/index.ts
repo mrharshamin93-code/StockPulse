@@ -324,7 +324,22 @@ Deno.serve(async (req) => {
           .from("stock_screener_stocks")
           .update({
             technicals_checked_at: checkedAt,
+            technicals_updated_at: null,
             technicals_error: message.slice(0, 1000),
+            sma_20: null,
+            sma_50: null,
+            price_above_sma_20: null,
+            sma_20_above_sma_50: null,
+            bullish_ma_crossover_at: null,
+            bullish_ma_crossover_days_ago: null,
+            rsi_14: null,
+            return_1_week: null,
+            return_1_month: null,
+            return_3_month: null,
+            volatility_30d: null,
+            high_52_week: null,
+            low_52_week: null,
+            week_52_change: null,
           })
           .eq("symbol", symbol);
 
