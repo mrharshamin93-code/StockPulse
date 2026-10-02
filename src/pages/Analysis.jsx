@@ -19,7 +19,6 @@ import {
   ThumbsUp,
   TrendingDown,
   TrendingUp,
-  X,
 } from "lucide-react";
 
 import { useParams } from "react-router-dom";
