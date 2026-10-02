@@ -9,8 +9,7 @@ const CORS = {
 };
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const FD_KEY = Deno.env.get("FINANCIAL_DATASETS_API_KEY") || "";
-const CACHE_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_MS = 30 * 24 * 60 * 60 * 1000;
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 function json(body: unknown, status = 200) {
@@ -42,16 +41,34 @@ async function saveCache(ticker: string, analysis: any) {
   if (error) throw error;
 }
 async function tickerExists(ticker: string): Promise<boolean | null> {
-  if (!FD_KEY) return null;
+  if (!SUPABASE_URL || !SERVICE_KEY) return null;
+
   try {
-    const url = new URL("https://api.financialdatasets.ai/prices/snapshot");
-    url.searchParams.set("ticker", ticker);
-    const response = await fetch(url, { headers: { Accept: "application/json", "X-API-KEY": FD_KEY } });
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/financial-datasets`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        apikey: SERVICE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "quote", ticker }),
+    });
+
     if (response.ok) return true;
+
     const text = await response.text().catch(() => "");
-    if (response.status === 404 || (response.status === 400 && /valid ticker|invalid ticker|not found|no prices/i.test(text))) return false;
+    if (
+      response.status === 404 ||
+      (response.status === 400 &&
+        /valid ticker|invalid ticker|not found|no prices/i.test(text))
+    ) {
+      return false;
+    }
+
     return null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 async function generateAndCache(ticker: string, companyName: string) {
   try {
