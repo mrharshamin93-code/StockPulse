@@ -521,67 +521,37 @@ function extractFinancialMetrics(
 
 async function fetchFinancialDatasetsMetrics(
   symbol: string,
-  apiKey: string,
+  _apiKey: string,
 ): Promise<UnknownRecord> {
-  const url =
-    new URL(
-      `${API_BASE_URL}/financial-metrics/snapshot`,
-    );
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-  url.searchParams.set(
-    "ticker",
-    symbol,
-  );
-
-  const response =
-    await fetch(
-      url.toString(),
-      {
-        headers: {
-          Accept:
-            "application/json",
-          "X-API-KEY":
-            apiKey,
-        },
-      },
-    );
-
-  const text =
-    await response.text();
-
-  let payload:
-    unknown = null;
-
-  if (text) {
-    try {
-      payload =
-        JSON.parse(text);
-    } catch {
-      payload = text;
-    }
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Supabase service credentials are unavailable.");
   }
 
-  if (!response.ok) {
-    const message =
-      payload &&
-      typeof payload ===
-        "object" &&
-      !Array.isArray(payload)
-        ? normalizeText(
-            (
-              payload as UnknownRecord
-            ).message ||
-              (
-                payload as UnknownRecord
-              ).error,
-          )
-        : normalizeText(
-            payload,
-          );
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/financial-datasets`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "metrics",
+        ticker: symbol,
+      }),
+    },
+  );
 
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
     throw new Error(
-      message ||
-        `Financial Datasets returned status ${response.status}.`,
+      normalizeText((payload as any)?.error) ||
+        `Financial Datasets metrics request failed with status ${response.status}.`,
     );
   }
 
@@ -590,9 +560,6 @@ async function fetchFinancialDatasetsMetrics(
       payload,
     );
 
-  // Safety guard: never overwrite a valid screener row with a
-  // fully-null fundamentals payload if the provider response shape
-  // changes again.
   if (
     !looksLikeFinancialMetrics(
       metrics,
@@ -716,60 +683,36 @@ function extractTickerSet(
 }
 
 async function fetchSupportedFinancialMetricsTickers(
-  apiKey: string,
+  _apiKey: string,
 ): Promise<Set<string>> {
-  const url =
-    `${API_BASE_URL}/financial-metrics/snapshot/tickers`;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-  const response =
-    await fetch(
-      url,
-      {
-        headers: {
-          Accept:
-            "application/json",
-          "X-API-KEY":
-            apiKey,
-        },
-      },
-    );
-
-  const text =
-    await response.text();
-
-  let payload:
-    unknown = null;
-
-  if (text) {
-    try {
-      payload =
-        JSON.parse(text);
-    } catch {
-      payload = text;
-    }
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Supabase service credentials are unavailable.");
   }
 
-  if (!response.ok) {
-    const message =
-      payload &&
-      typeof payload ===
-        "object" &&
-      !Array.isArray(payload)
-        ? normalizeText(
-            (
-              payload as UnknownRecord
-            ).message ||
-              (
-                payload as UnknownRecord
-              ).error,
-          )
-        : normalizeText(
-            payload,
-          );
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/financial-datasets`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "metrics_tickers",
+      }),
+    },
+  );
 
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
     throw new Error(
-      message ||
-        `Could not load Financial Datasets supported tickers (status ${response.status}).`,
+      normalizeText((payload as any)?.error) ||
+        `Could not load supported Financial Datasets tickers (status ${response.status}).`,
     );
   }
 
