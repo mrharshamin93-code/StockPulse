@@ -1,3 +1,4 @@
+import { requireStockPulseAccess } from "../_shared/entitlement.ts";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -248,6 +249,9 @@ function outputText(payload: Record<string, unknown>) {
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  const access = await requireStockPulseAccess(request);
+  if (!access.ok) return json({ error: access.error }, access.status);
 
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer ")) return json({ error: "Authentication required" }, 401);
