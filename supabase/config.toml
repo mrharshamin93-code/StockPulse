@@ -27,3 +27,15 @@ verify_jwt = false
 
 [functions.monthly-report]
 verify_jwt = false
+
+[functions.stock-analysis-job]
+verify_jwt = true
+
+[functions.stock-chart-prices]
+verify_jwt = true
+
+[functions.stock-news]
+verify_jwt = true
+
+[functions.sync-subscription-entitlement]
+verify_jwt = true
