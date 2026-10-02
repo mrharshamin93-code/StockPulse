@@ -16,6 +16,8 @@ import { financialDatasetsRequest } from "@/lib/financialDatasets";
 const QUOTE_TTL_MS = 5 * 60 * 1000;
 const PERSISTED_QUOTE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const PERSISTED_QUOTE_CACHE_KEY = "stockpulse:quote-cache:v1";
+const MAX_ACTIVE_TICKERS = 100;
+const MAX_PERSISTED_QUOTES = 200;
 
 const MarketDataContext = createContext({
   quotes: {},
@@ -29,6 +31,24 @@ function normalizeTicker(ticker) {
 
 function normalizeTickerList(tickers) {
   return [...new Set((tickers || []).map(normalizeTicker).filter(Boolean))];
+}
+
+function mergeRecentTickers(existing, incoming) {
+  const recent = [...(existing || [])];
+
+  for (const rawTicker of incoming || []) {
+    const ticker = normalizeTicker(rawTicker);
+    if (!ticker) continue;
+
+    const currentIndex = recent.indexOf(ticker);
+    if (currentIndex >= 0) {
+      recent.splice(currentIndex, 1);
+    }
+
+    recent.push(ticker);
+  }
+
+  return recent.slice(-MAX_ACTIVE_TICKERS);
 }
 
 function finiteNumber(value) {
@@ -125,7 +145,13 @@ function persistQuoteCache(cache) {
     const now = Date.now();
     const persisted = {};
 
-    for (const [rawTicker, entry] of Object.entries(cache || {})) {
+    const entries = Object.entries(cache || {})
+      .sort(([, left], [, right]) =>
+        Number(right?.fetchedAt || 0) - Number(left?.fetchedAt || 0),
+      )
+      .slice(0, MAX_PERSISTED_QUOTES);
+
+    for (const [rawTicker, entry] of entries) {
       const ticker = normalizeTicker(rawTicker);
       const fetchedAt = Number(entry?.fetchedAt);
       const quote = normalizeQuote(entry?.data, ticker);
@@ -181,10 +207,10 @@ export function MarketDataProvider({ children }) {
         return {};
       }
 
-      tickersRef.current = normalizeTickerList([
-        ...tickersRef.current,
-        ...normalizedTickers,
-      ]);
+      tickersRef.current = mergeRecentTickers(
+        tickersRef.current,
+        normalizedTickers,
+      );
 
       const now = Date.now();
       const resolved = {};
