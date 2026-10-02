@@ -4,7 +4,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const SYNC_SECRET = Deno.env.get("STOCK_SYNC_SECRET") || "";
-const CACHE_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
