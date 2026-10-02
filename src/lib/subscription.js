@@ -100,6 +100,14 @@ export async function purchaseStockPulsePro() {
 export async function restoreStockPulsePurchases() {
   if (!isNativeIOS()) return false;
 
-  await NativePurchases.restorePurchases();
+  try {
+    await NativePurchases.restorePurchases();
+  } catch (error) {
+    console.warn(
+      "App Store restore sync failed; checking current entitlements anyway:",
+      error,
+    );
+  }
+
   return hasActiveStockPulseSubscription();
 }

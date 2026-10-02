@@ -1,10 +1,30 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.110.7";
 import { Buffer } from "node:buffer";
+import { X509Certificate } from "node:crypto";
 import {
   Environment,
   SignedDataVerifier,
 } from "npm:@apple/app-store-server-library@3.1.0";
+
+// StockPulse Deno compatibility: Apple verifier expects X509Certificate#toString,
+// which Supabase Edge Runtime's Node shim does not currently implement.
+Object.defineProperty(
+  X509Certificate.prototype,
+  "toString",
+  {
+    configurable: true,
+    value: function (): string {
+      const base64 = Buffer
+        .from((this as X509Certificate).raw)
+        .toString("base64")
+        .match(/.{1,64}/g)
+        ?.join("\n") || "";
+
+      return `-----BEGIN CERTIFICATE-----\n${base64}\n-----END CERTIFICATE-----\n`;
+    },
+  },
+);
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
