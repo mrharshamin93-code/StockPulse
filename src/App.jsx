@@ -38,7 +38,7 @@ import ReferralPage from "@/pages/ReferralPage";
 import ContactUs from "@/pages/ContactUs";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password", "/auth/callback", "/privacy", "/terms", "/legal", "/contact-us"]);
-const GRANDFATHER_CUTOFF_MS = Date.parse("2026-09-27T00:00:00Z");
+const GRANDFATHER_CUTOFF_MS = Date.parse("2026-09-27T23:59:59.999Z");
 
 function ThemeSync() { const { preferences } = useAuth(); useEffect(() => { applyTheme(preferences?.theme || "default"); }, [preferences?.theme]); return null; }
 function ReviewPromptTracker() { const { user } = useAuth(); useEffect(() => { if (!user?.id) return undefined; let disposed=false, listenerHandle=null, reviewTimer=null; const scheduleSessionCheck=()=>{ if(reviewTimer) clearTimeout(reviewTimer); reviewTimer=window.setTimeout(()=>{if(!disposed) recordReviewSession();},4000);}; scheduleSessionCheck(); CapacitorApp.addListener("appStateChange",({isActive})=>{if(isActive)scheduleSessionCheck();}).then((handle)=>{if(disposed)handle.remove();else listenerHandle=handle;}).catch(()=>{}); return()=>{disposed=true;if(reviewTimer)clearTimeout(reviewTimer);listenerHandle?.remove();}; },[user?.id]); return null; }
@@ -158,7 +158,7 @@ function SubscriptionGate({ children }) {
     setState((s)=>({...s,loading:true}));
     try {
       const createdAtMs=Date.parse(user.created_at||"");
-      const grandfathered=Number.isFinite(createdAtMs)&&createdAtMs<GRANDFATHER_CUTOFF_MS;
+      const grandfathered=Number.isFinite(createdAtMs)&&createdAtMs<=GRANDFATHER_CUTOFF_MS;
       let storeActive=false, price="$4.99";
       if(!grandfathered){try{const[active,product]=await Promise.all([hasActiveStockPulseSubscription(),getMonthlyProduct()]);storeActive=active;price=product?.priceString||product?.displayPrice||price;}catch(storeError){console.error("Unable to check App Store subscription:",storeError);}}
       setState((s)=>({...s,loading:false,allowed:grandfathered||storeActive,price}));
