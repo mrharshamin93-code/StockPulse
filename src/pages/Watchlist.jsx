@@ -848,6 +848,83 @@ function AddTickerDialog({
   );
 }
 
+const sparklineBatchPending = new Map();
+let sparklineBatchTimer = null;
+
+function queueSparklineBatch(ticker) {
+  return new Promise((resolve, reject) => {
+    const pending = sparklineBatchPending.get(ticker) || {
+      resolves: [],
+      rejects: [],
+    };
+
+    pending.resolves.push(resolve);
+    pending.rejects.push(reject);
+    sparklineBatchPending.set(ticker, pending);
+
+    if (sparklineBatchTimer === null) {
+      sparklineBatchTimer = window.setTimeout(() => {
+        const batch = new Map(sparklineBatchPending);
+        sparklineBatchPending.clear();
+        sparklineBatchTimer = null;
+
+        void (async () => {
+          const tickers = [...batch.keys()];
+          const { data: rows, error } = await supabase.rpc(
+            "get_stock_sparklines",
+            {
+              p_tickers: tickers,
+              p_limit: 30,
+            },
+          );
+
+          if (error) {
+            for (const pendingEntry of batch.values()) {
+              pendingEntry.rejects.forEach((reject) => reject(error));
+            }
+            return;
+          }
+
+          const grouped = new Map();
+
+          for (const row of rows || []) {
+            const key = String(row?.ticker || "").trim().toUpperCase();
+            const close = Number(row?.close);
+
+            if (!key || !Number.isFinite(close) || close <= 0) {
+              continue;
+            }
+
+            const values = grouped.get(key) || [];
+            values.push(close);
+            grouped.set(key, values);
+          }
+
+          const timestamp = Date.now();
+
+          for (const [tickerKey, pendingEntry] of batch.entries()) {
+            const values = grouped.get(tickerKey) || [];
+            const data = values.length >= 2 ? values : null;
+
+            if (data) {
+              sparklineCache.set(tickerKey, {
+                data,
+                timestamp,
+              });
+            }
+
+            pendingEntry.resolves.forEach((resolve) => resolve(data));
+          }
+        })().catch((error) => {
+          for (const pendingEntry of batch.values()) {
+            pendingEntry.rejects.forEach((reject) => reject(error));
+          }
+        });
+      }, 0);
+    }
+  });
+}
+
 async function fetchSparkline(
   ticker,
   signal
@@ -886,29 +963,7 @@ async function fetchSparkline(
     );
   }
 
-  const {
-    data: rows,
-    error,
-  } =
-    await supabase
-      .from(
-        "stock_daily_prices"
-      )
-      .select(
-        "trading_date,close"
-      )
-      .eq(
-        "ticker",
-        key
-      )
-      .order(
-        "trading_date",
-        {
-          ascending:
-            false,
-        }
-      )
-      .limit(30);
+  const data = await queueSparklineBatch(key);
 
   if (
     signal?.aborted
@@ -918,44 +973,6 @@ async function fetchSparkline(
       "AbortError"
     );
   }
-
-  if (error) {
-    throw error;
-  }
-
-  const data =
-    (rows || [])
-      .slice()
-      .reverse()
-      .map(
-        (row) =>
-          Number(
-            row?.close
-          )
-      )
-      .filter(
-        (value) =>
-          Number.isFinite(
-            value
-          ) &&
-          value > 0
-      );
-
-  if (
-    data.length < 2
-  ) {
-    return null;
-  }
-
-  sparklineCache.set(
-    key,
-    {
-      data,
-
-      timestamp:
-        Date.now(),
-    }
-  );
 
   return data;
 }
