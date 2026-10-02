@@ -1312,12 +1312,31 @@ Deno.serve(
       if (
         requiresTechnicals
       ) {
+        const technicalFreshnessCutoff =
+          new Date(
+            Date.now() -
+              3 *
+                24 *
+                60 *
+                60 *
+                1000,
+          ).toISOString();
+
         query =
-          query.not(
-            "technicals_updated_at",
-            "is",
-            null,
-          );
+          query
+            .not(
+              "technicals_updated_at",
+              "is",
+              null,
+            )
+            .is(
+              "technicals_error",
+              null,
+            )
+            .gte(
+              "technicals_updated_at",
+              technicalFreshnessCutoff,
+            );
       }
 
       if (
