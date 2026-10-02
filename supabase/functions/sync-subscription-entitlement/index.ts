@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.110.7";
 import { Buffer } from "node:buffer";
+import { X509Certificate } from "node:crypto";
 import {
   Environment,
   SignedDataVerifier,
