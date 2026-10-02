@@ -41,6 +41,9 @@ const NEWS_TTL_MS =
 const METRICS_TTL_MS =
   24 * 60 * 60 * 1000;
 
+const METRICS_TICKERS_TTL_MS =
+  30 * 24 * 60 * 60 * 1000;
+
 const TICKER_DIRECTORY_TTL_MS =
   7 * 24 * 60 * 60 * 1000;
 
@@ -319,7 +322,7 @@ async function withCache<T>(key: string, ttlMs: number, fetcher: () => Promise<T
     parameters: { key },
     freshMs: ttlMs,
     staleMs: Math.max(ttlMs, dataType === "news" ? 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000),
-    endpoint: dataType === "profile" ? "/company/facts" : dataType === "news" ? "/news" : dataType === "candles" ? "/prices" : dataType === "metrics" ? "/financial-metrics/snapshot" : "/company/facts/tickers/",
+    endpoint: dataType === "profile" ? "/company/facts" : dataType === "news" ? "/news" : dataType === "candles" ? "/prices" : dataType === "metrics" ? "/financial-metrics/snapshot" : dataType === "metrics-tickers" ? "/financial-metrics/snapshot/tickers" : "/company/facts/tickers/",
     fetcher,
   });
   const value = result.data;
@@ -445,6 +448,14 @@ async function getMetrics(ticker: string) {
   });
 }
 
+async function getMetricsTickers() {
+  return withCache(
+    "metrics-tickers:all",
+    METRICS_TICKERS_TTL_MS,
+    async () => providerGet("/financial-metrics/snapshot/tickers"),
+  );
+}
+
 async function getTickerDirectory() {
   return withCache("ticker-directory", TICKER_DIRECTORY_TTL_MS, async () => {
     const payload = await providerGet("/company/facts/tickers/");
@@ -497,8 +508,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
       case "candles_range": if (!ticker) return jsonResponse({ error: "Ticker is required." }, 400); return jsonResponse(await getCandles(requestBody));
       case "metrics":
       case "basic_financials": if (!ticker) return jsonResponse({ error: "Ticker is required." }, 400); return jsonResponse(await getMetrics(ticker));
+      case "metrics_tickers": return jsonResponse(await getMetricsTickers());
       case "search": return jsonResponse(await searchTickers(requestBody.query ?? requestBody.q ?? requestBody.ticker, requestBody.limit));
-      default: return jsonResponse({ error: "Unsupported action. Use quote, quotes, profile, news, candles, candles_range, metrics, basic_financials, or search." }, 400);
+      default: return jsonResponse({ error: "Unsupported action. Use quote, quotes, profile, news, candles, candles_range, metrics, basic_financials, metrics_tickers, or search." }, 400);
     }
   } catch (error) {
     console.error("Financial Datasets Edge Function error:", error);
