@@ -5,6 +5,7 @@ const API_BASE = "https://api.financialdatasets.ai";
 const MARKET_TZ = "America/New_York";
 const CURRENT_TTL_MS = 15 * 60 * 1000;
 const HISTORICAL_TTL_MS = 3650 * 24 * 60 * 60 * 1000;
+const NO_DATA_TTL_MS = 12 * 60 * 60 * 1000;
 const MONTHLY_LIMIT = 100000;
 const RESERVED_UNITS = 15000;
 
@@ -203,11 +204,21 @@ async function fetchChunk(
     }
 
     if (!response.ok) {
-      throw new Error(
+      const message =
         payload && typeof payload === "object"
           ? String(payload.message ?? payload.error ?? payload.detail ?? `HTTP ${response.status}`)
-          : `HTTP ${response.status}`,
-      );
+          : `HTTP ${response.status}`;
+
+      if (
+        response.status === 404 ||
+        (response.status === 400 &&
+          /no prices|not found|invalid ticker|no data/i.test(message))
+      ) {
+        success = true;
+        return [];
+      }
+
+      throw new Error(message);
     }
 
     success = true;
@@ -580,9 +591,11 @@ Deno.serve(async (req) => {
     };
 
     const includesCurrent = endDate >= currentMarketDate;
-    const ttlMs = includesCurrent
-      ? CURRENT_TTL_MS
-      : HISTORICAL_TTL_MS;
+    const ttlMs = !candles.length
+      ? NO_DATA_TTL_MS
+      : includesCurrent
+        ? CURRENT_TTL_MS
+        : HISTORICAL_TTL_MS;
 
     const fetchedAt = new Date().toISOString();
     const expiresAt = new Date(now + ttlMs).toISOString();
