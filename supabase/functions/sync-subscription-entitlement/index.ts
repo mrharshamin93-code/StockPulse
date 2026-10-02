@@ -180,7 +180,7 @@ async function verifyAppleTransactionJws(
       hash: "SHA-256",
     },
     publicKey,
-    signature,
+    new Uint8Array(signature),
     signingInput,
   );
 
@@ -251,6 +251,7 @@ Deno.serve(async (request) => {
     );
   }
 
+  let stage = "verify_transaction";
   try {
     const tx = await verifyAppleTransactionJws(jwsRepresentation);
 
@@ -274,6 +275,7 @@ Deno.serve(async (request) => {
     const now = new Date().toISOString();
     const environment = String(tx?.environment || "");
 
+    stage = "save_entitlement";
     const { error: updateError } = await admin
       .from("profiles")
       .update({
@@ -289,7 +291,9 @@ Deno.serve(async (request) => {
         subscription_environment: environment,
         subscription_verified_at: now,
       })
-      .eq("id", userData.user.id);
+      .eq("id", userData.user.id)
+      .select("id")
+      .single();
 
     if (updateError) throw updateError;
 
@@ -301,10 +305,23 @@ Deno.serve(async (request) => {
       environment,
     });
   } catch (error) {
-    console.error(
-      "Subscription verification failed:",
-      error instanceof Error ? error.message : String(error),
-    );
+    // PostgREST errors are plain objects, not Error instances. Never log the
+    // request/JWS or database details (which can contain the entire profile).
+    const failure = error as { code?: string; message?: string } | null;
+    console.error("Subscription sync failed:", JSON.stringify({
+      stage,
+      code: typeof failure?.code === "string" ? failure.code : null,
+      message: typeof failure?.message === "string"
+        ? failure.message
+        : "Unknown subscription sync error",
+    }));
+
+    if (stage === "save_entitlement") {
+      return json(
+        { error: "Unable to save subscription access. Please retry." },
+        503,
+      );
+    }
 
     return json(
       { error: "The App Store subscription could not be verified." },
