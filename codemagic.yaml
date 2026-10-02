@@ -9,7 +9,7 @@ workflows:
         - stockpulse_app
 
       node: 22
-      xcode: latest
+      xcode: 26.6
 
       vars:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
@@ -25,9 +25,13 @@ workflows:
         script: |
           npm ci
 
-      - name: Install native review plugin
+      - name: Lint
         script: |
-          npm install @capacitor-community/in-app-review@8.0.0 --save-exact
+          npm run lint
+
+      - name: Typecheck
+        script: |
+          npm run typecheck
 
       - name: Build StockPulse web app
         script: |
@@ -75,7 +79,7 @@ workflows:
         bundle_identifier: com.harshamin.stockpulse
 
       node: 22
-      xcode: latest
+      xcode: 26.6
 
       vars:
         APP_STORE_APPLE_ID: "6808373094"
@@ -94,9 +98,13 @@ workflows:
         script: |
           npm ci
 
-      - name: Install native review plugin
+      - name: Lint
         script: |
-          npm install @capacitor-community/in-app-review@8.0.0 --save-exact
+          npm run lint
+
+      - name: Typecheck
+        script: |
+          npm run typecheck
 
       - name: Build and sync Capacitor iOS
         script: |
