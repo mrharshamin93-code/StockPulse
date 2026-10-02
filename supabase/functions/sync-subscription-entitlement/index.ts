@@ -61,11 +61,7 @@ async function verifiedTransaction(jws: string) {
       environment: "Production",
       payload: await production.verifyAndDecodeTransaction(jws),
     };
-  } catch (productionError) {
-    if (Deno.env.get("ALLOW_APP_STORE_SANDBOX") !== "true") {
-      throw productionError;
-    }
-
+  } catch (_productionError) {
     const sandbox = new SignedDataVerifier(
       roots,
       false,
