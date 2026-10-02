@@ -8,16 +8,10 @@ export function isNativeIOS() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
 }
 
-function isLocallyActivePurchase(purchase) {
+function isStockPulsePurchase(purchase) {
   return (
     purchase?.productIdentifier === STOCKPULSE_PRO_MONTHLY &&
-    (
-      purchase?.isActive === true ||
-      (
-        purchase?.expirationDate &&
-        new Date(purchase.expirationDate) > new Date()
-      )
-    )
+    Boolean(purchase?.jwsRepresentation)
   );
 }
 
@@ -73,7 +67,7 @@ export async function hasActiveStockPulseSubscription() {
     onlyCurrentEntitlements: true,
   });
 
-  const purchase = purchases.find(isLocallyActivePurchase);
+  const purchase = purchases.find(isStockPulsePurchase);
   if (!purchase) return false;
 
   return verifyPurchaseWithServer(purchase);
